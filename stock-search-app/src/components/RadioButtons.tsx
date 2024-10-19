@@ -12,7 +12,7 @@ const RadioButtons = ({ exchange, setExchange }: Props) => (
                     value={ex}
                     checked={exchange === ex}
                     onChange={() => setExchange(ex as 'BSE' | 'NSE' | 'NSE_SME')}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500"
+                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 transition-all duration-200"
                 />
                 <span className="text-gray-700 text-lg font-medium">{ex}</span>
             </label>

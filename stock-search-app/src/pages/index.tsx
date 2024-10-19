@@ -78,9 +78,9 @@ export default function Home() {
     };
 
     return (
-        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-            <div className="bg-white shadow-2xl rounded-3xl p-8 w-full max-w-lg">
-                <h1 className="text-4xl font-extrabold mb-8 text-center text-indigo-600">
+        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-100 to-gray-300 p-4">
+            <div className="bg-white shadow-lg rounded-2xl p-8 w-full max-w-lg flex flex-col gap-6">
+                <h1 className="text-4xl font-bold text-center text-indigo-700 mb-4">
                     Stock Search App
                 </h1>
 
@@ -89,12 +89,12 @@ export default function Home() {
                 <SearchBar searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
 
                 {filteredStocks.length > 0 && (
-                    <div className="border border-gray-300 rounded-lg max-h-40 overflow-y-auto bg-white shadow-lg mb-4">
+                    <div className="border border-gray-300 rounded-lg shadow-lg max-h-40 overflow-y-auto bg-white mb-4 animate-dropdown transition-all duration-300 ease-out">
                         {filteredStocks.map((stock) => (
                             <div
                                 key={stock.ticker}
                                 onClick={() => addStock(stock)}
-                                className="cursor-pointer p-3 hover:bg-indigo-50 transition duration-200"
+                                className="cursor-pointer p-3 hover:bg-indigo-100 transition-colors duration-200 delay-75"
                             >
                                 {stock.name} ({stock.ticker})
                             </div>
@@ -104,16 +104,16 @@ export default function Home() {
 
                 <SelectedStocks selectedStocks={selectedStocks} onRemove={removeStock} />
 
-                <div className="flex gap-4 mt-8 justify-center">
+                <div className="flex gap-4 mt-6 justify-center">
                     <button
                         onClick={handleSubmit}
-                        className="px-6 py-3 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 transition duration-200"
+                        className="px-6 py-3 bg-indigo-600 text-white rounded-full shadow-md hover:bg-indigo-700 transition-all duration-200"
                     >
                         Submit
                     </button>
                     <button
                         onClick={resetPage}
-                        className="px-6 py-3 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 transition duration-200"
+                        className="px-6 py-3 bg-red-600 text-white rounded-full shadow-md hover:bg-red-700 transition-all duration-200"
                     >
                         Reset
                     </button>

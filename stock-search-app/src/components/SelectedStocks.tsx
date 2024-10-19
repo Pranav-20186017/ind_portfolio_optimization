@@ -9,16 +9,16 @@ type Props = {
 };
 
 const SelectedStocks = ({ selectedStocks, onRemove }: Props) => (
-    <div className="mt-6 w-full">
+    <div className="mt-4 w-full p-4 border-2 border-indigo-200 rounded-lg shadow-lg bg-white transition-all duration-300">
         <h2 className="text-2xl font-semibold mb-4 text-center text-gray-700">
             Selected Stocks
         </h2>
         {selectedStocks.length > 0 ? (
-            <div className="grid gap-3">
+            <div className="flex flex-col gap-2">
                 {selectedStocks.map((stock) => (
                     <div
                         key={stock.ticker}
-                        className="flex justify-between items-center border p-3 rounded-lg shadow-sm bg-gray-50"
+                        className="flex justify-between items-center border p-3 rounded-lg shadow-sm bg-gray-50 hover:bg-red-50 transition-all duration-200"
                     >
                         <div className="text-gray-800 font-medium">
                             {stock.name} ({stock.ticker})

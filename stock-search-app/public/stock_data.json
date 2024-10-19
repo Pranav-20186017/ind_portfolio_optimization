@@ -25539,5 +25539,1518 @@
             "isin": "INE768C01010"
         }
     },
-    "NSE_SME": {}
+    "NSE_SME": {
+        "MYMUDRA": {
+            "name": "My Mudra Fincorp Limited",
+            "isin": "INE0RVQ01016"
+        },
+        "NAMOEWASTE": {
+            "name": "Namo eWaste Management Limited",
+            "isin": "INE08NZ01012"
+        },
+        "JEYYAM": {
+            "name": "Jeyyam Global Foods Limited",
+            "isin": "INE0RXB01022"
+        },
+        "BOSS": {
+            "name": "Boss Packaging Solutions Limited",
+            "isin": "INE0QNI01012"
+        },
+        "PARAMATRIX": {
+            "name": "Paramatrix Technologies Limited",
+            "isin": "INE0S2W01018"
+        },
+        "AERON": {
+            "name": "Aeron Composite Limited",
+            "isin": "INE0WL801011"
+        },
+        "JAYBEE": {
+            "name": "Jay Bee Laminations Limited",
+            "isin": "INE0SMY01017"
+        },
+        "VDEAL": {
+            "name": "Vdeal System Limited",
+            "isin": "INE0U2M01015"
+        },
+        "IPHL": {
+            "name": "Indian Phosphate Limited",
+            "isin": "INE0DHF01018"
+        },
+        "QVCEL": {
+            "name": "QVC Exports Limited",
+            "isin": "INE0KZF01015"
+        },
+        "IDEALTECHO": {
+            "name": "Ideal Technoplast Industries Limited",
+            "isin": "INE0T9I01011"
+        },
+        "FORCAS": {
+            "name": "Forcas Studio Limited",
+            "isin": "INE0U2501017"
+        },
+        "BRACEPORT": {
+            "name": "Brace Port Logistics Limited",
+            "isin": "INE0R4Z01018"
+        },
+        "BALCO": {
+            "name": "Solve Plastic Products Limited",
+            "isin": "INE0U0201016"
+        },
+        "POSITRON": {
+            "name": "Positron Energy Limited",
+            "isin": "INE0S3H01017"
+        },
+        "SUNLITE": {
+            "name": "Sunlite Recycling Industries Limited",
+            "isin": "INE0U2N01013"
+        },
+        "AESTHETIK": {
+            "name": "Aesthetik Engineers Limited",
+            "isin": "INE0TSF01011"
+        },
+        "PPSL": {
+            "name": "Picturepost Studios Limited",
+            "isin": "INE0YAL01017"
+        },
+        "DHARIWAL": {
+            "name": "Dhariwalcorp Limited",
+            "isin": "INE0YRN01017"
+        },
+        "UTSSAV": {
+            "name": "Utssav CZ Gold Jewels Limited",
+            "isin": "INE06IJ01010"
+        },
+        "BULKCORP": {
+            "name": "Bulkcorp International Limited",
+            "isin": "INE0SZ301012"
+        },
+        "ASHALOG": {
+            "name": "Ashapura Logistics Limited",
+            "isin": "INE0LAA01017"
+        },
+        "RAJINDLTD": {
+            "name": "Rajputana Industries Limited",
+            "isin": "INE0PCU01012"
+        },
+        "SSEGL": {
+            "name": "Sathlokhar Synergys E&C Global Limited",
+            "isin": "INE0RFP01011"
+        },
+        "SATECH": {
+            "name": "S A Tech Software India Limited",
+            "isin": "INE0BSN01013"
+        },
+        "ESPRIT": {
+            "name": "Esprit Stones Limited",
+            "isin": "INE0SBP01018"
+        },
+        "TROM": {
+            "name": "Trom Industries Limited",
+            "isin": "INE0SYV01018"
+        },
+        "APRAMEYA": {
+            "name": "Aprameya Engineering Limited",
+            "isin": "INE0LQG01010"
+        },
+        "MIEL": {
+            "name": "Manglam Infra & Engineering Limited",
+            "isin": "INE0R3101011"
+        },
+        "CHETANA": {
+            "name": "Chetana Education Limited",
+            "isin": "INE0U1T01012"
+        },
+        "VLINFRA": {
+            "name": "V.L.Infraprojects Limited",
+            "isin": "INE0QXL01015"
+        },
+        "RNFI": {
+            "name": "RNFI Services Limited",
+            "isin": "INE0SA001017"
+        },
+        "MACOBSTECH": {
+            "name": "Macobs Technologies Limited",
+            "isin": "INE0R0J01010"
+        },
+        "KATARIA": {
+            "name": "Kataria Industries Limited",
+            "isin": "INE0SVY01018"
+        },
+        "TUNWAL": {
+            "name": "Tunwal E-Motors Limited",
+            "isin": "INE0OXV01027"
+        },
+        "SATIPOLY": {
+            "name": "Sati Poly Plast Limited",
+            "isin": "INE0RPM01017"
+        },
+        "PRIZOR": {
+            "name": "Prizor Viztech Limited",
+            "isin": "INE0V9N01017"
+        },
+        "SAHAJSOLAR": {
+            "name": "Sahaj Solar Limited",
+            "isin": "INE0P4701011"
+        },
+        "GGBL": {
+            "name": "Ganesh Green Bharat Limited",
+            "isin": "INE0R8C01018"
+        },
+        "EFFWA": {
+            "name": "Effwa Infra & Research Limited",
+            "isin": "INE0U9101019"
+        },
+        "AMBEY": {
+            "name": "Ambey Laboratories Limited",
+            "isin": "INE0M3I01029"
+        },
+        "NEPHROCARE": {
+            "name": "Nephro Care India Limited",
+            "isin": "INE0SUN01013"
+        },
+        "DTL": {
+            "name": "Diensten Tech Limited",
+            "isin": "INE0JRD01019"
+        },
+        "DPEL": {
+            "name": "Divine Power Energy Limited",
+            "isin": "INE0SCO01019"
+        },
+        "PCCL": {
+            "name": "Petro Carbon and Chemicals Limited",
+            "isin": "INE998U01015"
+        },
+        "AKIKO": {
+            "name": "Akiko Global Services Limited",
+            "isin": "INE0PMR01017"
+        },
+        "MASON": {
+            "name": "Mason Infratech Limited",
+            "isin": "INE0SH001010"
+        },
+        "SYLVANPLY": {
+            "name": "Sylvan Plyboard (India) Limited",
+            "isin": "INE01IH01015"
+        },
+        "SPCL": {
+            "name": "Shivalic Power Control Limited",
+            "isin": "INE0T7B01010"
+        },
+        "VISAMAN": {
+            "name": "Visaman Global Sales Limited",
+            "isin": "INE0BHK01012"
+        },
+        "MEDIORG": {
+            "name": "Medicamen Organics Limited",
+            "isin": "INE0PE401018"
+        },
+        "WINNY": {
+            "name": "Winny Immigration & Education Services Limited",
+            "isin": "INE0S9101013"
+        },
+        "FALCONTECH": {
+            "name": "Falcon Technoprojects India Limited",
+            "isin": "INE0PQK01013"
+        },
+        "DURLAX": {
+            "name": "Durlax Top Surface Limited",
+            "isin": "INE0OUW01013"
+        },
+        "GPECO": {
+            "name": "GP Eco Solutions India Limited",
+            "isin": "INE0S7E01015"
+        },
+        "TBI": {
+            "name": "TBI Corn Limited",
+            "isin": "INE0N2D01013"
+        },
+        "AIMTRON": {
+            "name": "Aimtron Electronics Limited",
+            "isin": "INE0RUV01018"
+        },
+        "ZTECH": {
+            "name": "Z-Tech (India) Limited",
+            "isin": "INE0ISZ01012"
+        },
+        "BEACON": {
+            "name": "Beacon Trusteeship Limited",
+            "isin": "INE639X01027"
+        },
+        "VILAS": {
+            "name": "Vilas Transcore Limited",
+            "isin": "INE0AZY01017"
+        },
+        "GSMFOILS": {
+            "name": "GSM Foils Limited",
+            "isin": "INE0SQY01018"
+        },
+        "HOACFOODS": {
+            "name": "Hoac Foods India Limited",
+            "isin": "INE0S6S01017"
+        },
+        "RULKA": {
+            "name": "Rulka Electricals Limited",
+            "isin": "INE0R7301013"
+        },
+        "QUESTLAB": {
+            "name": "Quest Laboratories Limited",
+            "isin": "INE0TNW01017"
+        },
+        "IEML": {
+            "name": "Indian Emulsifiers Limited",
+            "isin": "INE0RRU01016"
+        },
+        "MANDEEP": {
+            "name": "Mandeep Auto Industries Limited",
+            "isin": "INE0R3T01013"
+        },
+        "VERITAAS": {
+            "name": "Veritaas Advertising Limited",
+            "isin": "INE0SRI01019"
+        },
+        "ABSMARINE": {
+            "name": "ABS Marine Services Limited",
+            "isin": "INE0QRV01016"
+        },
+        "PRLIND": {
+            "name": "Premier Roadlines Limited",
+            "isin": "INE0CFG01012"
+        },
+        "EMMIL": {
+            "name": "Energy Mission Machineries (India) Limited",
+            "isin": "INE0S1L01013"
+        },
+        "SILKFLEX": {
+            "name": "Silkflex Polymers (India) Limited",
+            "isin": "INE0STN01015"
+        },
+        "REFRACTORY": {
+            "name": "Refractory Shapes Limited",
+            "isin": "INE0TNX01015"
+        },
+        "WINSOL": {
+            "name": "Winsol Engineers Limited",
+            "isin": "INE0S3D01016"
+        },
+        "SLONE": {
+            "name": "Slone Infosystems Limited",
+            "isin": "INE0SMA01017"
+        },
+        "RBS": {
+            "name": "Ramdevbaba Solvent Limited",
+            "isin": "INE0RJH01010"
+        },
+        "BIRDYS": {
+            "name": "Grill Splendour Services Limited",
+            "isin": "INE0PC901019"
+        },
+        "DCG": {
+            "name": "DCG Cables & Wires Limited",
+            "isin": "INE0S8401018"
+        },
+        "TGL": {
+            "name": "Teerth Gopicon Limited",
+            "isin": "INE0K6601012"
+        },
+        "DRSCARGO": {
+            "name": "DRS Cargo Movers Limited",
+            "isin": "INE0QZM01018"
+        },
+        "CGRAPHICS": {
+            "name": "Creative Graphics Solutions India Limited",
+            "isin": "INE0R7401011"
+        },
+        "ALUWIND": {
+            "name": "Aluwind Architectural Limited",
+            "isin": "INE0STM01017"
+        },
+        "YASHOPTICS": {
+            "name": "Yash Optics & Lens Limited",
+            "isin": "INE0TO601017"
+        },
+        "K2INFRA": {
+            "name": "K2 Infragen Limited",
+            "isin": "INE0DEZ01013"
+        },
+        "RADIOWALLA": {
+            "name": "Radiowalla Network Limited",
+            "isin": "INE430U01019"
+        },
+        "TAC": {
+            "name": "TAC Infosec Limited",
+            "isin": "INE0SOY01013"
+        },
+        "TRUST": {
+            "name": "Trust Fintech Limited",
+            "isin": "INE0SWN01019"
+        },
+        "BLUEPEBBLE": {
+            "name": "Blue Pebble Limited",
+            "isin": "INE0SAK01011"
+        },
+        "ASPIRE": {
+            "name": "Aspire & Innovative Advertising Limited",
+            "isin": "INE0S7801010"
+        },
+        "NAMAN": {
+            "name": "Naman In-Store (India) Limited",
+            "isin": "INE0RJM01010"
+        },
+        "VISHWAS": {
+            "name": "Vishwas Agri Seeds Limited",
+            "isin": "INE0S2E01016"
+        },
+        "ENSER": {
+            "name": "Enser Communications Limited",
+            "isin": "INE0R9I01013"
+        },
+        "ENFUSE": {
+            "name": "Enfuse Solutions Limited",
+            "isin": "INE0S3X01014"
+        },
+        "AVPINFRA": {
+            "name": "AVP Infracon Limited",
+            "isin": "INE0R9401019"
+        },
+        "SIGNORIA": {
+            "name": "Signoria Creation Limited",
+            "isin": "INE0RDE01010"
+        },
+        "PRATHAM": {
+            "name": "Pratham EPC Projects Limited",
+            "isin": "INE0QA601016"
+        },
+        "SHREEKARNI": {
+            "name": "Shree Karni Fabcom Limited",
+            "isin": "INE0S4Y01010"
+        },
+        "SONAMAC": {
+            "name": "Sona Machinery Limited",
+            "isin": "INE0Q6H01012"
+        },
+        "VR": {
+            "name": "V R Infraspace Limited",
+            "isin": "INE0QQM01017"
+        },
+        "MVKAGRO": {
+            "name": "M.V.K. Agro Food Product Limited",
+            "isin": "INE0SGC01015"
+        },
+        "PURVFLEXI": {
+            "name": "Purv Flexipack Limited",
+            "isin": "INE0R6C01012"
+        },
+        "OWAIS": {
+            "name": "Owais Metal And Mineral Processing Limited",
+            "isin": "INE0R8M01017"
+        },
+        "SADHAV": {
+            "name": "Sadhav Shipping Limited",
+            "isin": "INE0K5H01010"
+        },
+        "ZENITHDRUG": {
+            "name": "Zenith Drugs Limited",
+            "isin": "INE0QWN01013"
+        },
+        "DEEM": {
+            "name": "Deem Roll Tech Limited",
+            "isin": "INE586O01011"
+        },
+        "ATMASTCO": {
+            "name": "Atmastco Limited",
+            "isin": "INE05DH01017"
+        },
+        "INM": {
+            "name": "Interiors & More Limited",
+            "isin": "INE0OPC01015"
+        },
+        "TCL": {
+            "name": "Thaai Casting Limited",
+            "isin": "INE0QJL01014"
+        },
+        "KTL": {
+            "name": "Kalahridhaan Trendz Limited",
+            "isin": "INE02M801018"
+        },
+        "ESCONET": {
+            "name": "Esconet Technologies Limited",
+            "isin": "INE0RQZ01017"
+        },
+        "WTICAB": {
+            "name": "Wise Travel India Limited",
+            "isin": "INE623Y01011"
+        },
+        "POLYSIL": {
+            "name": "Polysil Irrigation Systems Limited",
+            "isin": "INE517M01028"
+        },
+        "ALPEXSOLAR": {
+            "name": "Alpex Solar Limited",
+            "isin": "INE0R4701017"
+        },
+        "ITALIANE": {
+            "name": "Italian Edibles Limited",
+            "isin": "INE0R7R01018"
+        },
+        "BAWEJA": {
+            "name": "Baweja Studios Limited",
+            "isin": "INE0JFJ01011"
+        },
+        "MEGATHERM": {
+            "name": "Megatherm Induction Limited",
+            "isin": "INE531R01010"
+        },
+        "DHTL": {
+            "name": "Docmode Health Technologies Limited",
+            "isin": "INE0OGG01015"
+        },
+        "DELAPLEX": {
+            "name": "Delaplex Limited",
+            "isin": "INE0SK801018"
+        },
+        "FONEBOX": {
+            "name": "Fonebox Retail Limited",
+            "isin": "INE0Q4701019"
+        },
+        "LAWSIKHO": {
+            "name": "Addictive Learning Technology Limited",
+            "isin": "INE0RDH01021"
+        },
+        "KONSTELEC": {
+            "name": "Konstelec Engineers Limited",
+            "isin": "INE0QEI01011"
+        },
+        "MAXPOSURE": {
+            "name": "Maxposure Limited",
+            "isin": "INE0ECC01022"
+        },
+        "APS": {
+            "name": "Australian Premium Solar (India) Limited",
+            "isin": "INE0P0001010"
+        },
+        "IBLFL": {
+            "name": "IBL Finance Limited",
+            "isin": "INE0O7401018"
+        },
+        "KLL": {
+            "name": "Kaushalya Logistics Limited",
+            "isin": "INE0Q2V01012"
+        },
+        "KCEIL": {
+            "name": "Kay Cee Energy & Infra Limited",
+            "isin": "INE0RCG01017"
+        },
+        "AKANKSHA": {
+            "name": "Akanksha Power and Infrastructure Limited",
+            "isin": "INE0PCY01014"
+        },
+        "HRHNEXT": {
+            "name": "HRH Next Services Limited",
+            "isin": "INE0R3501012"
+        },
+        "SAIFL": {
+            "name": "Sameera Agro And Infra Limited",
+            "isin": "INE0PZA01015"
+        },
+        "SUPREMEPWR": {
+            "name": "Supreme Power Equipment Limited",
+            "isin": "INE0QHG01026"
+        },
+        "INDIFRA": {
+            "name": "Indifra Limited",
+            "isin": "INE0PS301014"
+        },
+        "TECHLABS": {
+            "name": "Trident Techlabs Limited",
+            "isin": "INE0QD201012"
+        },
+        "EFORCE": {
+            "name": "Electro Force (India) Limited",
+            "isin": "INE0Q1W01012"
+        },
+        "SHREEOSFM": {
+            "name": "Shree OSFM E-Mobility Limited",
+            "isin": "INE02S501018"
+        },
+        "SJLOGISTIC": {
+            "name": "S J Logistics (India) Limited",
+            "isin": "INE0F3301020"
+        },
+        "PRESSTONIC": {
+            "name": "Presstonic Engineering Limited",
+            "isin": "INE0R1601012"
+        },
+        "ACCENTMIC": {
+            "name": "Accent Microcell Limited",
+            "isin": "INE0Q5D01013"
+        },
+        "GRAPHISAD": {
+            "name": "Graphisads Limited",
+            "isin": "INE0POU01017"
+        },
+        "SHEETAL": {
+            "name": "Sheetal Universal Limited",
+            "isin": "INE04VX01019"
+        },
+        "CBAZAAR": {
+            "name": "Net Avenue Technologies Limited",
+            "isin": "INE518X01015"
+        },
+        "MARINETRAN": {
+            "name": "Marinetrans India Limited",
+            "isin": "INE0P1P01017"
+        },
+        "ROCKINGDCE": {
+            "name": "Rockingdeals Circular Economy Limited",
+            "isin": "INE0PTR01012"
+        },
+        "SUNREST": {
+            "name": "Sunrest Lifescience Limited",
+            "isin": "INE0PLZ01012"
+        },
+        "ROXHITECH": {
+            "name": "Rox Hi Tech Limited",
+            "isin": "INE0PDJ01013"
+        },
+        "BABAFP": {
+            "name": "Baba Food Processing (India) Limited",
+            "isin": "INE0QW501012"
+        },
+        "MICROPRO": {
+            "name": "Micropro Software Solutions Limited",
+            "isin": "INE0PZK01014"
+        },
+        "SARTELE": {
+            "name": "Sar Televenture Limited",
+            "isin": "INE0PUC01020"
+        },
+        "MAITREYA": {
+            "name": "Maitreya Medicare Limited",
+            "isin": "INE0PLQ01011"
+        },
+        "TRANSTEEL": {
+            "name": "Transteel Seating Technologies Limited",
+            "isin": "INE0NVI01020"
+        },
+        "PARAGON": {
+            "name": "Paragon Fine and Speciality Chemical Limited",
+            "isin": "INE0N4G01012"
+        },
+        "SHANTHALA": {
+            "name": "Shanthala FMCG Products Limited",
+            "isin": "INE0Q9Q01017"
+        },
+        "ONDOOR": {
+            "name": "On Door Concepts Limited",
+            "isin": "INE00ER01015"
+        },
+        "RCDL": {
+            "name": "Rajgor Castor Derivatives Limited",
+            "isin": "INE0BZQ01011"
+        },
+        "WOMANCART": {
+            "name": "Womancart Limited",
+            "isin": "INE0Q9601016"
+        },
+        "ACSAL": {
+            "name": "Arvind and Company Shipping Agencies Limited",
+            "isin": "INE0P4T01013"
+        },
+        "COMMITTED": {
+            "name": "Committed Cargo Care Limited",
+            "isin": "INE597Z01014"
+        },
+        "PLADAINFO": {
+            "name": "Plada Infotech Services Limited",
+            "isin": "INE0PXD01014"
+        },
+        "SCML": {
+            "name": "Sharp Chucks and Machines Limited",
+            "isin": "INE460Q01014"
+        },
+        "KARNIKA": {
+            "name": "Karnika Industries Limited",
+            "isin": "INE0MGA01012"
+        },
+        "GOYALSALT": {
+            "name": "Goyal Salt Limited",
+            "isin": "INE0QFE01017"
+        },
+        "OLIL": {
+            "name": "Oneclick Logistics India Limited",
+            "isin": "INE0OPS01011"
+        },
+        "CANARYS": {
+            "name": "Canarys Automations Limited",
+            "isin": "INE0QG301017"
+        },
+        "KONTOR": {
+            "name": "Kontor Space Limited",
+            "isin": "INE0KZ301010"
+        },
+        "VISHNUINFR": {
+            "name": "Vishnusurya Projects and Infra Limited",
+            "isin": "INE0PQ001012"
+        },
+        "EFACTOR": {
+            "name": "E Factor Experiences Limited",
+            "isin": "INE0KFF01017"
+        },
+        "ARABIAN": {
+            "name": "Arabian Petroleum Limited",
+            "isin": "INE08NJ01024"
+        },
+        "VINYAS": {
+            "name": "Vinyas Innovative Technologies Limited",
+            "isin": "INE0OLS01010"
+        },
+        "NEWJAISA": {
+            "name": "Newjaisa Technologies Limited",
+            "isin": "INE0PW501021"
+        },
+        "INSPIRE": {
+            "name": "Inspire Films Limited",
+            "isin": "INE0NDX01019"
+        },
+        "DIGIKORE": {
+            "name": "Digikore Studios Limited",
+            "isin": "INE0QJ901011"
+        },
+        "MAL": {
+            "name": "Mangalam Alloys Limited",
+            "isin": "INE00C401011"
+        },
+        "SAAKSHI": {
+            "name": "Saakshi Medtech and Panels Limited",
+            "isin": "INE0PSK01027"
+        },
+        "MASTER": {
+            "name": "Master Components Limited",
+            "isin": "INE0OJM01017"
+        },
+        "HIGREEN": {
+            "name": "Hi-Green Carbon Limited",
+            "isin": "INE0PIC01017"
+        },
+        "MARCO": {
+            "name": "Marco Cables & Conductors Limited",
+            "isin": "INE0QP001012"
+        },
+        "CELLECOR": {
+            "name": "Cellecor Gadgets Limited",
+            "isin": "INE0OMO01025"
+        },
+        "KODYTECH": {
+            "name": "Kody Technolab Limited",
+            "isin": "INE0Q7P01013"
+        },
+        "KEL": {
+            "name": "Kundan Edifice Limited",
+            "isin": "INE0OWX01025"
+        },
+        "MADHUSUDAN": {
+            "name": "Madhusudan Masala Limited",
+            "isin": "INE0P6701019"
+        },
+        "CHAVDA": {
+            "name": "Chavda Infra Limited",
+            "isin": "INE0PT101017"
+        },
+        "HOLMARC": {
+            "name": "Holmarc Opto-Mechatronics Limited",
+            "isin": "INE0LXA01019"
+        },
+        "UNIHEALTH": {
+            "name": "Unihealth Consultancy Limited",
+            "isin": "INE0PRF01011"
+        },
+        "JIWANRAM": {
+            "name": "Jiwanram Sheoduttrai Industries Limited",
+            "isin": "INE0N5H01017"
+        },
+        "SAROJA": {
+            "name": "Saroja Pharma Industries India Limited",
+            "isin": "INE0PCL01011"
+        },
+        "PRAMARA": {
+            "name": "Pramara Promotions Limited",
+            "isin": "INE0O7A01017"
+        },
+        "BASILIC": {
+            "name": "Basilic Fly Studio Limited",
+            "isin": "INE0OCC01013"
+        },
+        "MONOPHARMA": {
+            "name": "Mono Pharmacare Limited",
+            "isin": "INE0OIP01012"
+        },
+        "CPS": {
+            "name": "C P S Shapers Limited",
+            "isin": "INE0QBU01012"
+        },
+        "SAHAJ": {
+            "name": "Sahaj Fashions Limited",
+            "isin": "INE013901017"
+        },
+        "SEL": {
+            "name": "Sungarner Energies Limited",
+            "isin": "INE0O3O01017"
+        },
+        "CLSL": {
+            "name": "Crop Life Science Limited",
+            "isin": "INE00NH01017"
+        },
+        "SSFL": {
+            "name": "Srivari Spices And Foods Limited",
+            "isin": "INE0ON201012"
+        },
+        "SANGANI": {
+            "name": "Sangani Hospitals Limited",
+            "isin": "INE0OVI01010"
+        },
+        "YUDIZ": {
+            "name": "Yudiz Solutions Limited",
+            "isin": "INE09FA01019"
+        },
+        "VINSYS": {
+            "name": "Vinsys IT Services India Limited",
+            "isin": "INE0OSJ01014"
+        },
+        "ORIANA": {
+            "name": "Oriana Power Limited",
+            "isin": "INE0OUT01019"
+        },
+        "ZEAL": {
+            "name": "Zeal Global Services Limited",
+            "isin": "INE0PPS01018"
+        },
+        "SHRITECH": {
+            "name": "Shri Techtex Limited",
+            "isin": "INE0OMF01015"
+        },
+        "YCCL": {
+            "name": "Yasons Chemex Care Limited",
+            "isin": "INE08S201019"
+        },
+        "SERVICE": {
+            "name": "Service Care Limited",
+            "isin": "INE0P1Q01015"
+        },
+        "DRONE": {
+            "name": "Drone Destination Limited",
+            "isin": "INE0P7201019"
+        },
+        "SYNOPTICS": {
+            "name": "Synoptics Technologies Limited",
+            "isin": "INE0BTR01012"
+        },
+        "TRIDHYA": {
+            "name": "Tridhya Tech Limited",
+            "isin": "INE0LWY01029"
+        },
+        "GLOBALPET": {
+            "name": "Global Pet Industries Limited",
+            "isin": "INE0PS501019"
+        },
+        "PENTAGON": {
+            "name": "Pentagon Rubber Limited",
+            "isin": "INE0ORS01017"
+        },
+        "GREENCHEF": {
+            "name": "Greenchef Appliances Limited",
+            "isin": "INE0O7P01015"
+        },
+        "ESFL": {
+            "name": "Essen Speciality Films Limited",
+            "isin": "INE0ITO01014"
+        },
+        "MAGSON": {
+            "name": "Magson Retail And Distribution Limited",
+            "isin": "INE0O1S01012"
+        },
+        "AATMAJ": {
+            "name": "Aatmaj Healthcare Limited",
+            "isin": "INE0OB201016"
+        },
+        "VILINBIO": {
+            "name": "Vilin Bio Med Limited",
+            "isin": "INE0L4V01013"
+        },
+        "CELLPOINT": {
+            "name": "Cell Point (India) Limited",
+            "isin": "INE0O0001013"
+        },
+        "URBAN": {
+            "name": "Urban Enviro Waste Management Limited",
+            "isin": "INE0O0201019"
+        },
+        "SPECTSTM": {
+            "name": "Spectrum Talent Management Limited",
+            "isin": "INE0OL001018"
+        },
+        "KDL": {
+            "name": "Kore Digital Limited",
+            "isin": "INE0O4R01018"
+        },
+        "SAHANA": {
+            "name": "Sahana System Limited",
+            "isin": "INE0LEX01011"
+        },
+        "INFOLLION": {
+            "name": "Infollion Research Services Limited",
+            "isin": "INE0NNZ01013"
+        },
+        "PROV": {
+            "name": "Proventus Agrocom Limited",
+            "isin": "INE0ONE01016"
+        },
+        "CRAYONS": {
+            "name": "Crayons Advertising Limited",
+            "isin": "INE0OFK01019"
+        },
+        "DENTALKART": {
+            "name": "Vasa Denticity Limited",
+            "isin": "INE0N5801013"
+        },
+        "REMUS": {
+            "name": "Remus Pharmaceuticals Limited",
+            "isin": "INE0O5T01011"
+        },
+        "KRISHCA": {
+            "name": "Krishca Strapping Solutions Limited",
+            "isin": "INE0NR701018"
+        },
+        "AUROIMPEX": {
+            "name": "Auro Impex  & Chemicals Limited",
+            "isin": "INE0NUL01018"
+        },
+        "DENEERS": {
+            "name": "De Neers Tools Limited",
+            "isin": "INE0JWV01011"
+        },
+        "QUICKTOUCH": {
+            "name": "Quicktouch Technologies Limited",
+            "isin": "INE0K4D01020"
+        },
+        "AGUL": {
+            "name": "A G Universal Limited",
+            "isin": "INE0O6N01012"
+        },
+        "PATTECH": {
+            "name": "Pattech Fitwell Tube Components Limited",
+            "isin": "INE0NZW01014"
+        },
+        "MOS": {
+            "name": "Mos Utility Limited",
+            "isin": "INE0N7S01010"
+        },
+        "INFINIUM": {
+            "name": "Infinium Pharmachem Limited",
+            "isin": "INE0MRE01011"
+        },
+        "SOTAC": {
+            "name": "Sotac Pharmaceuticals Limited",
+            "isin": "INE0O2D01012"
+        },
+        "NIRMAN": {
+            "name": "Nirman Agri Genetics Limited",
+            "isin": "INE0OK701014"
+        },
+        "QFIL": {
+            "name": "Quality Foils (India) Limited",
+            "isin": "INE0O1M01015"
+        },
+        "VELS": {
+            "name": "Vels Film International Limited",
+            "isin": "INE0I3H01019"
+        },
+        "MCON": {
+            "name": "Mcon Rasayan India Limited",
+            "isin": "INE0O4M01019"
+        },
+        "SYSTANGO": {
+            "name": "Systango Technologies Limited",
+            "isin": "INE0O7R01011"
+        },
+        "VERTEXPLUS": {
+            "name": "Vertexplus Technologies Limited",
+            "isin": "INE0NLB01018"
+        },
+        "SRIVASAVI": {
+            "name": "Srivasavi Adhesive Tapes Limited",
+            "isin": "INE0NPI01014"
+        },
+        "VIAZ": {
+            "name": "Viaz Tyres Limited",
+            "isin": "INE0MO401019"
+        },
+        "AGARWALFT": {
+            "name": "Agarwal Float Glass India Limited",
+            "isin": "INE0MLA01012"
+        },
+        "LRRPL": {
+            "name": "Lead Reclaim And Rubber Products Limited",
+            "isin": "INE0H4B01011"
+        },
+        "SHERA": {
+            "name": "Shera Energy Limited",
+            "isin": "INE0MM001019"
+        },
+        "GRCL": {
+            "name": "Gayatri Rubbers And Chemicals Limited",
+            "isin": "INE0LVM01018"
+        },
+        "ARISTO": {
+            "name": "Aristo Bio-Tech And Lifescience Limited",
+            "isin": "INE082101010"
+        },
+        "DUCOL": {
+            "name": "Ducol Organics And Colours Limited",
+            "isin": "INE0LZO01015"
+        },
+        "CMNL": {
+            "name": "Chaman Metallics Limited",
+            "isin": "INE06PV01010"
+        },
+        "ANLON": {
+            "name": "Anlon Technology Solutions Limited",
+            "isin": "INE0LR101013"
+        },
+        "RBMINFRA": {
+            "name": "Rbm Infracon Limited",
+            "isin": "INE0NA301016"
+        },
+        "HOMESFY": {
+            "name": "Homesfy Realty Limited",
+            "isin": "INE0N7F01017"
+        },
+        "MOXSH": {
+            "name": "Moxsh Overseas Educon Limited",
+            "isin": "INE0N6D01014"
+        },
+        "UMA": {
+            "name": "Uma Converter Limited",
+            "isin": "INE067901012"
+        },
+        "ARIHANTACA": {
+            "name": "Arihant Academy Limited",
+            "isin": "INE0NCC01015"
+        },
+        "DOLLEX": {
+            "name": "Dollex Agrotech Limited",
+            "isin": "INE0JHH01011"
+        },
+        "ALLETEC": {
+            "name": "All E Technologies Limited",
+            "isin": "INE0M2X01012"
+        },
+        "ARHAM": {
+            "name": "Arham Technologies Limited",
+            "isin": "INE0L2Y01011"
+        },
+        "BAHETI": {
+            "name": "Baheti Recycling Industries Limited",
+            "isin": "INE029Q01017"
+        },
+        "PRITIKA": {
+            "name": "Pritika Engineering Components Limited",
+            "isin": "INE0MJQ01012"
+        },
+        "AMIABLE": {
+            "name": "Amiable Logistics (India) Limited",
+            "isin": "INE0MTP01013"
+        },
+        "VITAL": {
+            "name": "Vital Chemtech Limited",
+            "isin": "INE0L4K01016"
+        },
+        "IPSL": {
+            "name": "Integrated Personnel Services Limited",
+            "isin": "INE02EE01019"
+        },
+        "RITEZONE": {
+            "name": "Rite Zone Chemcon India Limited",
+            "isin": "INE0MRA01019"
+        },
+        "PHANTOMFX": {
+            "name": "Phantom Digital Effects Limited",
+            "isin": "INE0MLZ01019"
+        },
+        "FROG": {
+            "name": "Frog Cellsat Limited",
+            "isin": "INE385O01018"
+        },
+        "SWASTIK": {
+            "name": "Swastik Pipe Limited",
+            "isin": "INE0DGC01025"
+        },
+        "QMSMEDI": {
+            "name": "QMS Medical Allied Services Limited",
+            "isin": "INE0FMW01018"
+        },
+        "LLOYDS": {
+            "name": "Lloyds Luxuries Limited",
+            "isin": "INE0DTQ01028"
+        },
+        "CMRSL": {
+            "name": "Cyber Media Research & Services Limited",
+            "isin": "INE075Z01011"
+        },
+        "KANDARP": {
+            "name": "Kandarp Digi Smart BPO Limited",
+            "isin": "INE0MOT01016"
+        },
+        "MAKS": {
+            "name": "Maks Energy Solutions India Limited",
+            "isin": "INE0CDK01019"
+        },
+        "CLOUD": {
+            "name": "Varanium Cloud Limited",
+            "isin": "INE0JOO01021"
+        },
+        "ANNAPURNA": {
+            "name": "Annapurna Swadisht Limited",
+            "isin": "INE0MGM01017"
+        },
+        "TAPIFRUIT": {
+            "name": "Tapi Fruit Processing Limited",
+            "isin": "INE0M7001010"
+        },
+        "ISHAN": {
+            "name": "Ishan International Limited",
+            "isin": "INE0LCW01025"
+        },
+        "SABAR": {
+            "name": "Sabar Flex India Limited",
+            "isin": "INE0DZ101013"
+        },
+        "MEGAFLEX": {
+            "name": "Mega Flex Plastics Limited",
+            "isin": "INE0G1D01014"
+        },
+        "VIVIANA": {
+            "name": "Viviana Power Tech Limited",
+            "isin": "INE0MEG01014"
+        },
+        "JFLLIFE": {
+            "name": "Jfl Life Sciences Limited",
+            "isin": "INE0LA901015"
+        },
+        "AMEYA": {
+            "name": "Ameya Precision Engineers Limited",
+            "isin": "INE0KT901015"
+        },
+        "KORE": {
+            "name": "Jay Jalaram Technologies Limited",
+            "isin": "INE0J6801010"
+        },
+        "VEEKAYEM": {
+            "name": "Veekayem Fashion and Apparels Limited",
+            "isin": "INE0KTW01013"
+        },
+        "USASEEDS": {
+            "name": "Upsurge Seeds Of Agriculture Limited",
+            "isin": "INE0CBM01019"
+        },
+        "AGNI": {
+            "name": "Agni Green Power Limited",
+            "isin": "INE0LF301013"
+        },
+        "SKP": {
+            "name": "SKP Bearing Industries Limited",
+            "isin": "INE0KZA01016"
+        },
+        "MWL": {
+            "name": "Mangalam Worldwide Limited",
+            "isin": "INE0JYY01011"
+        },
+        "KCK": {
+            "name": "Kck Industries Limited",
+            "isin": "INE0J1E01019"
+        },
+        "RILINFRA": {
+            "name": "Rachana Infrastructure Limited",
+            "isin": "INE02OY01016"
+        },
+        "FIDEL": {
+            "name": "Fidel Softech Limited",
+            "isin": "INE0LQQ01019"
+        },
+        "GSTL": {
+            "name": "Globesecure Technologies Limited",
+            "isin": "INE00WS01056"
+        },
+        "SONUINFRA": {
+            "name": "Sonu Infratech Limited",
+            "isin": "INE0JZA01018"
+        },
+        "LEMERITE": {
+            "name": "Le Merite Exports Limited",
+            "isin": "INE0G1L01017"
+        },
+        "JSLL": {
+            "name": "Jeena Sikho Lifecare Limited",
+            "isin": "INE0J5801011"
+        },
+        "KRISHNADEF": {
+            "name": "Krishna Defence and Allied Industries Limited",
+            "isin": "INE0J5601015"
+        },
+        "PROPEQUITY": {
+            "name": "P. E. Analytics Limited",
+            "isin": "INE0KN801013"
+        },
+        "KRISHIVAL": {
+            "name": "Krishival Foods Limited",
+            "isin": "INE0GGO01015"
+        },
+        "KNAGRI": {
+            "name": "KN Agri Resources Limited",
+            "isin": "INE0KNW01016"
+        },
+        "SWARAJ": {
+            "name": "Swaraj Suiting Limited",
+            "isin": "INE0GMR01016"
+        },
+        "COOLCAPS": {
+            "name": "Cool Caps Industries Limited",
+            "isin": "INE0HS001010"
+        },
+        "SPRL": {
+            "name": "Sp Refractories Limited",
+            "isin": "INE0JW501011"
+        },
+        "SHIGAN": {
+            "name": "Shigan Quantum Technologies Limited",
+            "isin": "INE03KJ01013"
+        },
+        "MADHAVBAUG": {
+            "name": "Vaidya Sane Ayurved Laboratories Limited",
+            "isin": "INE0JR301013"
+        },
+        "RICHA": {
+            "name": "Richa Info Systems Limited",
+            "isin": "INE0J1P01015"
+        },
+        "PRECISION": {
+            "name": "Precision Metaliks Limited",
+            "isin": "INE0HKW01018"
+        },
+        "TIMESCAN": {
+            "name": "Timescan Logistics (India) Limited",
+            "isin": "INE0IJY01014"
+        },
+        "ABCOTS": {
+            "name": "A B Cotspin India Limited",
+            "isin": "INE08PH01015"
+        },
+        "VIVO": {
+            "name": "Vivo Collaboration Solutions Limited",
+            "isin": "INE0IA701014"
+        },
+        "FOCE": {
+            "name": "Foce India Limited",
+            "isin": "INE0I7D01019"
+        },
+        "EUROBOND": {
+            "name": "Euro Panel Products Limited",
+            "isin": "INE505V01016"
+        },
+        "NIDAN": {
+            "name": "Nidan Laboratories and Healthcare Limited",
+            "isin": "INE0J6L01013"
+        },
+        "KOTYARK": {
+            "name": "Kotyark Industries Limited",
+            "isin": "INE0J0B01017"
+        },
+        "DKEGL": {
+            "name": "D.K. Enterprises Global Limited",
+            "isin": "INE0GN101014"
+        },
+        "DYNAMIC": {
+            "name": "Dynamic Services & Security Limited",
+            "isin": "INE0DZ701010"
+        },
+        "DESTINY": {
+            "name": "Destiny Logistics & Infra Limited",
+            "isin": "INE0IGO01011"
+        },
+        "BMETRICS": {
+            "name": "Bombay Metrics Supply Chain Limited",
+            "isin": "INE0I3Y01014"
+        },
+        "JAINAM": {
+            "name": "Jainam Ferro Alloys (I) Limited",
+            "isin": "INE02KC01010"
+        },
+        "QUADPRO": {
+            "name": "Quadpro Ites Limited",
+            "isin": "INE0GOJ01027"
+        },
+        "BEWLTD": {
+            "name": "BEW Engineering Limited",
+            "isin": "INE0HQI01014"
+        },
+        "DUGLOBAL": {
+            "name": "DUDIGITAL GLOBAL LIMITED",
+            "isin": "INE0HPK01020"
+        },
+        "REXPIPES": {
+            "name": "Rex Pipes And Cables Industries Limited",
+            "isin": "INE00D001018"
+        },
+        "NPST": {
+            "name": "Network People Services Technologies Limited",
+            "isin": "INE0FFK01017"
+        },
+        "WALPAR": {
+            "name": "Walpar Nutritions Limited",
+            "isin": "INE0G2G01015"
+        },
+        "AILIMITED": {
+            "name": "Abhishek Integrations Limited",
+            "isin": "INE0CAJ01017"
+        },
+        "VMARCIND": {
+            "name": "V Marc India Limited",
+            "isin": "INE0GXK01018"
+        },
+        "SIDDHIKA": {
+            "name": "Siddhika Coatings Limited",
+            "isin": "INE0A1E01018"
+        },
+        "PARTYCRUS": {
+            "name": "Party Cruisers Limited",
+            "isin": "INE06ZX01015"
+        },
+        "ASCOM": {
+            "name": "Ascom Leasing & Investments Limited",
+            "isin": "INE08KD01015"
+        },
+        "GOLDKART": {
+            "name": "Goldkart Jewels Limited",
+            "isin": "INE06MH01016"
+        },
+        "SHIVAUM": {
+            "name": "Shiv Aum Steels Limited",
+            "isin": "INE719F01016"
+        },
+        "SECL": {
+            "name": "Salasar Exteriors and Contour Limited",
+            "isin": "INE00Y701026"
+        },
+        "ABINFRA": {
+            "name": "A B Infrabuild Limited",
+            "isin": "INE00YB01017"
+        },
+        "KHFM": {
+            "name": "Khfm Hospitality And Facility Management Services Limited",
+            "isin": "INE00UG01014"
+        },
+        "MINDPOOL": {
+            "name": "Mindpool Technologies Limited",
+            "isin": "INE00RQ01019"
+        },
+        "SURANI": {
+            "name": "Surani Steel Tubes Limited",
+            "isin": "INE01ZJ01015"
+        },
+        "DRSDILIP": {
+            "name": "DRS Dilip Roadlines Limited",
+            "isin": "INE02CV01017"
+        },
+        "SHUBHLAXMI": {
+            "name": "Shubhlaxmi Jewel Art Limited",
+            "isin": "INE01Z401013"
+        },
+        "UWCSL": {
+            "name": "Ultra Wiring Connectivity System Limited",
+            "isin": "INE00F301010"
+        },
+        "PARIN": {
+            "name": "Parin Furniture Limited",
+            "isin": "INE00U801010"
+        },
+        "SPECTRUM": {
+            "name": "Spectrum Electrical Industries Limited",
+            "isin": "INE01EO01010"
+        },
+        "UCL": {
+            "name": "Ushanti Colour Chem Limited",
+            "isin": "INE00NI01015"
+        },
+        "AMBANIORGO": {
+            "name": "AMBANI ORGOCHEM LIMITED",
+            "isin": "INE00C501018"
+        },
+        "JAKHARIA": {
+            "name": "JAKHARIA FABRIC LIMITED",
+            "isin": "INE00N401018"
+        },
+        "MAHICKRA": {
+            "name": "Mahickra Chemicals Limited",
+            "isin": "INE961Y01015"
+        },
+        "VERA": {
+            "name": "Vera Synthetic Limited",
+            "isin": "INE709Z01015"
+        },
+        "CONTI": {
+            "name": "Continental Seeds and Chemicals Limited",
+            "isin": "INE340Z01019"
+        },
+        "GIRIRAJ": {
+            "name": "Giriraj Civil Developers Limited",
+            "isin": "INE614Z01017"
+        },
+        "MDL": {
+            "name": "Marvel Decor Limited",
+            "isin": "INE575Z01010"
+        },
+        "MHHL": {
+            "name": "Mohini Health & Hygiene Limited",
+            "isin": "INE450S01011"
+        },
+        "AMJUMBO": {
+            "name": "A and M Jumbo Bags Limited",
+            "isin": "INE749Y01014"
+        },
+        "VASA": {
+            "name": "Vasa Retail and Overseas Ltd",
+            "isin": "INE068Z01016"
+        },
+        "SOLEX": {
+            "name": "Solex Energy Limited",
+            "isin": "INE880Y01017"
+        },
+        "SMVD": {
+            "name": "SMVD Poly Pack Limited",
+            "isin": "INE702Y01013"
+        },
+        "INNOVANA": {
+            "name": "Innovana Thinklabs Limited",
+            "isin": "INE403Y01018"
+        },
+        "FELIX": {
+            "name": "Felix Industries Limited",
+            "isin": "INE901X01013"
+        },
+        "PULZ": {
+            "name": "Pulz Electronics Limited",
+            "isin": "INE335X01014"
+        },
+        "AISL": {
+            "name": "ANI Integrated Services Limited",
+            "isin": "INE635Y01015"
+        },
+        "MILTON": {
+            "name": "Milton Industries Limited",
+            "isin": "INE376Y01016"
+        },
+        "OMFURN": {
+            "name": "Omfurn India Limited",
+            "isin": "INE338Y01016"
+        },
+        "CMMIPL": {
+            "name": "CMM Infraprojects Limited",
+            "isin": "INE289S01013"
+        },
+        "BETA": {
+            "name": "Beta Drugs Limited",
+            "isin": "INE351Y01019"
+        },
+        "GOLDSTAR": {
+            "name": "Goldstar Power Limited",
+            "isin": "INE405Y01021"
+        },
+        "TIRUPATI": {
+            "name": "Shree Tirupati Balajee FIBC Limited",
+            "isin": "INE238Y01018"
+        },
+        "RMDRIP": {
+            "name": "R M Drip and Sprinklers Systems Limited",
+            "isin": "INE219Y01018"
+        },
+        "CADSYS": {
+            "name": "Cadsys (India) Limited",
+            "isin": "INE090Y01013"
+        },
+        "MPTODAY": {
+            "name": "Madhya Pradesh Today Media Limited",
+            "isin": "INE105Y01019"
+        },
+        "MANAV": {
+            "name": "Manav Infra Projects Limited",
+            "isin": "INE104Y01012"
+        },
+        "PASHUPATI": {
+            "name": "Pashupati Cotspin Limited",
+            "isin": "INE124Y01010"
+        },
+        "TRANSWIND": {
+            "name": "Transwind Infrastructures Limited",
+            "isin": "INE792X01016"
+        },
+        "ACCORD": {
+            "name": "Accord Synergy Limited",
+            "isin": "INE113X01015"
+        },
+        "VSCL": {
+            "name": "Vadivarhe Speciality Chemicals Limited",
+            "isin": "INE551Q01028"
+        },
+        "JALAN": {
+            "name": "Jalan Transolutions (India) Limited",
+            "isin": "INE349X01015"
+        },
+        "ASLIND": {
+            "name": "ASL Industries Limited",
+            "isin": "INE617I01024"
+        },
+        "PROLIFE": {
+            "name": "Prolife Industries Limited",
+            "isin": "INE994V01012"
+        },
+        "GICL": {
+            "name": "Globe International Carriers Limited",
+            "isin": "INE947T01014"
+        },
+        "DRL": {
+            "name": "Dhanuka Realty Limited",
+            "isin": "INE704V01015"
+        },
+        "AURDIS": {
+            "name": "Aurangabad Distillery Limited",
+            "isin": "INE448V01019"
+        },
+        "GRETEX": {
+            "name": "Gretex Industries Limited",
+            "isin": "INE985P01012"
+        },
+        "JETKNIT": {
+            "name": "Jet Knitwears Limited",
+            "isin": "INE564T01017"
+        },
+        "AVSL": {
+            "name": "AVSL Industries Limited",
+            "isin": "INE522V01011"
+        },
+        "KKVAPOW": {
+            "name": "KKV Agro Powers Limited",
+            "isin": "INE239T01016"
+        },
+        "AHIMSA": {
+            "name": "Ahimsa Industries Limited",
+            "isin": "INE136T01014"
+        },
+        "SHAIVAL": {
+            "name": "Shaival Reality Limited",
+            "isin": "INE262S01010"
+        },
+        "EMKAYTOOLS": {
+            "name": "Emkay Taps and Cutting Tools Limited",
+            "isin": "INE332S01011"
+        }
+    }
 }
