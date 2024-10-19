@@ -51,7 +51,7 @@ def compute_optimal_portfolio(df: pd.DataFrame) -> Dict[str, Union[Dict[str, flo
     }
 
 @app.post("/optimize/")
-async def optimize_portfolio(request: TickerRequest):
+def optimize_portfolio(request: TickerRequest):
     try:
         # Format tickers based on exchange
         formatted_tickers = format_tickers(request.tickers, request.exchange)
