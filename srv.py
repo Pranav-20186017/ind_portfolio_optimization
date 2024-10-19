@@ -1,4 +1,6 @@
-from typing import List, Dict, Union, Optional
+# main.py
+
+from typing import List, Dict, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from enum import Enum
@@ -7,8 +9,24 @@ import pandas as pd
 from pypfopt import EfficientFrontier, expected_returns
 from pypfopt.risk_models import CovarianceShrinkage
 from functools import lru_cache
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+# Add CORS middleware
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    # Add other origins if necessary
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Define Exchange Enum
 class ExchangeEnum(str, Enum):
@@ -29,38 +47,52 @@ class PortfolioOptimizationResponse(BaseModel):
     MVO: Optional[OptimizationResult]
     MinVol: Optional[OptimizationResult]
 
-class TickerRequest(BaseModel):
-    tickers: List[str]
+# Define StockItem model
+class StockItem(BaseModel):
+    ticker: str
     exchange: ExchangeEnum  # Use Enum for exchange
+
+# Update TickerRequest to use the new StockItem model
+class TickerRequest(BaseModel):
+    stocks: List[StockItem]
 
 # Cache the yf.download call
 @lru_cache(maxsize=32)
-def cached_yf_download(ticker: str) -> pd.DataFrame:
+def cached_yf_download(ticker: str) -> pd.Series:
     return yf.download(ticker)['Adj Close']
 
 # Helper function to format tickers based on exchange
-def format_tickers(tickers: List[str], exchange: ExchangeEnum) -> List[str]:
-    if exchange == ExchangeEnum.BSE:
-        return [ticker + ".BO" for ticker in tickers]
-    elif exchange == ExchangeEnum.NSE:
-        return [ticker + ".NS" for ticker in tickers]
-    else:
-        raise ValueError("Invalid exchange. Use 'BSE' or 'NSE'.")
+def format_tickers(stocks: List[StockItem]) -> List[str]:
+    formatted_tickers = []
+    for stock in stocks:
+        if stock.exchange == ExchangeEnum.BSE:
+            formatted_tickers.append(stock.ticker + ".BO")
+        elif stock.exchange == ExchangeEnum.NSE:
+            formatted_tickers.append(stock.ticker + ".NS")
+        else:
+            raise ValueError(f"Invalid exchange: {stock.exchange}")
+    return formatted_tickers
 
 # Helper function to fetch and align data
 def fetch_and_align_data(tickers: List[str]) -> pd.DataFrame:
     # Download data for each ticker using the cached function
-    data = {ticker: cached_yf_download(ticker) for ticker in tickers}
+    data = {}
+    for ticker in tickers:
+        try:
+            df = cached_yf_download(ticker)
+            if not df.empty:
+                data[ticker] = df
+            else:
+                print(f"No data for ticker: {ticker}")
+        except Exception as e:
+            print(f"Error fetching data for {ticker}: {e}")
     
-    # Filter out empty DataFrames
-    data = {ticker: df for ticker, df in data.items() if not df.empty}
-
     if not data:
         raise ValueError("No valid data available for the provided tickers.")
     
     # Find the maximum of the minimum dates across all tickers to ensure common dates
     min_date = max(df.index.min() for df in data.values())
-
+    
     # Filter data from the common minimum date for all tickers
     filtered_data = {ticker: df[df.index >= min_date] for ticker, df in data.items()}
     
@@ -69,7 +101,7 @@ def fetch_and_align_data(tickers: List[str]) -> pd.DataFrame:
     
     # Drop rows with any NaN values
     combined_df = combined_df.dropna()
-
+    
     return combined_df
 
 # Helper function to compute portfolio optimization
@@ -110,6 +142,7 @@ def compute_optimal_portfolio(df: pd.DataFrame) -> PortfolioOptimizationResponse
             )
         )
     except Exception as e:
+        print(f"Error in MVO optimization: {e}")
         results["MVO"] = None
 
     try:
@@ -129,6 +162,7 @@ def compute_optimal_portfolio(df: pd.DataFrame) -> PortfolioOptimizationResponse
             )
         )
     except Exception as e:
+        print(f"Error in MinVol optimization: {e}")
         results["MinVol"] = None
 
     return PortfolioOptimizationResponse(**results)
@@ -137,7 +171,7 @@ def compute_optimal_portfolio(df: pd.DataFrame) -> PortfolioOptimizationResponse
 def optimize_portfolio(request: TickerRequest):
     try:
         # Format tickers based on exchange
-        formatted_tickers = format_tickers(request.tickers, request.exchange)
+        formatted_tickers = format_tickers(request.stocks)
         
         # Fetch and align data
         df = fetch_and_align_data(formatted_tickers)
@@ -152,4 +186,5 @@ def optimize_portfolio(request: TickerRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
     except Exception as e:
+        print(f"Internal Server Error: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
