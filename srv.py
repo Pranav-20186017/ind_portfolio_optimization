@@ -1,30 +1,48 @@
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from enum import Enum
 import yfinance as yf
 import pandas as pd
-from pypfopt import EfficientFrontier, risk_models, expected_returns
+from pypfopt import EfficientFrontier, expected_returns
 from pypfopt.risk_models import CovarianceShrinkage
 from functools import lru_cache
 
 app = FastAPI()
 
-# Pydantic model for request validation
+# Define Exchange Enum
+class ExchangeEnum(str, Enum):
+    NSE = "NSE"
+    BSE = "BSE"
+
+# Pydantic models for request and response
+class PortfolioPerformance(BaseModel):
+    expected_return: float
+    volatility: float
+    sharpe: float
+
+class OptimizationResult(BaseModel):
+    weights: Dict[str, float]
+    performance: PortfolioPerformance
+
+class PortfolioOptimizationResponse(BaseModel):
+    MVO: Optional[OptimizationResult]
+    MinVol: Optional[OptimizationResult]
+
 class TickerRequest(BaseModel):
     tickers: List[str]
-    exchange: str
+    exchange: ExchangeEnum  # Use Enum for exchange
 
 # Cache the yf.download call
 @lru_cache(maxsize=32)
 def cached_yf_download(ticker: str) -> pd.DataFrame:
-    # Download max available data and extract 'Adj Close'
     return yf.download(ticker)['Adj Close']
 
 # Helper function to format tickers based on exchange
-def format_tickers(tickers: List[str], exchange: str) -> List[str]:
-    if exchange == "BSE":
+def format_tickers(tickers: List[str], exchange: ExchangeEnum) -> List[str]:
+    if exchange == ExchangeEnum.BSE:
         return [ticker + ".BO" for ticker in tickers]
-    elif exchange == "NSE":
+    elif exchange == ExchangeEnum.NSE:
         return [ticker + ".NS" for ticker in tickers]
     else:
         raise ValueError("Invalid exchange. Use 'BSE' or 'NSE'.")
@@ -49,13 +67,13 @@ def fetch_and_align_data(tickers: List[str]) -> pd.DataFrame:
     # Combine the filtered data into a single DataFrame
     combined_df = pd.concat(filtered_data.values(), axis=1, keys=filtered_data.keys())
     
+    # Drop rows with any NaN values
+    combined_df = combined_df.dropna()
+
     return combined_df
 
-
-
-
 # Helper function to compute portfolio optimization
-def compute_optimal_portfolio(df: pd.DataFrame) -> Dict[str, Union[Dict[str, float], float]]:
+def compute_optimal_portfolio(df: pd.DataFrame) -> PortfolioOptimizationResponse:
     """
     Computes optimal portfolios using Mean-Variance Optimization (MVO) and Minimum Volatility.
 
@@ -63,7 +81,7 @@ def compute_optimal_portfolio(df: pd.DataFrame) -> Dict[str, Union[Dict[str, flo
         df (pd.DataFrame): DataFrame of adjusted close prices.
 
     Returns:
-        Dict: Dictionary containing optimal weights and performance metrics for each optimization method.
+        PortfolioOptimizationResponse: Dictionary containing optimal weights and performance metrics.
     """
     # Set the risk-free rate
     risk_free_rate = 0.05
@@ -83,38 +101,39 @@ def compute_optimal_portfolio(df: pd.DataFrame) -> Dict[str, Union[Dict[str, flo
         mvo_performance = ef_mvo.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
 
         # Store MVO results
-        results["MVO"] = {
-            "weights": cleaned_weights_mvo,
-            "expected_return": mvo_performance[0],
-            "volatility": mvo_performance[1],
-            "sharpe": mvo_performance[2]
-        }
+        results["MVO"] = OptimizationResult(
+            weights=cleaned_weights_mvo,
+            performance=PortfolioPerformance(
+                expected_return=mvo_performance[0],
+                volatility=mvo_performance[1],
+                sharpe=mvo_performance[2]
+            )
+        )
     except Exception as e:
-        results["MVO"] = {"error": str(e)}
+        results["MVO"] = None
 
     try:
         # Minimum Volatility Portfolio
         ef_min_vol = EfficientFrontier(mu, S)
-        ef_min_vol.min_volatility()  # Minimize portfolio volatility
+        ef_min_vol.min_volatility()  # Minimize volatility
         cleaned_weights_min_vol = ef_min_vol.clean_weights()
         min_vol_performance = ef_min_vol.portfolio_performance(verbose=False)
 
         # Store Min Vol results
-        results["MinVol"] = {
-            "weights": cleaned_weights_min_vol,
-            "expected_return": min_vol_performance[0],
-            "volatility": min_vol_performance[1],
-            "sharpe": min_vol_performance[2]
-        }
+        results["MinVol"] = OptimizationResult(
+            weights=cleaned_weights_min_vol,
+            performance=PortfolioPerformance(
+                expected_return=min_vol_performance[0],
+                volatility=min_vol_performance[1],
+                sharpe=min_vol_performance[2]
+            )
+        )
     except Exception as e:
-        results["MinVol"] = {"error": str(e)}
+        results["MinVol"] = None
 
-    return results
+    return PortfolioOptimizationResponse(**results)
 
-
-
-
-@app.post("/optimize/")
+@app.post("/optimize/", response_model=PortfolioOptimizationResponse)
 def optimize_portfolio(request: TickerRequest):
     try:
         # Format tickers based on exchange
