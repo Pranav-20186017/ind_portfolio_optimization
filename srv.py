@@ -1,5 +1,3 @@
-# main.py
-
 from typing import List, Dict, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -10,6 +8,7 @@ from pypfopt import EfficientFrontier, expected_returns
 from pypfopt.risk_models import CovarianceShrinkage
 from functools import lru_cache
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 
 app = FastAPI()
 
@@ -46,6 +45,8 @@ class OptimizationResult(BaseModel):
 class PortfolioOptimizationResponse(BaseModel):
     MVO: Optional[OptimizationResult]
     MinVol: Optional[OptimizationResult]
+    start_date: datetime
+    end_date: datetime
 
 # Define StockItem model
 class StockItem(BaseModel):
@@ -105,7 +106,7 @@ def fetch_and_align_data(tickers: List[str]) -> pd.DataFrame:
     return combined_df
 
 # Helper function to compute portfolio optimization
-def compute_optimal_portfolio(df: pd.DataFrame) -> PortfolioOptimizationResponse:
+def compute_optimal_portfolio(df: pd.DataFrame) -> Dict[str, Optional[OptimizationResult]]:
     """
     Computes optimal portfolios using Mean-Variance Optimization (MVO) and Minimum Volatility.
 
@@ -113,7 +114,7 @@ def compute_optimal_portfolio(df: pd.DataFrame) -> PortfolioOptimizationResponse
         df (pd.DataFrame): DataFrame of adjusted close prices.
 
     Returns:
-        PortfolioOptimizationResponse: Dictionary containing optimal weights and performance metrics.
+        Dict[str, Optional[OptimizationResult]]: Dictionary containing optimal weights and performance metrics.
     """
     # Set the risk-free rate
     risk_free_rate = 0.05
@@ -165,7 +166,7 @@ def compute_optimal_portfolio(df: pd.DataFrame) -> PortfolioOptimizationResponse
         print(f"Error in MinVol optimization: {e}")
         results["MinVol"] = None
 
-    return PortfolioOptimizationResponse(**results)
+    return results
 
 @app.post("/optimize/", response_model=PortfolioOptimizationResponse)
 def optimize_portfolio(request: TickerRequest):
@@ -178,9 +179,21 @@ def optimize_portfolio(request: TickerRequest):
         if df.empty:
             raise HTTPException(status_code=400, detail="No data found for the given tickers.")
         
+        # Get the time period
+        start_date = df.index.min().date()
+        end_date = df.index.max().date()
+        
         # Compute optimal portfolio
         results = compute_optimal_portfolio(df)
-        return results
+        
+        # Construct the response
+        response = PortfolioOptimizationResponse(
+            MVO=results.get("MVO"),
+            MinVol=results.get("MinVol"),
+            start_date=start_date,
+            end_date=end_date
+        )
+        return response
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

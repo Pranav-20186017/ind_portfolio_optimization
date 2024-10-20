@@ -15,3 +15,23 @@ export interface StockOption {
     name: string;
     exchange: string;
 }
+
+// src/types/index.ts
+
+export interface PortfolioPerformance {
+    expected_return: number;
+    volatility: number;
+    sharpe: number;
+}
+
+export interface OptimizationResult {
+    weights: { [ticker: string]: number };
+    performance: PortfolioPerformance;
+}
+
+export interface PortfolioOptimizationResponse {
+    MVO?: OptimizationResult | null;
+    MinVol?: OptimizationResult | null;
+    start_date: string; // ISO date string (e.g., "2021-01-01")
+    end_date: string;   // ISO date string (e.g., "2023-10-01")
+}

@@ -10,7 +10,8 @@ import Stack from '@mui/material/Stack';
 import axios from 'axios';
 import Fuse from 'fuse.js';
 import debounce from 'lodash/debounce';
-import VirtualizedListbox from '../components/VirtualizedListbox';
+// If you implemented the VirtualizedListbox for optimization
+// import VirtualizedListbox from '../components/VirtualizedListbox';
 
 const HomePage: React.FC = () => {
     const [stockData, setStockData] = useState<StockData>({});
@@ -52,7 +53,7 @@ const HomePage: React.FC = () => {
         fetchStockData();
     }, []);
 
-    // Initialize Fuse.js
+    // Initialize Fuse.js for fuzzy search
     const fuse = useMemo(() => {
         return new Fuse(options, {
             keys: ['ticker', 'name'],
@@ -130,6 +131,12 @@ const HomePage: React.FC = () => {
         setOptimizationResult(null);
     };
 
+    // Function to format dates
+    const formatDate = (dateString: string) => {
+        const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
+        return new Date(dateString).toLocaleDateString(undefined, options);
+    };
+
     return (
         <div className="p-8">
             <h1 className="text-2xl font-bold mb-4">Stock Search</h1>
@@ -151,7 +158,8 @@ const HomePage: React.FC = () => {
                 filterOptions={(options) => options} // Disable default filtering
                 clearOnBlur={false}
                 value={null} // Clear input after selection
-                ListboxComponent={VirtualizedListbox as React.ComponentType<React.HTMLAttributes<HTMLElement>>}
+            // If using VirtualizedListbox
+            // ListboxComponent={VirtualizedListbox as React.ComponentType<React.HTMLAttributes<HTMLElement>>}
             />
             <div className="mt-6">
                 <h2 className="text-xl font-semibold mb-2">Selected Stocks</h2>
@@ -172,6 +180,7 @@ const HomePage: React.FC = () => {
                     color="primary"
                     onClick={handleSubmit}
                     className="mr-4"
+                    disabled={selectedStocks.length === 0} // Disable if no stocks are selected
                 >
                     Submit
                 </Button>
@@ -183,8 +192,12 @@ const HomePage: React.FC = () => {
                 {optimizationResult && (
                     <div>
                         <h2 className="text-xl font-semibold mb-2">Optimization Results</h2>
+                        <p>
+                            Data Time Period:{' '}
+                            {formatDate(optimizationResult.start_date)} to {formatDate(optimizationResult.end_date)}
+                        </p>
                         {optimizationResult.MVO && (
-                            <div>
+                            <div className="mt-4">
                                 <h3 className="text-lg font-semibold">
                                     Mean-Variance Optimization (MVO)
                                 </h3>
@@ -209,7 +222,7 @@ const HomePage: React.FC = () => {
                             </div>
                         )}
                         {optimizationResult.MinVol && (
-                            <div>
+                            <div className="mt-4">
                                 <h3 className="text-lg font-semibold">
                                     Minimum Volatility Portfolio
                                 </h3>
