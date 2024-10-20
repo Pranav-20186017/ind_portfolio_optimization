@@ -32,6 +32,12 @@ export interface OptimizationResult {
 export interface PortfolioOptimizationResponse {
     MVO?: OptimizationResult | null;
     MinVol?: OptimizationResult | null;
-    start_date: string; // ISO date string (e.g., "2021-01-01")
-    end_date: string;   // ISO date string (e.g., "2023-10-01")
+    start_date: string; // ISO date string
+    end_date: string;   // ISO date string
+    cumulative_returns: {
+        MVO: (number | null)[];
+        MinVol: (number | null)[];
+    };
+    dates: string[]; // Dates as ISO strings
+    nifty_returns: number[];
 }

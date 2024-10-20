@@ -13,6 +13,20 @@ import debounce from 'lodash/debounce';
 // If you implemented the VirtualizedListbox for optimization
 // import VirtualizedListbox from '../components/VirtualizedListbox';
 
+// Import Chart.js components
+import { Line } from 'react-chartjs-2';
+import {
+    Chart as ChartJS,
+    LineElement,
+    CategoryScale,
+    LinearScale,
+    PointElement,
+    Legend,
+    Tooltip,
+} from 'chart.js';
+
+ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Legend, Tooltip);
+
 const HomePage: React.FC = () => {
     const [stockData, setStockData] = useState<StockData>({});
     const [options, setOptions] = useState<StockOption[]>([]);
@@ -137,6 +151,77 @@ const HomePage: React.FC = () => {
         return new Date(dateString).toLocaleDateString(undefined, options);
     };
 
+    // Prepare chart data
+    const prepareChartData = (result: PortfolioOptimizationResponse) => {
+        const labels = result.dates.map((dateStr) => {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString();
+        });
+
+        const datasets = [];
+
+        if (result.cumulative_returns.MVO && result.cumulative_returns.MVO.length > 0) {
+            datasets.push({
+                label: 'MVO Portfolio',
+                data: result.cumulative_returns.MVO,
+                borderColor: 'blue',
+                fill: false,
+            });
+        }
+
+        if (result.cumulative_returns.MinVol && result.cumulative_returns.MinVol.length > 0) {
+            datasets.push({
+                label: 'MinVol Portfolio',
+                data: result.cumulative_returns.MinVol,
+                borderColor: 'green',
+                fill: false,
+            });
+        }
+
+        if (result.nifty_returns && result.nifty_returns.length > 0) {
+            datasets.push({
+                label: 'Nifty Index',
+                data: result.nifty_returns,
+                borderColor: 'red',
+                fill: false,
+            });
+        }
+
+        return {
+            labels,
+            datasets,
+        };
+    };
+
+    const chartOptions = {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top' as const,
+            },
+            tooltip: {
+                mode: 'index' as const,
+                intersect: false,
+            },
+        },
+        scales: {
+            x: {
+                display: true,
+                title: {
+                    display: true,
+                    text: 'Date',
+                },
+            },
+            y: {
+                display: true,
+                title: {
+                    display: true,
+                    text: 'Cumulative Return',
+                },
+            },
+        },
+    };
+
     return (
         <div className="p-8">
             <h1 className="text-2xl font-bold mb-4">Stock Search</h1>
@@ -246,6 +331,11 @@ const HomePage: React.FC = () => {
                                 </ul>
                             </div>
                         )}
+                        {/* Add the cumulative returns chart */}
+                        <div className="mt-6">
+                            <h2 className="text-xl font-semibold mb-2">Cumulative Returns Over Time</h2>
+                            <Line data={prepareChartData(optimizationResult)} options={chartOptions} />
+                        </div>
                     </div>
                 )}
             </div>

@@ -1,4 +1,6 @@
-from typing import List, Dict, Optional
+# srv.py
+
+from typing import List, Dict, Optional, Tuple
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from enum import Enum
@@ -9,6 +11,7 @@ from pypfopt.risk_models import CovarianceShrinkage
 from functools import lru_cache
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
+from fastapi.encoders import jsonable_encoder
 
 app = FastAPI()
 
@@ -47,6 +50,9 @@ class PortfolioOptimizationResponse(BaseModel):
     MinVol: Optional[OptimizationResult]
     start_date: datetime
     end_date: datetime
+    cumulative_returns: Dict[str, List[Optional[float]]]  # New field
+    dates: List[datetime]  # New field
+    nifty_returns: List[float]  # New field
 
 # Define StockItem model
 class StockItem(BaseModel):
@@ -58,9 +64,9 @@ class TickerRequest(BaseModel):
     stocks: List[StockItem]
 
 # Cache the yf.download call
-@lru_cache(maxsize=32)
-def cached_yf_download(ticker: str) -> pd.Series:
-    return yf.download(ticker)['Adj Close']
+@lru_cache(maxsize=128)
+def cached_yf_download(ticker: str, start_date: datetime) -> pd.Series:
+    return yf.download(ticker, start=start_date)['Adj Close']
 
 # Helper function to format tickers based on exchange
 def format_tickers(stocks: List[StockItem]) -> List[str]:
@@ -75,12 +81,12 @@ def format_tickers(stocks: List[StockItem]) -> List[str]:
     return formatted_tickers
 
 # Helper function to fetch and align data
-def fetch_and_align_data(tickers: List[str]) -> pd.DataFrame:
+def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
     # Download data for each ticker using the cached function
     data = {}
     for ticker in tickers:
         try:
-            df = cached_yf_download(ticker)
+            df = cached_yf_download(ticker, datetime(2000, 1, 1))
             if not df.empty:
                 data[ticker] = df
             else:
@@ -102,19 +108,33 @@ def fetch_and_align_data(tickers: List[str]) -> pd.DataFrame:
     
     # Drop rows with any NaN values
     combined_df = combined_df.dropna()
-    
-    return combined_df
+
+    # Fetch Nifty index data
+    nifty_df = yf.download('^NSEI', start=min_date)['Adj Close']
+    nifty_df = nifty_df[nifty_df.index >= min_date]
+    nifty_df = nifty_df.dropna()
+
+    # Align Nifty data with combined_df
+    common_dates = combined_df.index.intersection(nifty_df.index)
+    combined_df = combined_df.loc[common_dates]
+    nifty_df = nifty_df.loc[common_dates]
+
+    return combined_df, nifty_df
 
 # Helper function to compute portfolio optimization
-def compute_optimal_portfolio(df: pd.DataFrame) -> Dict[str, Optional[OptimizationResult]]:
+def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Dict[str, Optional[OptimizationResult]], pd.DataFrame, pd.Series]:
     """
     Computes optimal portfolios using Mean-Variance Optimization (MVO) and Minimum Volatility.
 
     Args:
         df (pd.DataFrame): DataFrame of adjusted close prices.
+        nifty_df (pd.Series): Series of Nifty index adjusted close prices.
 
     Returns:
-        Dict[str, Optional[OptimizationResult]]: Dictionary containing optimal weights and performance metrics.
+        Tuple containing:
+            - Dict[str, Optional[OptimizationResult]]: Dictionary containing optimal weights and performance metrics.
+            - pd.DataFrame: DataFrame of cumulative returns for portfolios.
+            - pd.Series: Series of cumulative returns for Nifty index.
     """
     # Set the risk-free rate
     risk_free_rate = 0.05
@@ -166,7 +186,34 @@ def compute_optimal_portfolio(df: pd.DataFrame) -> Dict[str, Optional[Optimizati
         print(f"Error in MinVol optimization: {e}")
         results["MinVol"] = None
 
-    return results
+    # Calculate cumulative returns
+    cumulative_returns = pd.DataFrame(index=df.index)
+
+    # Portfolio cumulative returns
+    returns = df.pct_change().dropna()
+
+    if results.get("MVO") and results["MVO"].weights:
+        weights_mvo = pd.Series(results["MVO"].weights)
+        portfolio_returns_mvo = returns.dot(weights_mvo)
+        cumulative_returns['MVO'] = (1 + portfolio_returns_mvo).cumprod()
+    else:
+        cumulative_returns['MVO'] = None
+
+    if results.get("MinVol") and results["MinVol"].weights:
+        weights_minvol = pd.Series(results["MinVol"].weights)
+        portfolio_returns_minvol = returns.dot(weights_minvol)
+        cumulative_returns['MinVol'] = (1 + portfolio_returns_minvol).cumprod()
+    else:
+        cumulative_returns['MinVol'] = None
+
+    # Nifty cumulative returns
+    nifty_returns = nifty_df.pct_change().dropna()
+    cumulative_nifty_returns = (1 + nifty_returns).cumprod()
+
+    # Align cumulative returns
+    cumulative_returns = cumulative_returns.loc[cumulative_nifty_returns.index]
+
+    return results, cumulative_returns, cumulative_nifty_returns
 
 @app.post("/optimize/", response_model=PortfolioOptimizationResponse)
 def optimize_portfolio(request: TickerRequest):
@@ -175,7 +222,7 @@ def optimize_portfolio(request: TickerRequest):
         formatted_tickers = format_tickers(request.stocks)
         
         # Fetch and align data
-        df = fetch_and_align_data(formatted_tickers)
+        df, nifty_df = fetch_and_align_data(formatted_tickers)
         if df.empty:
             raise HTTPException(status_code=400, detail="No data found for the given tickers.")
         
@@ -184,16 +231,27 @@ def optimize_portfolio(request: TickerRequest):
         end_date = df.index.max().date()
         
         # Compute optimal portfolio
-        results = compute_optimal_portfolio(df)
-        
+        results, cumulative_returns_df, cumulative_nifty_returns = compute_optimal_portfolio(df, nifty_df)
+
+        # Prepare cumulative returns data for JSON response
+        dates = cumulative_returns_df.index.tolist()
+        cumulative_returns = {
+            'MVO': cumulative_returns_df['MVO'].tolist() if 'MVO' in cumulative_returns_df else [],
+            'MinVol': cumulative_returns_df['MinVol'].tolist() if 'MinVol' in cumulative_returns_df else []
+        }
+        nifty_returns = cumulative_nifty_returns.tolist()
+
         # Construct the response
         response = PortfolioOptimizationResponse(
             MVO=results.get("MVO"),
             MinVol=results.get("MinVol"),
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
+            cumulative_returns=cumulative_returns,
+            dates=dates,
+            nifty_returns=nifty_returns
         )
-        return response
+        return jsonable_encoder(response)
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
