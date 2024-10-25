@@ -10,8 +10,6 @@ import Stack from '@mui/material/Stack';
 import axios from 'axios';
 import Fuse from 'fuse.js';
 import debounce from 'lodash/debounce';
-// If you implemented the VirtualizedListbox for optimization
-// import VirtualizedListbox from '../components/VirtualizedListbox';
 
 // Import Chart.js components
 import { Line } from 'react-chartjs-2';

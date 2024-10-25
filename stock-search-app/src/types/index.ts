@@ -41,3 +41,4 @@ export interface PortfolioOptimizationResponse {
     dates: string[]; // Dates as ISO strings
     nifty_returns: number[];
 }
+
