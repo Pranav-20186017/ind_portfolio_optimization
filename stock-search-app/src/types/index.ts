@@ -27,6 +27,7 @@ export interface PortfolioPerformance {
 export interface OptimizationResult {
     weights: { [ticker: string]: number };
     performance: PortfolioPerformance;
+    returns_dist: string;
 }
 
 export interface PortfolioOptimizationResponse {

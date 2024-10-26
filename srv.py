@@ -12,6 +12,16 @@ from functools import lru_cache
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 from fastapi.encoders import jsonable_encoder
+import matplotlib.pyplot as plt
+import os
+import base64
+import io
+# Set Matplotlib to use 'Agg' backend
+plt.switch_backend('Agg')
+
+# Ensure the output directory exists
+output_dir = './outputs'
+os.makedirs(output_dir, exist_ok=True)
 
 app = FastAPI()
 
@@ -44,6 +54,8 @@ class PortfolioPerformance(BaseModel):
 class OptimizationResult(BaseModel):
     weights: Dict[str, float]
     performance: PortfolioPerformance
+    returns_dist : Optional[str] = None
+    
 
 class PortfolioOptimizationResponse(BaseModel):
     MVO: Optional[OptimizationResult]
@@ -62,6 +74,13 @@ class StockItem(BaseModel):
 # Update TickerRequest to use the new StockItem model
 class TickerRequest(BaseModel):
     stocks: List[StockItem]
+
+
+
+# Function to convert saved plot to base64 string
+def file_to_base64(filepath):
+    with open(filepath, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
 
 # Cache the yf.download call
 @lru_cache(maxsize=128)
@@ -152,6 +171,19 @@ def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Di
         ef_mvo.max_sharpe(risk_free_rate=risk_free_rate)  # Maximize Sharpe ratio
         cleaned_weights_mvo = ef_mvo.clean_weights()
         mvo_performance = ef_mvo.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+        mvo_returns_dist = df.pct_change().dropna().dot(pd.Series(cleaned_weights_mvo))
+        plt.figure(figsize=(10, 6))
+        plt.hist(mvo_returns_dist, bins=50, edgecolor='black', alpha=0.7)
+        plt.title("Distribution of MVO Portfolio Returns")
+        plt.xlabel("Returns")
+        plt.ylabel("Frequency")
+        plt.grid(True)
+        # Save the plot
+        mvo_output_file = os.path.join(output_dir, "mvo_port_dist.png")
+        plt.savefig(mvo_output_file)
+        # Convert the saved plot to base64
+        mvo_image_base64 = file_to_base64(mvo_output_file)
+        
 
         # Store MVO results
         results["MVO"] = OptimizationResult(
@@ -160,7 +192,8 @@ def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Di
                 expected_return=mvo_performance[0],
                 volatility=mvo_performance[1],
                 sharpe=mvo_performance[2]
-            )
+            ),
+            returns_dist = mvo_image_base64
         )
     except Exception as e:
         print(f"Error in MVO optimization: {e}")
@@ -172,6 +205,19 @@ def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Di
         ef_min_vol.min_volatility()  # Minimize volatility
         cleaned_weights_min_vol = ef_min_vol.clean_weights()
         min_vol_performance = ef_min_vol.portfolio_performance(verbose=False)
+        min_vol_returns_dist = df.pct_change().dropna().dot(pd.Series(cleaned_weights_mvo))
+        plt.figure(figsize=(10, 6))
+        plt.hist(min_vol_returns_dist, bins=50, edgecolor='black', alpha=0.7)
+        plt.title("Distribution of Min Vol Portfolio Returns")
+        plt.xlabel("Returns")
+        plt.ylabel("Frequency")
+        plt.grid(True)
+        # Save the plot
+        min_vol_output_file = os.path.join(output_dir, "min_vol_port_dist.png")
+        plt.savefig( min_vol_output_file)
+        min_vol_image_base64 = file_to_base64(min_vol_output_file)
+
+
 
         # Store Min Vol results
         results["MinVol"] = OptimizationResult(
@@ -180,7 +226,8 @@ def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Di
                 expected_return=min_vol_performance[0],
                 volatility=min_vol_performance[1],
                 sharpe=min_vol_performance[2]
-            )
+            ),
+            returns_dist = min_vol_image_base64
         )
     except Exception as e:
         print(f"Error in MinVol optimization: {e}")
