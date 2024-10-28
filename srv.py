@@ -105,7 +105,7 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
     data = {}
     for ticker in tickers:
         try:
-            df = cached_yf_download(ticker, datetime(2000, 1, 1))
+            df = cached_yf_download(ticker, datetime(1990, 1, 1))
             if not df.empty:
                 data[ticker] = df
             else:
