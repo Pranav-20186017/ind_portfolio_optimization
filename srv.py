@@ -56,6 +56,7 @@ class OptimizationResult(BaseModel):
     weights: Dict[str, float]
     performance: PortfolioPerformance
     returns_dist : Optional[str] = None
+    quantstats_report: Optional[str] = None 
     
 
 class PortfolioOptimizationResponse(BaseModel):
@@ -141,6 +142,13 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
 
     return combined_df, nifty_df
 
+# Helper function to save QuantStats report
+def save_quantstats_report(returns, filename):
+    report_path = os.path.join(output_dir, filename)
+    qs.reports.html(returns, output=report_path)
+    return report_path
+
+
 # Helper function to compute portfolio optimization
 def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Dict[str, Optional[OptimizationResult]], pd.DataFrame, pd.Series]:
     """
@@ -173,6 +181,8 @@ def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Di
         cleaned_weights_mvo = ef_mvo.clean_weights()
         mvo_performance = ef_mvo.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
         mvo_returns_dist = df.pct_change().dropna().dot(pd.Series(cleaned_weights_mvo))
+        mvo_report_path = save_quantstats_report(mvo_returns_dist, "mvo_port_report.html")
+        
         plt.figure(figsize=(10, 6))
         plt.hist(mvo_returns_dist, bins=50, edgecolor='black', alpha=0.7)
         plt.title("Distribution of MVO Portfolio Returns")
@@ -194,7 +204,8 @@ def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Di
                 volatility=mvo_performance[1],
                 sharpe=mvo_performance[2]
             ),
-            returns_dist = mvo_image_base64
+            returns_dist = mvo_image_base64,
+            quantstats_report=mvo_report_path
         )
     except Exception as e:
         print(f"Error in MVO optimization: {e}")
@@ -207,6 +218,8 @@ def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Di
         cleaned_weights_min_vol = ef_min_vol.clean_weights()
         min_vol_performance = ef_min_vol.portfolio_performance(verbose=False)
         min_vol_returns_dist = df.pct_change().dropna().dot(pd.Series(cleaned_weights_mvo))
+        # Generate QuantStats report for Min Vol
+        min_vol_report_path = save_quantstats_report(min_vol_returns_dist, "min_vol_port_report.html")
         plt.figure(figsize=(10, 6))
         plt.hist(min_vol_returns_dist, bins=50, edgecolor='black', alpha=0.7)
         plt.title("Distribution of Min Vol Portfolio Returns")
@@ -228,7 +241,8 @@ def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Di
                 volatility=min_vol_performance[1],
                 sharpe=min_vol_performance[2]
             ),
-            returns_dist = min_vol_image_base64
+            returns_dist = min_vol_image_base64,
+            quantstats_report=min_vol_report_path
         )
     except Exception as e:
         print(f"Error in MinVol optimization: {e}")
