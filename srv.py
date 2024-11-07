@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import os
 import base64
 import io
+import quantstats as qs
 # Set Matplotlib to use 'Agg' backend
 plt.switch_backend('Agg')
 
