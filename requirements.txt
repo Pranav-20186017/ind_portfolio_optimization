@@ -9,4 +9,3 @@ fastapi==0.111.1
 uvicorn==0.24.0.post1
 yfinance==0.2.44
 QuantStats==0.0.62
-ipython
