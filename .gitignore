@@ -164,7 +164,7 @@ cython_debug/
 *.png
 *.pyc
 
-ouptuts/
+.ouptuts/
 
 mvo_port_report.html
 min_vol_port_report.html
