@@ -137,7 +137,7 @@ const HomePage: React.FC = () => {
         };
 
         try {
-            const response = await axios.post('https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize/', dataToSend);
+            const response = await axios.post('https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize', dataToSend);
             const result = response.data as PortfolioOptimizationResponse;
             setOptimizationResult(result);
         } catch (error) {
