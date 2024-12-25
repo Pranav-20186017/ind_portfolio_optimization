@@ -264,7 +264,7 @@ def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Di
 
     return results, cumulative_returns, cumulative_nifty_returns
 
-@app.post("/optimize/", response_model=PortfolioOptimizationResponse)
+@app.post("/optimize", response_model=PortfolioOptimizationResponse)
 def optimize_portfolio(request: TickerRequest):
     try:
         # Format tickers based on exchange
