@@ -178,6 +178,15 @@ const HomePage: React.FC = () => {
                 fill: false,
             });
         }
+        if (result.cumulative_returns.MaxQuadraticUtility && result.cumulative_returns.MaxQuadraticUtility.length > 0) {
+            datasets.push({
+                label: 'Max Quadratic Utility Portfolio',
+                data: result.cumulative_returns.MaxQuadraticUtility,
+                borderColor: 'purple',  // Use a distinct color for this portfolio
+                fill: false,
+            });
+        }
+
 
         if (result.nifty_returns && result.nifty_returns.length > 0) {
             datasets.push({
@@ -298,6 +307,26 @@ const HomePage: React.FC = () => {
                                     <ImageComponent base64String={optimizationResult.MinVol.returns_dist} altText="MinVol Portfolio Distribution" />
                                 </div>
                             )}
+
+                            {optimizationResult.MaxQuadraticUtility && (
+                                <div className="result-with-plot">
+                                    <div className="result-details">
+                                        <h3 className="text-lg font-semibold">Max Quadratic Utility Portfolio</h3>
+                                        <p>Expected Return: {optimizationResult.MaxQuadraticUtility.performance.expected_return.toFixed(4)}</p>
+                                        <p>Volatility: {optimizationResult.MaxQuadraticUtility.performance.volatility.toFixed(4)}</p>
+                                        <p>Sharpe Ratio: {optimizationResult.MaxQuadraticUtility.performance.sharpe.toFixed(4)}</p>
+                                        <h4 className="font-semibold">Weights:</h4>
+                                        <ul>
+                                            {Object.entries(optimizationResult.MaxQuadraticUtility.weights).map(([ticker, weight]) => (
+                                                <li key={ticker}>{ticker}: {(weight * 100).toFixed(2)}%</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                    {/* Max Quadratic Utility Plot */}
+                                    <ImageComponent base64String={optimizationResult.MaxQuadraticUtility.returns_dist} altText="Max Quadratic Utility Portfolio Distribution" />
+                                </div>
+                            )}
+
 
                             {/* Cumulative Returns Chart */}
                             <div className="mt-6">
