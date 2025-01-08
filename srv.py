@@ -58,11 +58,13 @@ class OptimizationResult(BaseModel):
 class PortfolioOptimizationResponse(BaseModel):
     MVO: Optional[OptimizationResult]
     MinVol: Optional[OptimizationResult]
+    MaxQuadraticUtility: Optional[OptimizationResult]  # Add this line
     start_date: datetime
     end_date: datetime
     cumulative_returns: Dict[str, List[Optional[float]]]  # New field
     dates: List[datetime]  # New field
     nifty_returns: List[float]  # New field
+
 
 # Define StockItem model
 class StockItem(BaseModel):
@@ -235,6 +237,43 @@ def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Di
         print(f"Error in MinVol optimization: {e}")
         results["MinVol"] = None
 
+
+    try:
+        # Max Quadratic Utility Portfolio
+        risk_aversion = 5  # You can adjust this value to control the level of risk aversion
+        ef_quad_util = EfficientFrontier(mu, S)
+        ef_quad_util.max_quadratic_utility(risk_aversion=risk_aversion)
+        cleaned_weights_quad_util = ef_quad_util.clean_weights()
+        quad_util_performance = ef_quad_util.portfolio_performance(verbose=False)
+        quad_util_returns_dist = df.pct_change().dropna().dot(pd.Series(cleaned_weights_quad_util))
+        
+        plt.figure(figsize=(10, 6))
+        plt.hist(quad_util_returns_dist, bins=50, edgecolor='black', alpha=0.7)
+        plt.title("Distribution of Max Quadratic Utility Portfolio Returns")
+        plt.xlabel("Returns")
+        plt.ylabel("Frequency")
+        plt.grid(True)
+        # Save the plot
+        quad_util_output_file = os.path.join(output_dir, "quad_util_port_dist.png")
+        plt.savefig(quad_util_output_file)
+        # Convert the saved plot to base64
+        quad_util_image_base64 = file_to_base64(quad_util_output_file)
+
+        # Store Quadratic Utility results
+        results["MaxQuadraticUtility"] = OptimizationResult(
+            weights=cleaned_weights_quad_util,
+            performance=PortfolioPerformance(
+                expected_return=quad_util_performance[0],
+                volatility=quad_util_performance[1],
+                sharpe=quad_util_performance[2]
+            ),
+            returns_dist=quad_util_image_base64
+        )
+    except Exception as e:
+        print(f"Error in Max Quadratic Utility optimization: {e}")
+        results["MaxQuadraticUtility"] = None
+
+
     # Calculate cumulative returns
     cumulative_returns = pd.DataFrame(index=df.index)
 
@@ -255,6 +294,14 @@ def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Di
     else:
         cumulative_returns['MinVol'] = None
 
+    # Add Max Quadratic Utility Portfolio cumulative returns
+    if results.get("MaxQuadraticUtility") and results["MaxQuadraticUtility"].weights:
+        weights_quad_util = pd.Series(results["MaxQuadraticUtility"].weights)
+        portfolio_returns_quad_util = returns.dot(weights_quad_util)
+        cumulative_returns['MaxQuadraticUtility'] = (1 + portfolio_returns_quad_util).cumprod()
+    else:
+        cumulative_returns['MaxQuadraticUtility'] = None
+
     # Nifty cumulative returns
     nifty_returns = nifty_df.pct_change().dropna()
     cumulative_nifty_returns = (1 + nifty_returns).cumprod()
@@ -263,6 +310,7 @@ def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Di
     cumulative_returns = cumulative_returns.loc[cumulative_nifty_returns.index]
 
     return results, cumulative_returns, cumulative_nifty_returns
+
 
 @app.post("/optimize", response_model=PortfolioOptimizationResponse)
 def optimize_portfolio(request: TickerRequest):
@@ -286,7 +334,8 @@ def optimize_portfolio(request: TickerRequest):
         dates = cumulative_returns_df.index.tolist()
         cumulative_returns = {
             'MVO': cumulative_returns_df['MVO'].tolist() if 'MVO' in cumulative_returns_df else [],
-            'MinVol': cumulative_returns_df['MinVol'].tolist() if 'MinVol' in cumulative_returns_df else []
+            'MinVol': cumulative_returns_df['MinVol'].tolist() if 'MinVol' in cumulative_returns_df else [],
+            'MaxQuadraticUtility': cumulative_returns_df['MaxQuadraticUtility'].tolist() if 'MaxQuadraticUtility' in cumulative_returns_df else []  # Add this line
         }
         nifty_returns = cumulative_nifty_returns.tolist()
 
@@ -294,6 +343,7 @@ def optimize_portfolio(request: TickerRequest):
         response = PortfolioOptimizationResponse(
             MVO=results.get("MVO"),
             MinVol=results.get("MinVol"),
+            MaxQuadraticUtility=results.get("MaxQuadraticUtility"),  # Add this line
             start_date=start_date,
             end_date=end_date,
             cumulative_returns=cumulative_returns,
