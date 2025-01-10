@@ -1,4 +1,3 @@
-# srv.py
 from typing import List, Dict, Optional, Tuple
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -14,18 +13,21 @@ from fastapi.encoders import jsonable_encoder
 import matplotlib.pyplot as plt
 import os
 import base64
-import io
+import numpy as np
 
 # Set Matplotlib to use 'Agg' backend
 plt.switch_backend('Agg')
-
-# Ensure the output directory exists
+########################################
+# Ensure output directory
+########################################
 output_dir = './outputs'
 os.makedirs(output_dir, exist_ok=True)
 
+########################################
+# FastAPI app + CORS
+########################################
 app = FastAPI()
 
-# Add CORS middleware
 origins = [
     "https://indportfoliooptimization.vercel.app"
 ]
@@ -38,57 +40,69 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Define Exchange Enum
+########################################
+# Pydantic Models
+########################################
+
 class ExchangeEnum(str, Enum):
     NSE = "NSE"
     BSE = "BSE"
 
-# Pydantic models for request and response
 class PortfolioPerformance(BaseModel):
+    # From PyPortfolioOpt
     expected_return: float
     volatility: float
     sharpe: float
+    # Custom
+    sortino: float
+    max_drawdown: float
+    romad: float
+    var_95: float
+    cvar_95: float
+    var_90: float
+    cvar_90: float
+    cagr: float  # Newly added
 
 class OptimizationResult(BaseModel):
     weights: Dict[str, float]
     performance: PortfolioPerformance
-    returns_dist : Optional[str] = None 
-    
+    returns_dist: Optional[str] = None
+    max_drawdown_plot: Optional[str] = None
 
 class PortfolioOptimizationResponse(BaseModel):
     MVO: Optional[OptimizationResult]
     MinVol: Optional[OptimizationResult]
-    MaxQuadraticUtility: Optional[OptimizationResult]  # Add this line
+    MaxQuadraticUtility: Optional[OptimizationResult]
     start_date: datetime
     end_date: datetime
-    cumulative_returns: Dict[str, List[Optional[float]]]  # New field
-    dates: List[datetime]  # New field
-    nifty_returns: List[float]  # New field
+    cumulative_returns: Dict[str, List[Optional[float]]]
+    dates: List[datetime]
+    nifty_returns: List[float]
 
-
-# Define StockItem model
 class StockItem(BaseModel):
     ticker: str
-    exchange: ExchangeEnum  # Use Enum for exchange
+    exchange: ExchangeEnum
 
-# Update TickerRequest to use the new StockItem model
 class TickerRequest(BaseModel):
     stocks: List[StockItem]
 
 
+########################################
+# Utility Functions
+########################################
 
-# Function to convert saved plot to base64 string
-def file_to_base64(filepath):
+def file_to_base64(filepath: str) -> str:
+    """Convert a saved image file to base64 string."""
     with open(filepath, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
-# Cache the yf.download call
 @lru_cache(maxsize=128)
 def cached_yf_download(ticker: str, start_date: datetime) -> pd.Series:
+    """Cached download of Adjusted Close from yfinance."""
     return yf.download(ticker, start=start_date)['Adj Close']
 
-# Helper function to format tickers based on exchange
 def format_tickers(stocks: List[StockItem]) -> List[str]:
+    """Convert StockItem list into yfinance-friendly tickers."""
     formatted_tickers = []
     for stock in stocks:
         if stock.exchange == ExchangeEnum.BSE:
@@ -99,9 +113,12 @@ def format_tickers(stocks: List[StockItem]) -> List[str]:
             raise ValueError(f"Invalid exchange: {stock.exchange}")
     return formatted_tickers
 
-# Helper function to fetch and align data
+
+########################################
+# 1) fetch_and_align_data
+########################################
 def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
-    # Download data for each ticker using the cached function
+    """Download & align data for each ticker, plus Nifty index."""
     data = {}
     for ticker in tickers:
         try:
@@ -116,24 +133,16 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
     if not data:
         raise ValueError("No valid data available for the provided tickers.")
     
-    # Find the maximum of the minimum dates across all tickers to ensure common dates
+    # Align all tickers to the latest min_date among them
     min_date = max(df.index.min() for df in data.values())
-    
-    # Filter data from the common minimum date for all tickers
-    filtered_data = {ticker: df[df.index >= min_date] for ticker, df in data.items()}
-    
-    # Combine the filtered data into a single DataFrame
+    filtered_data = {t: df[df.index >= min_date] for t, df in data.items()}
+
+    # Combine into multi-index DataFrame
     combined_df = pd.concat(filtered_data.values(), axis=1, keys=filtered_data.keys())
-    
-    # Drop rows with any NaN values
-    combined_df = combined_df.dropna()
+    combined_df.dropna(inplace=True)
 
-    # Fetch Nifty index data
-    nifty_df = yf.download('^NSEI', start=min_date)['Adj Close']
-    nifty_df = nifty_df[nifty_df.index >= min_date]
-    nifty_df = nifty_df.dropna()
-
-    # Align Nifty data with combined_df
+    # Nifty
+    nifty_df = yf.download('^NSEI', start=min_date)['Adj Close'].dropna()
     common_dates = combined_df.index.intersection(nifty_df.index)
     combined_df = combined_df.loc[common_dates]
     nifty_df = nifty_df.loc[common_dates]
@@ -141,209 +150,240 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
     return combined_df, nifty_df
 
 
-
-
-# Helper function to compute portfolio optimization
-def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Dict[str, Optional[OptimizationResult]], pd.DataFrame, pd.Series]:
+########################################
+# 2) Helper: Compute Additional Metrics
+########################################
+def compute_custom_metrics(port_returns: pd.Series, risk_free_rate: float = 0.05) -> Dict[str, float]:
     """
-    Computes optimal portfolios using Mean-Variance Optimization (MVO) and Minimum Volatility.
-
-    Args:
-        df (pd.DataFrame): DataFrame of adjusted close prices.
-        nifty_df (pd.Series): Series of Nifty index adjusted close prices.
-
-    Returns:
-        Tuple containing:
-            - Dict[str, Optional[OptimizationResult]]: Dictionary containing optimal weights and performance metrics.
-            - pd.DataFrame: DataFrame of cumulative returns for portfolios.
-            - pd.Series: Series of cumulative returns for Nifty index.
+    Compute custom metrics:
+      - sortino
+      - max_drawdown
+      - romad
+      - var_95, cvar_95
+      - var_90, cvar_90
+      - cagr
+    Then we'll combine these with PyPortfolioOpt's expected_return/volatility/sharpe.
     """
-    # Set the risk-free rate
+    ann_factor = 252
+
+    # Sortino
+    downside_std = port_returns[port_returns < 0].std()
+    sortino = 0.0
+    if downside_std > 1e-9:
+        mean_daily = port_returns.mean()
+        annual_ret = mean_daily * ann_factor
+        sortino = (annual_ret - risk_free_rate) / (downside_std * np.sqrt(ann_factor))
+
+    # Drawdown stats
+    cum = (1 + port_returns).cumprod()
+    peak = cum.cummax()
+    drawdown = (cum - peak) / peak
+    max_dd = drawdown.min()  # negative
+
+    # RoMaD
+    final_cum = cum.iloc[-1] - 1.0
+    romad = final_cum / abs(max_dd) if max_dd < 0 else 0.0
+
+    # VaR / CVaR
+    var_95 = np.percentile(port_returns, 5)
+    below_95 = port_returns[port_returns <= var_95]
+    cvar_95 = below_95.mean() if not below_95.empty else var_95
+
+    var_90 = np.percentile(port_returns, 10)
+    below_90 = port_returns[port_returns <= var_90]
+    cvar_90 = below_90.mean() if not below_90.empty else var_90
+
+    # CAGR
+    # number of daily returns:
+    n_days = len(port_returns)
+    if n_days > 1:
+        final_growth = cum.iloc[-1]  # e.g. 1.25 => up 25%
+        # annualize via 252 trading days
+        cagr = final_growth ** (ann_factor / n_days) - 1.0
+    else:
+        cagr = 0.0
+
+    return {
+        "sortino": sortino,
+        "max_drawdown": max_dd,
+        "romad": romad,
+        "var_95": var_95,
+        "cvar_95": cvar_95,
+        "var_90": var_90,
+        "cvar_90": cvar_90,
+        "cagr": cagr
+    }
+
+
+########################################
+# 3) compute_optimal_portfolio
+########################################
+def compute_optimal_portfolio(
+    df: pd.DataFrame,
+    nifty_df: pd.Series
+) -> Tuple[Dict[str, Optional[OptimizationResult]], pd.DataFrame, pd.Series]:
+    """
+    Runs 3 portfolio optimizations: MVO, MinVol, MaxQuadraticUtility.
+    Uses PyPortfolioOpt for (expected_return, volatility, sharpe).
+    Adds custom metrics (sortino, drawdown, var/cvar, cagr).
+    Plots distribution & drawdown. Returns results + cumulative returns + Nifty.
+    """
     risk_free_rate = 0.05
-
-    # Calculate expected returns and Ledoit-Wolf covariance matrix
     mu = expected_returns.mean_historical_return(df, frequency=252)
     S = CovarianceShrinkage(df).ledoit_wolf()
 
-    # Prepare results dictionary
     results = {}
-
-    try:
-        # Mean-Variance Optimization (MVO) - Maximize Sharpe Ratio
-        ef_mvo = EfficientFrontier(mu, S)
-        ef_mvo.max_sharpe(risk_free_rate=risk_free_rate)  # Maximize Sharpe ratio
-        cleaned_weights_mvo = ef_mvo.clean_weights()
-        mvo_performance = ef_mvo.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
-        mvo_returns_dist = df.pct_change().dropna().dot(pd.Series(cleaned_weights_mvo))
-        
-        plt.figure(figsize=(10, 6))
-        plt.hist(mvo_returns_dist, bins=50, edgecolor='black', alpha=0.7)
-        plt.title("Distribution of MVO Portfolio Returns")
-        plt.xlabel("Returns")
-        plt.ylabel("Frequency")
-        plt.grid(True)
-        # Save the plot
-        mvo_output_file = os.path.join(output_dir, "mvo_port_dist.png")
-        plt.savefig(mvo_output_file)
-        # Convert the saved plot to base64
-        mvo_image_base64 = file_to_base64(mvo_output_file)
-        
-
-        # Store MVO results
-        results["MVO"] = OptimizationResult(
-            weights=cleaned_weights_mvo,
-            performance=PortfolioPerformance(
-                expected_return=mvo_performance[0],
-                volatility=mvo_performance[1],
-                sharpe=mvo_performance[2]
-            ),
-            returns_dist = mvo_image_base64
-        )
-    except Exception as e:
-        print(f"Error in MVO optimization: {e}")
-        results["MVO"] = None
-
-    try:
-        # Minimum Volatility Portfolio
-        ef_min_vol = EfficientFrontier(mu, S)
-        ef_min_vol.min_volatility()  # Minimize volatility
-        cleaned_weights_min_vol = ef_min_vol.clean_weights()
-        min_vol_performance = ef_min_vol.portfolio_performance(verbose=False)
-        min_vol_returns_dist = df.pct_change().dropna().dot(pd.Series(cleaned_weights_min_vol))
-        plt.figure(figsize=(10, 6))
-        plt.hist(min_vol_returns_dist, bins=50, edgecolor='black', alpha=0.7)
-        plt.title("Distribution of Min Vol Portfolio Returns")
-        plt.xlabel("Returns")
-        plt.ylabel("Frequency")
-        plt.grid(True)
-        # Save the plot
-        min_vol_output_file = os.path.join(output_dir, "min_vol_port_dist.png")
-        plt.savefig( min_vol_output_file)
-        min_vol_image_base64 = file_to_base64(min_vol_output_file)
-
-
-
-        # Store Min Vol results
-        results["MinVol"] = OptimizationResult(
-            weights=cleaned_weights_min_vol,
-            performance=PortfolioPerformance(
-                expected_return=min_vol_performance[0],
-                volatility=min_vol_performance[1],
-                sharpe=min_vol_performance[2]
-            ),
-            returns_dist = min_vol_image_base64
-        )
-    except Exception as e:
-        print(f"Error in MinVol optimization: {e}")
-        results["MinVol"] = None
-
-
-    try:
-        # Max Quadratic Utility Portfolio
-        risk_aversion = 5  # You can adjust this value to control the level of risk aversion
-        ef_quad_util = EfficientFrontier(mu, S)
-        ef_quad_util.max_quadratic_utility(risk_aversion=risk_aversion)
-        cleaned_weights_quad_util = ef_quad_util.clean_weights()
-        quad_util_performance = ef_quad_util.portfolio_performance(verbose=False)
-        quad_util_returns_dist = df.pct_change().dropna().dot(pd.Series(cleaned_weights_quad_util))
-        
-        plt.figure(figsize=(10, 6))
-        plt.hist(quad_util_returns_dist, bins=50, edgecolor='black', alpha=0.7)
-        plt.title("Distribution of Max Quadratic Utility Portfolio Returns")
-        plt.xlabel("Returns")
-        plt.ylabel("Frequency")
-        plt.grid(True)
-        # Save the plot
-        quad_util_output_file = os.path.join(output_dir, "quad_util_port_dist.png")
-        plt.savefig(quad_util_output_file)
-        # Convert the saved plot to base64
-        quad_util_image_base64 = file_to_base64(quad_util_output_file)
-
-        # Store Quadratic Utility results
-        results["MaxQuadraticUtility"] = OptimizationResult(
-            weights=cleaned_weights_quad_util,
-            performance=PortfolioPerformance(
-                expected_return=quad_util_performance[0],
-                volatility=quad_util_performance[1],
-                sharpe=quad_util_performance[2]
-            ),
-            returns_dist=quad_util_image_base64
-        )
-    except Exception as e:
-        print(f"Error in Max Quadratic Utility optimization: {e}")
-        results["MaxQuadraticUtility"] = None
-
-
-    # Calculate cumulative returns
-    cumulative_returns = pd.DataFrame(index=df.index)
-
-    # Portfolio cumulative returns
     returns = df.pct_change().dropna()
 
-    if results.get("MVO") and results["MVO"].weights:
-        weights_mvo = pd.Series(results["MVO"].weights)
-        portfolio_returns_mvo = returns.dot(weights_mvo)
-        cumulative_returns['MVO'] = (1 + portfolio_returns_mvo).cumprod()
-    else:
-        cumulative_returns['MVO'] = None
+    methods = ["MVO", "MinVol", "MaxQuadraticUtility"]
 
-    if results.get("MinVol") and results["MinVol"].weights:
-        weights_minvol = pd.Series(results["MinVol"].weights)
-        portfolio_returns_minvol = returns.dot(weights_minvol)
-        cumulative_returns['MinVol'] = (1 + portfolio_returns_minvol).cumprod()
-    else:
-        cumulative_returns['MinVol'] = None
+    for method in methods:
+        try:
+            ef = EfficientFrontier(mu, S)
+            if method == "MVO":
+                ef.max_sharpe(risk_free_rate=risk_free_rate)
+                label = "MVO"
+            elif method == "MinVol":
+                ef.min_volatility()
+                label = "MinVol"
+            else:
+                ef.max_quadratic_utility(risk_aversion=5)
+                label = "MaxQuadraticUtility"
 
-    # Add Max Quadratic Utility Portfolio cumulative returns
-    if results.get("MaxQuadraticUtility") and results["MaxQuadraticUtility"].weights:
-        weights_quad_util = pd.Series(results["MaxQuadraticUtility"].weights)
-        portfolio_returns_quad_util = returns.dot(weights_quad_util)
-        cumulative_returns['MaxQuadraticUtility'] = (1 + portfolio_returns_quad_util).cumprod()
-    else:
-        cumulative_returns['MaxQuadraticUtility'] = None
+            # Weights & performance from PyPortfolioOpt
+            weights = ef.clean_weights()
+            w_series = pd.Series(weights)
+            pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+            # pfolio_perf -> (expected_return, volatility, sharpe)
 
-    # Nifty cumulative returns
-    nifty_returns = nifty_df.pct_change().dropna()
-    cumulative_nifty_returns = (1 + nifty_returns).cumprod()
+            # Daily returns of this portfolio
+            port_returns = returns.dot(w_series)
 
-    # Align cumulative returns
-    cumulative_returns = cumulative_returns.loc[cumulative_nifty_returns.index]
+            # 1) Compute custom metrics
+            custom = compute_custom_metrics(port_returns, risk_free_rate)
 
-    return results, cumulative_returns, cumulative_nifty_returns
+            # 2) Plot distribution + VaR/CVaR lines
+            plt.figure(figsize=(10, 6))
+            plt.hist(port_returns, bins=50, edgecolor='black', alpha=0.7, label='Daily Returns')
+            plt.title(f"Distribution of {label} Portfolio Returns")
+            plt.xlabel("Returns")
+            plt.ylabel("Frequency")
+            plt.grid(True)
 
+            # Add var/cvar lines
+            plt.axvline(custom["var_95"], color='r', linestyle='--',
+                        label=f"VaR 95%: {custom['var_95']:.4f}")
+            plt.axvline(custom["cvar_95"], color='r', linestyle='-',
+                        label=f"CVaR 95%: {custom['cvar_95']:.4f}")
+            plt.axvline(custom["var_90"], color='g', linestyle='--',
+                        label=f"VaR 90%: {custom['var_90']:.4f}")
+            plt.axvline(custom["cvar_90"], color='g', linestyle='-',
+                        label=f"CVaR 90%: {custom['cvar_90']:.4f}")
+            plt.legend()
 
+            dist_file = os.path.join(output_dir, f"{label.lower()}_dist.png")
+            plt.savefig(dist_file)
+            plt.close()
+            dist_b64 = file_to_base64(dist_file)
+
+            # 3) Plot drawdown
+            cum = (1 + port_returns).cumprod()
+            peak = cum.cummax()
+            drawdown = (cum - peak) / peak
+            plt.figure(figsize=(10, 6))
+            plt.plot(drawdown, color='red', label='Drawdown')
+            plt.title(f"Drawdown of {label} Portfolio")
+            plt.xlabel("Date")
+            plt.ylabel("Drawdown")
+            plt.grid(True)
+            plt.legend()
+
+            dd_file = os.path.join(output_dir, f"{label.lower()}_drawdown.png")
+            plt.savefig(dd_file)
+            plt.close()
+            dd_b64 = file_to_base64(dd_file)
+
+            # Merge everything into one Performance object
+            performance = PortfolioPerformance(
+                expected_return=pfolio_perf[0],
+                volatility=pfolio_perf[1],
+                sharpe=pfolio_perf[2],
+                sortino=custom["sortino"],
+                max_drawdown=custom["max_drawdown"],
+                romad=custom["romad"],
+                var_95=custom["var_95"],
+                cvar_95=custom["cvar_95"],
+                var_90=custom["var_90"],
+                cvar_90=custom["cvar_90"],
+                cagr=custom["cagr"]
+            )
+
+            results[label] = OptimizationResult(
+                weights=weights,
+                performance=performance,
+                returns_dist=dist_b64,
+                max_drawdown_plot=dd_b64
+            )
+        except Exception as e:
+            print(f"Error in {method} optimization: {e}")
+            results[method] = None
+
+    # 4) Cumulative returns
+    cumulative_returns = pd.DataFrame(index=df.index)
+    for method in methods:
+        if results.get(method) and results[method].weights:
+            w = pd.Series(results[method].weights)
+            port_daily = returns.dot(w)
+            cumulative_returns[method] = (1 + port_daily).cumprod()
+        else:
+            cumulative_returns[method] = None
+
+    # 5) Nifty
+    nifty_ret = nifty_df.pct_change().dropna()
+    cum_nifty = (1 + nifty_ret).cumprod()
+    cumulative_returns = cumulative_returns.loc[cum_nifty.index]
+
+    return results, cumulative_returns, cum_nifty
+
+########################################
+# 4) The /optimize Endpoint
+########################################
 @app.post("/optimize", response_model=PortfolioOptimizationResponse)
 def optimize_portfolio(request: TickerRequest):
     try:
-        # Format tickers based on exchange
+        # 1) Format tickers
         formatted_tickers = format_tickers(request.stocks)
         
-        # Fetch and align data
+        # 2) Fetch & align
         df, nifty_df = fetch_and_align_data(formatted_tickers)
         if df.empty:
             raise HTTPException(status_code=400, detail="No data found for the given tickers.")
-        
-        # Get the time period
+
+        # 3) Start/end date
         start_date = df.index.min().date()
         end_date = df.index.max().date()
-        
-        # Compute optimal portfolio
-        results, cumulative_returns_df, cumulative_nifty_returns = compute_optimal_portfolio(df, nifty_df)
 
-        # Prepare cumulative returns data for JSON response
-        dates = cumulative_returns_df.index.tolist()
+        # 4) Compute
+        results, cum_returns_df, cum_nifty = compute_optimal_portfolio(df, nifty_df)
+
+        # 5) Build JSON
+        dates = cum_returns_df.index.tolist()
         cumulative_returns = {
-            'MVO': cumulative_returns_df['MVO'].tolist() if 'MVO' in cumulative_returns_df else [],
-            'MinVol': cumulative_returns_df['MinVol'].tolist() if 'MinVol' in cumulative_returns_df else [],
-            'MaxQuadraticUtility': cumulative_returns_df['MaxQuadraticUtility'].tolist() if 'MaxQuadraticUtility' in cumulative_returns_df else []  # Add this line
+            "MVO": cum_returns_df["MVO"].tolist() if "MVO" in cum_returns_df else [],
+            "MinVol": cum_returns_df["MinVol"].tolist() if "MinVol" in cum_returns_df else [],
+            "MaxQuadraticUtility": (
+                cum_returns_df["MaxQuadraticUtility"].tolist()
+                if "MaxQuadraticUtility" in cum_returns_df
+                else []
+            )
         }
-        nifty_returns = cumulative_nifty_returns.tolist()
+        nifty_returns = cum_nifty.tolist()
 
-        # Construct the response
+        # 6) Response
         response = PortfolioOptimizationResponse(
             MVO=results.get("MVO"),
             MinVol=results.get("MinVol"),
-            MaxQuadraticUtility=results.get("MaxQuadraticUtility"),  # Add this line
+            MaxQuadraticUtility=results.get("MaxQuadraticUtility"),
             start_date=start_date,
             end_date=end_date,
             cumulative_returns=cumulative_returns,
@@ -354,7 +394,6 @@ def optimize_portfolio(request: TickerRequest):
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
     except Exception as e:
         print(f"Internal Server Error: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
