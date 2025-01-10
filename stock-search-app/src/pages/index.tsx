@@ -23,8 +23,8 @@ import {
 
 ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Legend, Tooltip);
 
-// Component to display base64 image
-const ImageComponent = ({ base64String, altText }: { base64String: string, altText: string }) => (
+// Component to display base64-encoded images
+const ImageComponent = ({ base64String, altText }: { base64String: string; altText: string }) => (
     <div className="image-container">
         {base64String ? (
             <img
@@ -46,8 +46,10 @@ const HomePage: React.FC = () => {
     const [optimizationResult, setOptimizationResult] = useState<PortfolioOptimizationResponse | null>(null);
     const [filteredOptions, setFilteredOptions] = useState<StockOption[]>([]);
 
+    // ----------------------------------------
+    // 1) Fetch stock data
+    // ----------------------------------------
     useEffect(() => {
-        // Fetch stock data from public/stock_data.json
         const fetchStockData = async () => {
             try {
                 const res = await fetch('/stock_data.json');
@@ -78,7 +80,9 @@ const HomePage: React.FC = () => {
         fetchStockData();
     }, []);
 
-    // Initialize Fuse.js for fuzzy search
+    // ----------------------------------------
+    // 2) Fuzzy search with Fuse.js
+    // ----------------------------------------
     const fuse = useMemo(() => {
         return new Fuse(options, {
             keys: ['ticker', 'name'],
@@ -86,7 +90,6 @@ const HomePage: React.FC = () => {
         });
     }, [options]);
 
-    // Debounced filtering function
     const debouncedFilter = useCallback(
         debounce((input: string) => {
             if (input === '') {
@@ -103,6 +106,9 @@ const HomePage: React.FC = () => {
         debouncedFilter(inputValue);
     }, [inputValue, debouncedFilter]);
 
+    // ----------------------------------------
+    // 3) Adding/removing stocks
+    // ----------------------------------------
     const handleAddStock = (event: any, newValue: StockOption | null) => {
         if (newValue) {
             const isDuplicate = selectedStocks.some(
@@ -128,6 +134,9 @@ const HomePage: React.FC = () => {
         );
     };
 
+    // ----------------------------------------
+    // 4) Submit to the backend
+    // ----------------------------------------
     const handleSubmit = async () => {
         const dataToSend = {
             stocks: selectedStocks.map((stock) => ({
@@ -137,7 +146,10 @@ const HomePage: React.FC = () => {
         };
 
         try {
-            const response = await axios.post('https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize', dataToSend);
+            const response = await axios.post(
+                'http://127.0.0.1:8000/optimize',
+                dataToSend
+            );
             const result = response.data as PortfolioOptimizationResponse;
             setOptimizationResult(result);
         } catch (error) {
@@ -151,17 +163,22 @@ const HomePage: React.FC = () => {
         setOptimizationResult(null);
     };
 
+    // ----------------------------------------
+    // 5) Date formatting
+    // ----------------------------------------
     const formatDate = (dateString: string) => {
         const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
         return new Date(dateString).toLocaleDateString(undefined, options);
     };
 
+    // ----------------------------------------
+    // 6) Prepare Chart.js data
+    // ----------------------------------------
     const prepareChartData = (result: PortfolioOptimizationResponse) => {
         const labels = result.dates.map((dateStr) => new Date(dateStr).toLocaleDateString());
-
         const datasets = [];
 
-        if (result.cumulative_returns.MVO && result.cumulative_returns.MVO.length > 0) {
+        if (result.cumulative_returns.MVO?.length) {
             datasets.push({
                 label: 'MVO Portfolio',
                 data: result.cumulative_returns.MVO,
@@ -169,8 +186,7 @@ const HomePage: React.FC = () => {
                 fill: false,
             });
         }
-
-        if (result.cumulative_returns.MinVol && result.cumulative_returns.MinVol.length > 0) {
+        if (result.cumulative_returns.MinVol?.length) {
             datasets.push({
                 label: 'MinVol Portfolio',
                 data: result.cumulative_returns.MinVol,
@@ -178,17 +194,15 @@ const HomePage: React.FC = () => {
                 fill: false,
             });
         }
-        if (result.cumulative_returns.MaxQuadraticUtility && result.cumulative_returns.MaxQuadraticUtility.length > 0) {
+        if (result.cumulative_returns.MaxQuadraticUtility?.length) {
             datasets.push({
-                label: 'Max Quadratic Utility Portfolio',
+                label: 'Max Quadratic Utility',
                 data: result.cumulative_returns.MaxQuadraticUtility,
-                borderColor: 'purple',  // Use a distinct color for this portfolio
+                borderColor: 'purple',
                 fill: false,
             });
         }
-
-
-        if (result.nifty_returns && result.nifty_returns.length > 0) {
+        if (result.nifty_returns?.length) {
             datasets.push({
                 label: 'Nifty Index',
                 data: result.nifty_returns,
@@ -215,6 +229,9 @@ const HomePage: React.FC = () => {
         },
     };
 
+    // ----------------------------------------
+    // 7) Render
+    // ----------------------------------------
     return (
         <div className="p-8">
             <h1 className="text-2xl font-bold mb-4">Stock Search</h1>
@@ -229,10 +246,11 @@ const HomePage: React.FC = () => {
                 )}
                 style={{ width: '100%', maxWidth: 600 }}
                 openOnFocus={false}
-                filterOptions={(options) => options}
+                filterOptions={(x) => x}
                 clearOnBlur={false}
                 value={null}
             />
+
             <div className="mt-6">
                 <h2 className="text-xl font-semibold mb-2">Selected Stocks</h2>
                 <Stack direction="row" spacing={1} flexWrap="wrap">
@@ -246,6 +264,7 @@ const HomePage: React.FC = () => {
                     ))}
                 </Stack>
             </div>
+
             <div className="mt-6">
                 <Button
                     variant="contained"
@@ -265,74 +284,145 @@ const HomePage: React.FC = () => {
             <div className="mt-6">
                 {optimizationResult && (
                     <div className="results-container">
-                        {/* Results Section */}
-                        <div className="results">
-                            <h2 className="text-xl font-semibold mb-2">Optimization Results</h2>
-                            <p>Data Time Period: {formatDate(optimizationResult.start_date)} to {formatDate(optimizationResult.end_date)}</p>
+                        <h2 className="text-xl font-semibold mb-2">Optimization Results</h2>
+                        <p>
+                            Data Time Period:{' '}
+                            {formatDate(optimizationResult.start_date)} to{' '}
+                            {formatDate(optimizationResult.end_date)}
+                        </p>
 
-                            {optimizationResult.MVO && (
-                                <div className="result-with-plot">
-                                    <div className="result-details">
-                                        <h3 className="text-lg font-semibold">Mean-Variance Optimization (MVO)</h3>
-                                        <p>Expected Return: {optimizationResult.MVO.performance.expected_return.toFixed(4)}</p>
-                                        <p>Volatility: {optimizationResult.MVO.performance.volatility.toFixed(4)}</p>
-                                        <p>Sharpe Ratio: {optimizationResult.MVO.performance.sharpe.toFixed(4)}</p>
-                                        <h4 className="font-semibold">Weights:</h4>
-                                        <ul>
-                                            {Object.entries(optimizationResult.MVO.weights).map(([ticker, weight]) => (
-                                                <li key={ticker}>{ticker}: {(weight * 100).toFixed(2)}%</li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                    {/* MVO Plot */}
-                                    <ImageComponent base64String={optimizationResult.MVO.returns_dist} altText="MVO Portfolio Distribution" />
+                        {/* MVO */}
+                        {optimizationResult.MVO && (
+                            <div className="result-with-plot">
+                                <div className="result-details">
+                                    <h3 className="text-lg font-semibold">MVO (Mean-Variance Optimization)</h3>
+                                    <p>Expected Return: {optimizationResult.MVO.performance.expected_return.toFixed(4)}</p>
+                                    <p>Volatility: {optimizationResult.MVO.performance.volatility.toFixed(4)}</p>
+                                    <p>Sharpe Ratio: {optimizationResult.MVO.performance.sharpe.toFixed(4)}</p>
+
+                                    <p>Sortino Ratio: {optimizationResult.MVO.performance.sortino.toFixed(4)}</p>
+                                    <p>Max Drawdown: {(optimizationResult.MVO.performance.max_drawdown * 100).toFixed(2)}%</p>
+                                    <p>RoMaD: {optimizationResult.MVO.performance.romad.toFixed(4)}</p>
+
+                                    <p>VaR 95%: {(optimizationResult.MVO.performance.var_95 * 100).toFixed(2)}%</p>
+                                    <p>CVaR 95%: {(optimizationResult.MVO.performance.cvar_95 * 100).toFixed(2)}%</p>
+                                    <p>VaR 90%: {(optimizationResult.MVO.performance.var_90 * 100).toFixed(2)}%</p>
+                                    <p>CVaR 90%: {(optimizationResult.MVO.performance.cvar_90 * 100).toFixed(2)}%</p>
+                                    <p>CAGR: {(optimizationResult.MVO.performance.cagr * 100).toFixed(2)}%</p>
+
+                                    <h4 className="font-semibold mt-2">Weights:</h4>
+                                    <ul>
+                                        {Object.entries(optimizationResult.MVO.weights).map(([ticker, weight]) => (
+                                            <li key={ticker}>
+                                                {ticker}: {(weight * 100).toFixed(2)}%
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </div>
-                            )}
-
-                            {optimizationResult.MinVol && (
-                                <div className="result-with-plot">
-                                    <div className="result-details">
-                                        <h3 className="text-lg font-semibold">Minimum Volatility Portfolio</h3>
-                                        <p>Expected Return: {optimizationResult.MinVol.performance.expected_return.toFixed(4)}</p>
-                                        <p>Volatility: {optimizationResult.MinVol.performance.volatility.toFixed(4)}</p>
-                                        <p>Sharpe Ratio: {optimizationResult.MinVol.performance.sharpe.toFixed(4)}</p>
-                                        <h4 className="font-semibold">Weights:</h4>
-                                        <ul>
-                                            {Object.entries(optimizationResult.MinVol.weights).map(([ticker, weight]) => (
-                                                <li key={ticker}>{ticker}: {(weight * 100).toFixed(2)}%</li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                    {/* Min Vol Plot */}
-                                    <ImageComponent base64String={optimizationResult.MinVol.returns_dist} altText="MinVol Portfolio Distribution" />
+                                <div className="plots-container">
+                                    {/* Distribution Plot */}
+                                    <ImageComponent
+                                        base64String={optimizationResult.MVO.returns_dist}
+                                        altText="MVO Portfolio Distribution"
+                                    />
+                                    {/* Drawdown Plot */}
+                                    <ImageComponent
+                                        base64String={optimizationResult.MVO.max_drawdown_plot}
+                                        altText="MVO Portfolio Drawdown"
+                                    />
                                 </div>
-                            )}
-
-                            {optimizationResult.MaxQuadraticUtility && (
-                                <div className="result-with-plot">
-                                    <div className="result-details">
-                                        <h3 className="text-lg font-semibold">Max Quadratic Utility Portfolio</h3>
-                                        <p>Expected Return: {optimizationResult.MaxQuadraticUtility.performance.expected_return.toFixed(4)}</p>
-                                        <p>Volatility: {optimizationResult.MaxQuadraticUtility.performance.volatility.toFixed(4)}</p>
-                                        <p>Sharpe Ratio: {optimizationResult.MaxQuadraticUtility.performance.sharpe.toFixed(4)}</p>
-                                        <h4 className="font-semibold">Weights:</h4>
-                                        <ul>
-                                            {Object.entries(optimizationResult.MaxQuadraticUtility.weights).map(([ticker, weight]) => (
-                                                <li key={ticker}>{ticker}: {(weight * 100).toFixed(2)}%</li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                    {/* Max Quadratic Utility Plot */}
-                                    <ImageComponent base64String={optimizationResult.MaxQuadraticUtility.returns_dist} altText="Max Quadratic Utility Portfolio Distribution" />
-                                </div>
-                            )}
-
-
-                            {/* Cumulative Returns Chart */}
-                            <div className="mt-6">
-                                <h2 className="text-xl font-semibold mb-2">Cumulative Returns Over Time</h2>
-                                <Line data={prepareChartData(optimizationResult)} options={chartOptions} />
                             </div>
+                        )}
+
+                        {/* MinVol */}
+                        {optimizationResult.MinVol && (
+                            <div className="result-with-plot">
+                                <div className="result-details">
+                                    <h3 className="text-lg font-semibold">MinVol (Minimum Volatility)</h3>
+                                    <p>Expected Return: {optimizationResult.MinVol.performance.expected_return.toFixed(4)}</p>
+                                    <p>Volatility: {optimizationResult.MinVol.performance.volatility.toFixed(4)}</p>
+                                    <p>Sharpe Ratio: {optimizationResult.MinVol.performance.sharpe.toFixed(4)}</p>
+
+                                    <p>Sortino Ratio: {optimizationResult.MinVol.performance.sortino.toFixed(4)}</p>
+                                    <p>Max Drawdown: {(optimizationResult.MinVol.performance.max_drawdown * 100).toFixed(2)}%</p>
+                                    <p>RoMaD: {optimizationResult.MinVol.performance.romad.toFixed(4)}</p>
+
+                                    <p>VaR 95%: {(optimizationResult.MinVol.performance.var_95 * 100).toFixed(2)}%</p>
+                                    <p>CVaR 95%: {(optimizationResult.MinVol.performance.cvar_95 * 100).toFixed(2)}%</p>
+                                    <p>VaR 90%: {(optimizationResult.MinVol.performance.var_90 * 100).toFixed(2)}%</p>
+                                    <p>CVaR 90%: {(optimizationResult.MinVol.performance.cvar_90 * 100).toFixed(2)}%</p>
+                                    <p>CAGR: {(optimizationResult.MinVol.performance.cagr * 100).toFixed(2)}%</p>
+
+                                    <h4 className="font-semibold mt-2">Weights:</h4>
+                                    <ul>
+                                        {Object.entries(optimizationResult.MinVol.weights).map(([ticker, weight]) => (
+                                            <li key={ticker}>
+                                                {ticker}: {(weight * 100).toFixed(2)}%
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                                <div className="plots-container">
+                                    <ImageComponent
+                                        base64String={optimizationResult.MinVol.returns_dist}
+                                        altText="MinVol Portfolio Distribution"
+                                    />
+                                    <ImageComponent
+                                        base64String={optimizationResult.MinVol.max_drawdown_plot}
+                                        altText="MinVol Portfolio Drawdown"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* MaxQuadraticUtility */}
+                        {optimizationResult.MaxQuadraticUtility && (
+                            <div className="result-with-plot">
+                                <div className="result-details">
+                                    <h3 className="text-lg font-semibold">Max Quadratic Utility</h3>
+                                    <p>Expected Return: {optimizationResult.MaxQuadraticUtility.performance.expected_return.toFixed(4)}</p>
+                                    <p>Volatility: {optimizationResult.MaxQuadraticUtility.performance.volatility.toFixed(4)}</p>
+                                    <p>Sharpe Ratio: {optimizationResult.MaxQuadraticUtility.performance.sharpe.toFixed(4)}</p>
+
+                                    <p>Sortino Ratio: {optimizationResult.MaxQuadraticUtility.performance.sortino.toFixed(4)}</p>
+                                    <p>Max Drawdown: {(optimizationResult.MaxQuadraticUtility.performance.max_drawdown * 100).toFixed(2)}%</p>
+                                    <p>RoMaD: {optimizationResult.MaxQuadraticUtility.performance.romad.toFixed(4)}</p>
+
+                                    <p>VaR 95%: {(optimizationResult.MaxQuadraticUtility.performance.var_95 * 100).toFixed(2)}%</p>
+                                    <p>CVaR 95%: {(optimizationResult.MaxQuadraticUtility.performance.cvar_95 * 100).toFixed(2)}%</p>
+                                    <p>VaR 90%: {(optimizationResult.MaxQuadraticUtility.performance.var_90 * 100).toFixed(2)}%</p>
+                                    <p>CVaR 90%: {(optimizationResult.MaxQuadraticUtility.performance.cvar_90 * 100).toFixed(2)}%</p>
+                                    <p>CAGR: {(optimizationResult.MaxQuadraticUtility.performance.cagr * 100).toFixed(2)}%</p>
+
+                                    <h4 className="font-semibold mt-2">Weights:</h4>
+                                    <ul>
+                                        {Object.entries(optimizationResult.MaxQuadraticUtility.weights).map(([ticker, weight]) => (
+                                            <li key={ticker}>
+                                                {ticker}: {(weight * 100).toFixed(2)}%
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                                <div className="plots-container">
+                                    <ImageComponent
+                                        base64String={optimizationResult.MaxQuadraticUtility.returns_dist}
+                                        altText="Max Quadratic Utility Distribution"
+                                    />
+                                    <ImageComponent
+                                        base64String={optimizationResult.MaxQuadraticUtility.max_drawdown_plot}
+                                        altText="Max Quadratic Utility Drawdown"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Cumulative Returns Chart */}
+                        <div className="mt-6">
+                            <h2 className="text-xl font-semibold mb-2">Cumulative Returns Over Time</h2>
+                            <Line
+                                data={prepareChartData(optimizationResult)}
+                                options={chartOptions}
+                            />
                         </div>
                     </div>
                 )}
@@ -348,16 +438,24 @@ const HomePage: React.FC = () => {
 
                 .result-with-plot {
                     display: flex;
+                    flex-direction: row;
                     gap: 20px;
                     align-items: flex-start;
+                    margin-top: 20px;
                 }
 
                 .result-details {
                     flex: 1;
                 }
 
-                .image-container {
+                .plots-container {
                     flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 20px;
+                }
+
+                .image-container {
                     border: 1px solid #ccc;
                     padding: 10px;
                     background-color: #f9f9f9;

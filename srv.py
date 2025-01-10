@@ -29,7 +29,8 @@ os.makedirs(output_dir, exist_ok=True)
 app = FastAPI()
 
 origins = [
-    "https://indportfoliooptimization.vercel.app"
+    "https://indportfoliooptimization.vercel.app",
+    "*"
 ]
 
 app.add_middleware(

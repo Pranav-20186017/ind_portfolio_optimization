@@ -15,31 +15,49 @@ export interface StockOption {
     exchange: string;
 }
 
-// Types for portfolio performance and optimization result
+// Extended types for portfolio performance
 export interface PortfolioPerformance {
+    // From PyPortfolioOpt
     expected_return: number;
     volatility: number;
     sharpe: number;
+
+    // Custom metrics
+    sortino: number;
+    max_drawdown: number;
+    romad: number;
+    var_95: number;
+    cvar_95: number;
+    var_90: number;
+    cvar_90: number;
+    cagr: number;
 }
 
+// Extended optimization result, now including drawdown plot
 export interface OptimizationResult {
-    weights: { [ticker: string]: number };  // Dictionary of stock tickers and their weights
-    performance: PortfolioPerformance;      // Performance metrics (expected return, volatility, Sharpe ratio)
-    returns_dist: string;                   // Base64-encoded string of the returns distribution plot
+    weights: { [ticker: string]: number };
+    performance: PortfolioPerformance;
+
+    // Base64-encoded images of distribution plot & drawdown plot
+    returns_dist: string;
+    max_drawdown_plot: string;
 }
 
-// Full portfolio optimization response with all portfolio types and cumulative returns
+// Full portfolio optimization response with additional portfolios & new metrics
 export interface PortfolioOptimizationResponse {
-    MVO?: OptimizationResult | null;  // Mean-Variance Optimization (Max Sharpe Ratio)
-    MinVol?: OptimizationResult | null;  // Minimum Volatility Portfolio
-    MaxQuadraticUtility?: OptimizationResult | null;  // Max Quadratic Utility Portfolio
-    start_date: string;  // Start date of the portfolio period (ISO format)
-    end_date: string;    // End date of the portfolio period (ISO format)
+    MVO?: OptimizationResult | null;
+    MinVol?: OptimizationResult | null;
+    MaxQuadraticUtility?: OptimizationResult | null;
+
+    start_date: string;  // ISO date
+    end_date: string;    // ISO date
+
     cumulative_returns: {
-        MVO: (number | null)[];  // Cumulative returns for MVO
-        MinVol: (number | null)[];  // Cumulative returns for Min Vol
-        MaxQuadraticUtility: (number | null)[];  // Cumulative returns for Max Quadratic Utility Portfolio
+        MVO: (number | null)[];
+        MinVol: (number | null)[];
+        MaxQuadraticUtility: (number | null)[];
     };
-    dates: string[];  // Dates corresponding to the cumulative returns (ISO format)
-    nifty_returns: number[];  // Nifty index returns for the same period
+
+    dates: string[];        // ISO date strings corresponding to each data point
+    nifty_returns: number[];
 }
