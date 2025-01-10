@@ -147,7 +147,7 @@ const HomePage: React.FC = () => {
 
         try {
             const response = await axios.post(
-                'http://127.0.0.1:8000/optimize',
+                'https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize',
                 dataToSend
             );
             const result = response.data as PortfolioOptimizationResponse;
