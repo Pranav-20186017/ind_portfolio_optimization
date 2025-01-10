@@ -209,7 +209,7 @@ def compute_optimal_portfolio(df: pd.DataFrame, nifty_df: pd.Series) -> Tuple[Di
         ef_min_vol.min_volatility()  # Minimize volatility
         cleaned_weights_min_vol = ef_min_vol.clean_weights()
         min_vol_performance = ef_min_vol.portfolio_performance(verbose=False)
-        min_vol_returns_dist = df.pct_change().dropna().dot(pd.Series(cleaned_weights_mvo))
+        min_vol_returns_dist = df.pct_change().dropna().dot(pd.Series(cleaned_weights_min_vol))
         plt.figure(figsize=(10, 6))
         plt.hist(min_vol_returns_dist, bins=50, edgecolor='black', alpha=0.7)
         plt.title("Distribution of Min Vol Portfolio Returns")
