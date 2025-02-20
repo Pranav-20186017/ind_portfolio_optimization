@@ -142,7 +142,7 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
     combined_df.dropna(inplace=True)
 
     # Nifty
-    nifty_df = yf.download('^NSEI', start=min_date)['Adj Close'].dropna()
+    nifty_df = yf.download('^NSEI', start=min_date)['Close'].dropna()
     common_dates = combined_df.index.intersection(nifty_df.index)
     combined_df = combined_df.loc[common_dates]
     nifty_df = nifty_df.loc[common_dates]
