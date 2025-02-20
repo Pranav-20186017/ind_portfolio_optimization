@@ -99,7 +99,7 @@ def file_to_base64(filepath: str) -> str:
 @lru_cache(maxsize=128)
 def cached_yf_download(ticker: str, start_date: datetime) -> pd.Series:
     """Cached download of Adjusted Close from yfinance."""
-    return yf.download(ticker, start=start_date)['Adj Close']
+    return yf.download(ticker, start=start_date)['Close']
 
 def format_tickers(stocks: List[StockItem]) -> List[str]:
     """Convert StockItem list into yfinance-friendly tickers."""
