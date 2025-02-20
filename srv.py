@@ -99,7 +99,7 @@ def file_to_base64(filepath: str) -> str:
 @lru_cache(maxsize=128)
 def cached_yf_download(ticker: str, start_date: datetime) -> pd.Series:
     """Cached download of Adjusted Close from yfinance."""
-    return yf.download(ticker, start=start_date)['Close']
+    return yf.download(ticker, start=start_date,multi_level_index=False)['Close']
 
 def format_tickers(stocks: List[StockItem]) -> List[str]:
     """Convert StockItem list into yfinance-friendly tickers."""
@@ -142,7 +142,7 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
     combined_df.dropna(inplace=True)
 
     # Nifty
-    nifty_df = yf.download('^NSEI', start=min_date)['Close'].dropna()
+    nifty_df = yf.download('^NSEI', start=min_date,multi_level_index=False)['Close'].dropna()
     common_dates = combined_df.index.intersection(nifty_df.index)
     combined_df = combined_df.loc[common_dates]
     nifty_df = nifty_df.loc[common_dates]
