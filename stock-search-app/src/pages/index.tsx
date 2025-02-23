@@ -211,6 +211,14 @@ const HomePage: React.FC = () => {
                 fill:false,
             });
         }
+        if (result.cumulative_returns.CriticalLineAlgorithm?.length) {
+            datasets.push({
+                label: 'Critical Line Algorithm',
+                data: result.cumulative_returns.CriticalLineAlgorithm,
+                borderColor: 'magenta',
+                fill:false,
+            });
+        }
         if (result.nifty_returns?.length) {
             datasets.push({
                 label: 'Nifty Index',
@@ -461,6 +469,46 @@ const HomePage: React.FC = () => {
                                     <ImageComponent
                                         base64String={optimizationResult.EquiWeighted.max_drawdown_plot}
                                         altText="EquiWeighted Drawdown"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                         {/* Critical Line Algorithm */}
+                        {optimizationResult.CriticalLineAlgorithm && (
+                            <div className="result-with-plot">
+                                <div className="result-details">
+                                    <h3 className="text-lg font-semibold">EquiWeighted</h3>
+                                    <p>Expected Return: {optimizationResult.CriticalLineAlgorithm.performance.expected_return.toFixed(4)}</p>
+                                    <p>Volatility: {optimizationResult.CriticalLineAlgorithm.performance.volatility.toFixed(4)}</p>
+                                    <p>Sharpe Ratio: {optimizationResult.CriticalLineAlgorithm.performance.sharpe.toFixed(4)}</p>
+
+                                    <p>Sortino Ratio: {optimizationResult.CriticalLineAlgorithm.performance.sortino.toFixed(4)}</p>
+                                    <p>Max Drawdown: {(optimizationResult.CriticalLineAlgorithm.performance.max_drawdown * 100).toFixed(2)}%</p>
+                                    <p>RoMaD: {optimizationResult.CriticalLineAlgorithm.performance.romad.toFixed(4)}</p>
+
+                                    <p>VaR 95%: {(optimizationResult.CriticalLineAlgorithm.performance.var_95 * 100).toFixed(2)}%</p>
+                                    <p>CVaR 95%: {(optimizationResult.CriticalLineAlgorithm.performance.cvar_95 * 100).toFixed(2)}%</p>
+                                    <p>VaR 90%: {(optimizationResult.CriticalLineAlgorithm.performance.var_90 * 100).toFixed(2)}%</p>
+                                    <p>CVaR 90%: {(optimizationResult.CriticalLineAlgorithm.performance.cvar_90 * 100).toFixed(2)}%</p>
+                                    <p>CAGR: {(optimizationResult.CriticalLineAlgorithm.performance.cagr * 100).toFixed(2)}%</p>
+
+                                    <h4 className="font-semibold mt-2">Weights:</h4>
+                                    <ul>
+                                        {Object.entries(optimizationResult.CriticalLineAlgorithm.weights).map(([ticker, weight]) => (
+                                            <li key={ticker}>
+                                                {ticker}: {(weight * 100).toFixed(2)}%
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                                <div className="plots-container">
+                                    <ImageComponent
+                                        base64String={optimizationResult.CriticalLineAlgorithm.returns_dist}
+                                        altText="Critical Line Algorithm Distribution"
+                                    />
+                                    <ImageComponent
+                                        base64String={optimizationResult.CriticalLineAlgorithm.max_drawdown_plot}
+                                        altText="Critical Line Algorithm Drawdown"
                                     />
                                 </div>
                             </div>

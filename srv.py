@@ -7,6 +7,7 @@ import pandas as pd
 from pypfopt.base_optimizer import BaseOptimizer
 from pypfopt import EfficientFrontier, expected_returns
 from pypfopt.risk_models import CovarianceShrinkage
+from pypfopt import CLA  # <-- Added import
 from functools import lru_cache
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
@@ -18,6 +19,7 @@ import numpy as np
 
 # Set Matplotlib to use 'Agg' backend
 plt.switch_backend('Agg')
+
 ########################################
 # Ensure output directory
 ########################################
@@ -75,6 +77,9 @@ class PortfolioOptimizationResponse(BaseModel):
     MinVol: Optional[OptimizationResult]
     MaxQuadraticUtility: Optional[OptimizationResult]
     EquiWeighted: Optional[OptimizationResult]
+    # <-- Added CLA result
+    CriticalLineAlgorithm: Optional[OptimizationResult]
+
     start_date: datetime
     end_date: datetime
     cumulative_returns: Dict[str, List[Optional[float]]]
@@ -88,23 +93,26 @@ class StockItem(BaseModel):
 class TickerRequest(BaseModel):
     stocks: List[StockItem]
 
+########################################
+# Custom EquiWeighted Optimizer
+########################################
 class EquiWeightedOptimizer(BaseOptimizer):
     def __init__(self, n_assets: int, tickers: List[str] = None):
         super().__init__(n_assets, tickers)
         self.returns = None
-    def optimize(self)->dict:
+
+    def optimize(self) -> dict:
         equal_weight = 1 / self.n_assets
         self.weights = np.full(self.n_assets, equal_weight)
         return self.clean_weights(cutoff=1e-4, rounding=5)
+
     def portfolio_performance(self, verbose=False, risk_free_rate=0.05):
         """
-        Required custom implementation since BaseOptimizer
-        doesn't provide this method
+        Custom implementation of portfolio_performance for equal weighting.
         """
         if self.returns is None:
             raise ValueError("Historical returns not set")
 
-        # Calculate metrics manually
         port_returns = self.returns @ self.weights
         annual_return = port_returns.mean() * 252
         annual_volatility = port_returns.std() * np.sqrt(252)
@@ -128,11 +136,11 @@ def file_to_base64(filepath: str) -> str:
 
 @lru_cache(maxsize=128)
 def cached_yf_download(ticker: str, start_date: datetime) -> pd.Series:
-    """Cached download of Adjusted Close from yfinance."""
-    return yf.download(ticker, start=start_date,multi_level_index=False)['Close']
+    """Cached download of 'Close' price from yfinance."""
+    return yf.download(ticker, start=start_date, multi_level_index=False)['Close']
 
 def format_tickers(stocks: List[StockItem]) -> List[str]:
-    """Convert StockItem list into yfinance-friendly tickers."""
+    """Convert StockItem list into yfinance-friendly tickers (adding .BO or .NS)."""
     formatted_tickers = []
     for stock in stocks:
         if stock.exchange == ExchangeEnum.BSE:
@@ -148,7 +156,10 @@ def format_tickers(stocks: List[StockItem]) -> List[str]:
 # 1) fetch_and_align_data
 ########################################
 def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
-    """Download & align data for each ticker, plus Nifty index."""
+    """
+    Download & align data for each ticker, plus Nifty index.
+    Returns (combined_df, nifty_close).
+    """
     data = {}
     for ticker in tickers:
         try:
@@ -159,10 +170,10 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
                 print(f"No data for ticker: {ticker}")
         except Exception as e:
             print(f"Error fetching data for {ticker}: {e}")
-    
+
     if not data:
         raise ValueError("No valid data available for the provided tickers.")
-    
+
     # Align all tickers to the latest min_date among them
     min_date = max(df.index.min() for df in data.values())
     filtered_data = {t: df[df.index >= min_date] for t, df in data.items()}
@@ -172,7 +183,7 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
     combined_df.dropna(inplace=True)
 
     # Nifty
-    nifty_df = yf.download('^NSEI', start=min_date,multi_level_index=False)['Close'].dropna()
+    nifty_df = yf.download('^NSEI', start=min_date, multi_level_index=False)['Close'].dropna()
     common_dates = combined_df.index.intersection(nifty_df.index)
     combined_df = combined_df.loc[common_dates]
     nifty_df = nifty_df.loc[common_dates]
@@ -185,14 +196,13 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
 ########################################
 def compute_custom_metrics(port_returns: pd.Series, risk_free_rate: float = 0.05) -> Dict[str, float]:
     """
-    Compute custom metrics:
+    Compute custom daily-return metrics:
       - sortino
       - max_drawdown
       - romad
       - var_95, cvar_95
       - var_90, cvar_90
       - cagr
-    Then we'll combine these with PyPortfolioOpt's expected_return/volatility/sharpe.
     """
     ann_factor = 252
 
@@ -224,11 +234,9 @@ def compute_custom_metrics(port_returns: pd.Series, risk_free_rate: float = 0.05
     cvar_90 = below_90.mean() if not below_90.empty else var_90
 
     # CAGR
-    # number of daily returns:
     n_days = len(port_returns)
     if n_days > 1:
-        final_growth = cum.iloc[-1]  # e.g. 1.25 => up 25%
-        # annualize via 252 trading days
+        final_growth = cum.iloc[-1]
         cagr = final_growth ** (ann_factor / n_days) - 1.0
     else:
         cagr = 0.0
@@ -253,62 +261,90 @@ def compute_optimal_portfolio(
     nifty_df: pd.Series
 ) -> Tuple[Dict[str, Optional[OptimizationResult]], pd.DataFrame, pd.Series]:
     """
-    Runs 3 portfolio optimizations: MVO, MinVol, MaxQuadraticUtility.
-    Uses PyPortfolioOpt for (expected_return, volatility, sharpe).
-    Adds custom metrics (sortino, drawdown, var/cvar, cagr).
-    Plots distribution & drawdown. Returns results + cumulative returns + Nifty.
+    Runs 4 portfolio optimizations plus the newly added CLA:
+      - MVO (Max Sharpe)
+      - MinVol
+      - MaxQuadraticUtility
+      - EquiWeighted
+      - CriticalLineAlgorithm (CLA)
+
+    Each method returns:
+      (expected_return, volatility, sharpe)
+
+    Additionally, we compute custom metrics (sortino, drawdown, var/cvar, cagr),
+    plus distribution & drawdown plots. We return:
+      - results dictionary keyed by method
+      - cumulative returns DataFrame
+      - cumulative Nifty returns (Series)
     """
     risk_free_rate = 0.05
     mu = expected_returns.mean_historical_return(df, frequency=252)
     S = CovarianceShrinkage(df).ledoit_wolf()
 
-    results = {}
     returns = df.pct_change().dropna()
+    results: Dict[str, Optional[OptimizationResult]] = {}
 
-    methods = ["MVO", "MinVol", "MaxQuadraticUtility","EquiWeighted"]
+    methods = [
+        "MVO",
+        "MinVol",
+        "MaxQuadraticUtility",
+        "EquiWeighted",
+        "CriticalLineAlgorithm"
+    ]
 
     for method in methods:
         try:
-            ef = EfficientFrontier(mu, S)
+            # We'll handle each method in its own block
             if method == "MVO":
+                ef = EfficientFrontier(mu, S)
                 ef.max_sharpe(risk_free_rate=risk_free_rate)
                 label = "MVO"
+                weights = ef.clean_weights()
+                pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+
             elif method == "MinVol":
+                ef = EfficientFrontier(mu, S)
                 ef.min_volatility()
                 label = "MinVol"
-            elif method=="MaxQuadraticUtility":
+                weights = ef.clean_weights()
+                pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+
+            elif method == "MaxQuadraticUtility":
+                ef = EfficientFrontier(mu, S)
                 ef.max_quadratic_utility(risk_aversion=5)
                 label = "MaxQuadraticUtility"
+                weights = ef.clean_weights()
+                pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+
             elif method == "EquiWeighted":
+                label = "EquiWeighted"
                 ew = EquiWeightedOptimizer(n_assets=len(mu), tickers=mu.index)
                 ew.returns = returns
                 weights = ew.optimize()
-                label = "EquiWeighted"
-            if method != "EquiWeighted":
-                # Weights & performance from PyPortfolioOpt
-                weights = ef.clean_weights()
-                w_series = pd.Series(weights)
-                pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
-            # pfolio_perf -> (expected_return, volatility, sharpe)
-            else:
-                w_series = pd.Series(weights)
                 pfolio_perf = ew.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
 
-            # Daily returns of this portfolio
+            else:  # method == "CriticalLineAlgorithm"
+                label = "CriticalLineAlgorithm"
+                cla = CLA(mu, S)
+                cla.max_sharpe()
+                weights = cla.clean_weights()
+                pfolio_perf = cla.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+
+            # Convert weights to Series for daily returns
+            w_series = pd.Series(weights)
             port_returns = returns.dot(w_series)
 
-            # 1) Compute custom metrics
+            # Compute custom metrics
             custom = compute_custom_metrics(port_returns, risk_free_rate)
 
-            # 2) Plot distribution + VaR/CVaR lines
+            # Plot distribution (histogram)
             plt.figure(figsize=(10, 6))
             plt.hist(port_returns, bins=50, edgecolor='black', alpha=0.7, label='Daily Returns')
             plt.title(f"Distribution of {label} Portfolio Returns")
             plt.xlabel("Returns")
             plt.ylabel("Frequency")
             plt.grid(True)
-
-            # Add var/cvar lines
+            # VaR/CVaR lines
             plt.axvline(custom["var_95"], color='r', linestyle='--',
                         label=f"VaR 95%: {custom['var_95']:.4f}")
             plt.axvline(custom["cvar_95"], color='r', linestyle='-',
@@ -324,7 +360,7 @@ def compute_optimal_portfolio(
             plt.close()
             dist_b64 = file_to_base64(dist_file)
 
-            # 3) Plot drawdown
+            # Plot drawdown
             cum = (1 + port_returns).cumprod()
             peak = cum.cummax()
             drawdown = (cum - peak) / peak
@@ -341,7 +377,7 @@ def compute_optimal_portfolio(
             plt.close()
             dd_b64 = file_to_base64(dd_file)
 
-            # Merge everything into one Performance object
+            # Merge into one Performance object
             performance = PortfolioPerformance(
                 expected_return=pfolio_perf[0],
                 volatility=pfolio_perf[1],
@@ -356,12 +392,14 @@ def compute_optimal_portfolio(
                 cagr=custom["cagr"]
             )
 
+            # Store the result
             results[label] = OptimizationResult(
                 weights=weights,
                 performance=performance,
                 returns_dist=dist_b64,
                 max_drawdown_plot=dd_b64
             )
+
         except Exception as e:
             print(f"Error in {method} optimization: {e}")
             results[method] = None
@@ -369,14 +407,16 @@ def compute_optimal_portfolio(
     # 4) Cumulative returns
     cumulative_returns = pd.DataFrame(index=df.index)
     for method in methods:
-        if results.get(method) and results[method].weights:
-            w = pd.Series(results[method].weights)
-            port_daily = returns.dot(w)
-            cumulative_returns[method] = (1 + port_daily).cumprod()
+        label = method
+        opt_res = results.get(label)
+        if opt_res and opt_res.weights:
+            w_series = pd.Series(opt_res.weights)
+            port_daily = returns.dot(w_series)
+            cumulative_returns[label] = (1 + port_daily).cumprod()
         else:
-            cumulative_returns[method] = None
+            cumulative_returns[label] = None
 
-    # 5) Nifty
+    # 5) Align with Nifty
     nifty_ret = nifty_df.pct_change().dropna()
     cum_nifty = (1 + nifty_ret).cumprod()
     cumulative_returns = cumulative_returns.loc[cum_nifty.index]
@@ -391,7 +431,7 @@ def optimize_portfolio(request: TickerRequest):
     try:
         # 1) Format tickers
         formatted_tickers = format_tickers(request.stocks)
-        
+
         # 2) Fetch & align
         df, nifty_df = fetch_and_align_data(formatted_tickers)
         if df.empty:
@@ -401,10 +441,10 @@ def optimize_portfolio(request: TickerRequest):
         start_date = df.index.min().date()
         end_date = df.index.max().date()
 
-        # 4) Compute
+        # 4) Compute results
         results, cum_returns_df, cum_nifty = compute_optimal_portfolio(df, nifty_df)
 
-        # 5) Build JSON
+        # 5) Build JSON response
         dates = cum_returns_df.index.tolist()
         cumulative_returns = {
             "MVO": cum_returns_df["MVO"].tolist() if "MVO" in cum_returns_df else [],
@@ -414,16 +454,26 @@ def optimize_portfolio(request: TickerRequest):
                 if "MaxQuadraticUtility" in cum_returns_df
                 else []
             ),
-            "EquiWeighted": cum_returns_df["EquiWeighted"].tolist() if "EquiWeighted" in cum_returns_df else [],
+            "EquiWeighted": (
+                cum_returns_df["EquiWeighted"].tolist()
+                if "EquiWeighted" in cum_returns_df
+                else []
+            ),
+            "CriticalLineAlgorithm": (
+                cum_returns_df["CriticalLineAlgorithm"].tolist()
+                if "CriticalLineAlgorithm" in cum_returns_df
+                else []
+            ),
         }
         nifty_returns = cum_nifty.tolist()
 
-        # 6) Response
+        # 6) Construct the final response model
         response = PortfolioOptimizationResponse(
             MVO=results.get("MVO"),
             MinVol=results.get("MinVol"),
             MaxQuadraticUtility=results.get("MaxQuadraticUtility"),
-            EquiWeighted = results.get("EquiWeighted"),
+            EquiWeighted=results.get("EquiWeighted"),
+            CriticalLineAlgorithm=results.get("CriticalLineAlgorithm"),
             start_date=start_date,
             end_date=end_date,
             cumulative_returns=cumulative_returns,
