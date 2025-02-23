@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from enum import Enum
 import yfinance as yf
 import pandas as pd
+from pypfopt.base_optimizer import BaseOptimizer
 from pypfopt import EfficientFrontier, expected_returns
 from pypfopt.risk_models import CovarianceShrinkage
 from functools import lru_cache
@@ -29,7 +30,8 @@ os.makedirs(output_dir, exist_ok=True)
 app = FastAPI()
 
 origins = [
-    "https://indportfoliooptimization.vercel.app"
+    "https://indportfoliooptimization.vercel.app",
+    "*"
 ]
 
 app.add_middleware(
@@ -73,6 +75,7 @@ class PortfolioOptimizationResponse(BaseModel):
     MVO: Optional[OptimizationResult]
     MinVol: Optional[OptimizationResult]
     MaxQuadraticUtility: Optional[OptimizationResult]
+    EquiWeighted: Optional[OptimizationResult]
     start_date: datetime
     end_date: datetime
     cumulative_returns: Dict[str, List[Optional[float]]]
@@ -86,6 +89,34 @@ class StockItem(BaseModel):
 class TickerRequest(BaseModel):
     stocks: List[StockItem]
 
+class EquiWeightedOptimizer(BaseOptimizer):
+    def __init__(self, n_assets: int, tickers: List[str] = None):
+        super().__init__(n_assets, tickers)
+        self.returns = None
+    def optimize(self)->dict:
+        equal_weight = 1 / self.n_assets
+        self.weights = np.full(self.n_assets, equal_weight)
+        return self.clean_weights(cutoff=1e-4, rounding=5)
+    def portfolio_performance(self, verbose=False, risk_free_rate=0.05):
+        """
+        Required custom implementation since BaseOptimizer
+        doesn't provide this method
+        """
+        if self.returns is None:
+            raise ValueError("Historical returns not set")
+
+        # Calculate metrics manually
+        port_returns = self.returns @ self.weights
+        annual_return = port_returns.mean() * 252
+        annual_volatility = port_returns.std() * np.sqrt(252)
+        sharpe = (annual_return - risk_free_rate) / annual_volatility
+
+        if verbose:
+            print(f"Annual Return: {annual_return:.2%}")
+            print(f"Annual Volatility: {annual_volatility:.2%}")
+            print(f"Sharpe Ratio: {sharpe:.2f}")
+
+        return annual_return, annual_volatility, sharpe
 
 ########################################
 # Utility Functions
@@ -235,7 +266,7 @@ def compute_optimal_portfolio(
     results = {}
     returns = df.pct_change().dropna()
 
-    methods = ["MVO", "MinVol", "MaxQuadraticUtility"]
+    methods = ["MVO", "MinVol", "MaxQuadraticUtility","EquiWeighted"]
 
     for method in methods:
         try:
@@ -246,15 +277,23 @@ def compute_optimal_portfolio(
             elif method == "MinVol":
                 ef.min_volatility()
                 label = "MinVol"
-            else:
+            elif method=="MaxQuadraticUtility":
                 ef.max_quadratic_utility(risk_aversion=5)
                 label = "MaxQuadraticUtility"
-
-            # Weights & performance from PyPortfolioOpt
-            weights = ef.clean_weights()
-            w_series = pd.Series(weights)
-            pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+            elif method == "EquiWeighted":
+                ew = EquiWeightedOptimizer(n_assets=len(mu), tickers=mu.index)
+                ew.returns = returns
+                weights = ew.optimize()
+                label = "EquiWeighted"
+            if method != "EquiWeighted":
+                # Weights & performance from PyPortfolioOpt
+                weights = ef.clean_weights()
+                w_series = pd.Series(weights)
+                pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
             # pfolio_perf -> (expected_return, volatility, sharpe)
+            else:
+                w_series = pd.Series(weights)
+                pfolio_perf = ew.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
 
             # Daily returns of this portfolio
             port_returns = returns.dot(w_series)
@@ -375,7 +414,8 @@ def optimize_portfolio(request: TickerRequest):
                 cum_returns_df["MaxQuadraticUtility"].tolist()
                 if "MaxQuadraticUtility" in cum_returns_df
                 else []
-            )
+            ),
+            "EquiWeighted": cum_returns_df["EquiWeighted"].tolist() if "EquiWeighted" in cum_returns_df else [],
         }
         nifty_returns = cum_nifty.tolist()
 
@@ -384,6 +424,7 @@ def optimize_portfolio(request: TickerRequest):
             MVO=results.get("MVO"),
             MinVol=results.get("MinVol"),
             MaxQuadraticUtility=results.get("MaxQuadraticUtility"),
+            EquiWeighted = results.get("EquiWeighted"),
             start_date=start_date,
             end_date=end_date,
             cumulative_returns=cumulative_returns,

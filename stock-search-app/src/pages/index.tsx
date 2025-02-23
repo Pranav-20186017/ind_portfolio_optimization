@@ -20,6 +20,7 @@ import {
     Legend,
     Tooltip,
 } from 'chart.js';
+import { BorderColor } from '@mui/icons-material';
 
 ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Legend, Tooltip);
 
@@ -200,6 +201,14 @@ const HomePage: React.FC = () => {
                 data: result.cumulative_returns.MaxQuadraticUtility,
                 borderColor: 'purple',
                 fill: false,
+            });
+        }
+        if (result.cumulative_returns.EquiWeighted?.length) {
+            datasets.push({
+                label: 'Equi Weighted',
+                data: result.cumulative_returns.EquiWeighted,
+                BorderColor: 'orange',
+                fill:false,
             });
         }
         if (result.nifty_returns?.length) {
@@ -411,6 +420,47 @@ const HomePage: React.FC = () => {
                                     <ImageComponent
                                         base64String={optimizationResult.MaxQuadraticUtility.max_drawdown_plot}
                                         altText="Max Quadratic Utility Drawdown"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* EquiWeighted */}
+                        {optimizationResult.EquiWeighted && (
+                            <div className="result-with-plot">
+                                <div className="result-details">
+                                    <h3 className="text-lg font-semibold">EquiWeighted</h3>
+                                    <p>Expected Return: {optimizationResult.EquiWeighted.performance.expected_return.toFixed(4)}</p>
+                                    <p>Volatility: {optimizationResult.EquiWeighted.performance.volatility.toFixed(4)}</p>
+                                    <p>Sharpe Ratio: {optimizationResult.EquiWeighted.performance.sharpe.toFixed(4)}</p>
+
+                                    <p>Sortino Ratio: {optimizationResult.EquiWeighted.performance.sortino.toFixed(4)}</p>
+                                    <p>Max Drawdown: {(optimizationResult.EquiWeighted.performance.max_drawdown * 100).toFixed(2)}%</p>
+                                    <p>RoMaD: {optimizationResult.EquiWeighted.performance.romad.toFixed(4)}</p>
+
+                                    <p>VaR 95%: {(optimizationResult.EquiWeighted.performance.var_95 * 100).toFixed(2)}%</p>
+                                    <p>CVaR 95%: {(optimizationResult.EquiWeighted.performance.cvar_95 * 100).toFixed(2)}%</p>
+                                    <p>VaR 90%: {(optimizationResult.EquiWeighted.performance.var_90 * 100).toFixed(2)}%</p>
+                                    <p>CVaR 90%: {(optimizationResult.EquiWeighted.performance.cvar_90 * 100).toFixed(2)}%</p>
+                                    <p>CAGR: {(optimizationResult.EquiWeighted.performance.cagr * 100).toFixed(2)}%</p>
+
+                                    <h4 className="font-semibold mt-2">Weights:</h4>
+                                    <ul>
+                                        {Object.entries(optimizationResult.EquiWeighted.weights).map(([ticker, weight]) => (
+                                            <li key={ticker}>
+                                                {ticker}: {(weight * 100).toFixed(2)}%
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                                <div className="plots-container">
+                                    <ImageComponent
+                                        base64String={optimizationResult.EquiWeighted.returns_dist}
+                                        altText="EquiWeighted Distribution"
+                                    />
+                                    <ImageComponent
+                                        base64String={optimizationResult.EquiWeighted.max_drawdown_plot}
+                                        altText="EquiWeighted Drawdown"
                                     />
                                 </div>
                             </div>

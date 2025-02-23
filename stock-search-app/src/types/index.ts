@@ -48,6 +48,7 @@ export interface PortfolioOptimizationResponse {
     MVO?: OptimizationResult | null;
     MinVol?: OptimizationResult | null;
     MaxQuadraticUtility?: OptimizationResult | null;
+    EquiWeighted?: OptimizationResult | null;
 
     start_date: string;  // ISO date
     end_date: string;    // ISO date
@@ -56,6 +57,7 @@ export interface PortfolioOptimizationResponse {
         MVO: (number | null)[];
         MinVol: (number | null)[];
         MaxQuadraticUtility: (number | null)[];
+        EquiWeighted: (number | null)[];
     };
 
     dates: string[];        // ISO date strings corresponding to each data point
