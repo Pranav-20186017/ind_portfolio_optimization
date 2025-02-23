@@ -477,7 +477,7 @@ const HomePage: React.FC = () => {
                         {optimizationResult.CriticalLineAlgorithm && (
                             <div className="result-with-plot">
                                 <div className="result-details">
-                                    <h3 className="text-lg font-semibold">EquiWeighted</h3>
+                                    <h3 className="text-lg font-semibold">Critical Line Algorithm</h3>
                                     <p>Expected Return: {optimizationResult.CriticalLineAlgorithm.performance.expected_return.toFixed(4)}</p>
                                     <p>Volatility: {optimizationResult.CriticalLineAlgorithm.performance.volatility.toFixed(4)}</p>
                                     <p>Sharpe Ratio: {optimizationResult.CriticalLineAlgorithm.performance.sharpe.toFixed(4)}</p>
