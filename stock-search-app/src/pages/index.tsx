@@ -207,7 +207,7 @@ const HomePage: React.FC = () => {
             datasets.push({
                 label: 'Equi Weighted',
                 data: result.cumulative_returns.EquiWeighted,
-                BorderColor: 'orange',
+                borderColor: 'orange',
                 fill:false,
             });
         }
