@@ -31,6 +31,7 @@ export interface PortfolioPerformance {
     var_90: number;
     cvar_90: number;
     cagr: number;
+    portfolio_beta: number;
 }
 
 // Extended optimization result, now including drawdown plot

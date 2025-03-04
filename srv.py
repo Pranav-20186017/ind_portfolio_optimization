@@ -6,6 +6,7 @@ import yfinance as yf
 import pandas as pd
 from pypfopt.base_optimizer import BaseOptimizer
 from pypfopt import EfficientFrontier, expected_returns
+import statsmodels.api as sm
 from pypfopt.risk_models import CovarianceShrinkage
 from pypfopt import CLA  # <-- Added import
 from functools import lru_cache
@@ -65,6 +66,7 @@ class PortfolioPerformance(BaseModel):
     var_90: float
     cvar_90: float
     cagr: float  # Newly added
+    portfolio_beta: float
 
 class OptimizationResult(BaseModel):
     weights: Dict[str, float]
@@ -194,7 +196,7 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
 ########################################
 # 2) Helper: Compute Additional Metrics
 ########################################
-def compute_custom_metrics(port_returns: pd.Series, risk_free_rate: float = 0.05) -> Dict[str, float]:
+def compute_custom_metrics(port_returns: pd.Series, nifty_df:pd.DataFrame, risk_free_rate: float = 0.05) -> Dict[str, float]:
     """
     Compute custom daily-return metrics:
       - sortino
@@ -241,6 +243,21 @@ def compute_custom_metrics(port_returns: pd.Series, risk_free_rate: float = 0.05
     else:
         cagr = 0.0
 
+    nifty_ret = nifty_df.pct_change().dropna()
+    merged_returns = pd.DataFrame({
+    'Portfolio': port_returns,
+    'Nifty': nifty_ret
+    }).dropna()
+    risk_free_daily = risk_free_rate/ann_factor
+    # Calculate excess returns
+    excess_portfolio = merged_returns['Portfolio'] - risk_free_daily
+    excess_market = merged_returns['Nifty'] - risk_free_daily
+    # Prepare and run regression
+    X = sm.add_constant(excess_market)  # Adds intercept term
+    model = sm.OLS(excess_portfolio, X).fit()
+    portfolio_beta = model.params['Nifty']
+
+
     return {
         "sortino": sortino,
         "max_drawdown": max_dd,
@@ -249,7 +266,8 @@ def compute_custom_metrics(port_returns: pd.Series, risk_free_rate: float = 0.05
         "cvar_95": cvar_95,
         "var_90": var_90,
         "cvar_90": cvar_90,
-        "cagr": cagr
+        "cagr": cagr,
+        "portfolio_beta": portfolio_beta
     }
 
 
@@ -335,7 +353,7 @@ def compute_optimal_portfolio(
             port_returns = returns.dot(w_series)
 
             # Compute custom metrics
-            custom = compute_custom_metrics(port_returns, risk_free_rate)
+            custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
 
             # Plot distribution (histogram)
             plt.figure(figsize=(10, 6))
@@ -389,7 +407,8 @@ def compute_optimal_portfolio(
                 cvar_95=custom["cvar_95"],
                 var_90=custom["var_90"],
                 cvar_90=custom["cvar_90"],
-                cagr=custom["cagr"]
+                cagr=custom["cagr"],
+                portfolio_beta = custom["portfolio_beta"]
             )
 
             # Store the result

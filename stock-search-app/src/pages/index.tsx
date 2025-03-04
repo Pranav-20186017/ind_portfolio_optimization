@@ -451,6 +451,8 @@ const HomePage: React.FC = () => {
                                     <p>VaR 90%: {(optimizationResult.EquiWeighted.performance.var_90 * 100).toFixed(2)}%</p>
                                     <p>CVaR 90%: {(optimizationResult.EquiWeighted.performance.cvar_90 * 100).toFixed(2)}%</p>
                                     <p>CAGR: {(optimizationResult.EquiWeighted.performance.cagr * 100).toFixed(2)}%</p>
+                                    <p>Portfolio Beta: {optimizationResult.EquiWeighted.performance.portfolio_beta.toFixed(4)}</p>
+
 
                                     <h4 className="font-semibold mt-2">Weights:</h4>
                                     <ul>
