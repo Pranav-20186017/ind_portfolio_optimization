@@ -326,6 +326,7 @@ const HomePage: React.FC = () => {
                                     <p>VaR 90%: {(optimizationResult.MVO.performance.var_90 * 100).toFixed(2)}%</p>
                                     <p>CVaR 90%: {(optimizationResult.MVO.performance.cvar_90 * 100).toFixed(2)}%</p>
                                     <p>CAGR: {(optimizationResult.MVO.performance.cagr * 100).toFixed(2)}%</p>
+                                    <p>Portfolio Beta: {optimizationResult.MVO.performance.portfolio_beta.toFixed(4)}</p>
 
                                     <h4 className="font-semibold mt-2">Weights:</h4>
                                     <ul>
@@ -369,6 +370,7 @@ const HomePage: React.FC = () => {
                                     <p>VaR 90%: {(optimizationResult.MinVol.performance.var_90 * 100).toFixed(2)}%</p>
                                     <p>CVaR 90%: {(optimizationResult.MinVol.performance.cvar_90 * 100).toFixed(2)}%</p>
                                     <p>CAGR: {(optimizationResult.MinVol.performance.cagr * 100).toFixed(2)}%</p>
+                                    <p>Portfolio Beta: {optimizationResult.MinVol.performance.portfolio_beta.toFixed(4)}</p>
 
                                     <h4 className="font-semibold mt-2">Weights:</h4>
                                     <ul>
@@ -410,6 +412,7 @@ const HomePage: React.FC = () => {
                                     <p>VaR 90%: {(optimizationResult.MaxQuadraticUtility.performance.var_90 * 100).toFixed(2)}%</p>
                                     <p>CVaR 90%: {(optimizationResult.MaxQuadraticUtility.performance.cvar_90 * 100).toFixed(2)}%</p>
                                     <p>CAGR: {(optimizationResult.MaxQuadraticUtility.performance.cagr * 100).toFixed(2)}%</p>
+                                    <p>Portfolio Beta: {optimizationResult.MaxQuadraticUtility.performance.portfolio_beta.toFixed(4)}</p>
 
                                     <h4 className="font-semibold mt-2">Weights:</h4>
                                     <ul>
@@ -493,6 +496,7 @@ const HomePage: React.FC = () => {
                                     <p>VaR 90%: {(optimizationResult.CriticalLineAlgorithm.performance.var_90 * 100).toFixed(2)}%</p>
                                     <p>CVaR 90%: {(optimizationResult.CriticalLineAlgorithm.performance.cvar_90 * 100).toFixed(2)}%</p>
                                     <p>CAGR: {(optimizationResult.CriticalLineAlgorithm.performance.cagr * 100).toFixed(2)}%</p>
+                                    <p>Portfolio Beta: {optimizationResult.CriticalLineAlgorithm.performance.portfolio_beta.toFixed(4)}</p>
 
                                     <h4 className="font-semibold mt-2">Weights:</h4>
                                     <ul>
