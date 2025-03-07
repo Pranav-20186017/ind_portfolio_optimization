@@ -34,7 +34,7 @@ export interface PortfolioPerformance {
     portfolio_beta: number;
 }
 
-// Extended optimization result, now including drawdown plot
+// Extended optimization result, now including drawdown plot images
 export interface OptimizationResult {
     weights: { [ticker: string]: number };
     performance: PortfolioPerformance;
@@ -50,8 +50,9 @@ export interface PortfolioOptimizationResponse {
     MinVol?: OptimizationResult | null;
     MaxQuadraticUtility?: OptimizationResult | null;
     EquiWeighted?: OptimizationResult | null;
-    CriticalLineAlgorithm?: OptimizationResult | null;
-    
+    CriticalLineAlgorithm_MVO?: OptimizationResult | null;
+    CriticalLineAlgorithm_MinVol?: OptimizationResult | null;
+    HRP?: OptimizationResult | null;
 
     start_date: string;  // ISO date
     end_date: string;    // ISO date
@@ -61,7 +62,9 @@ export interface PortfolioOptimizationResponse {
         MinVol: (number | null)[];
         MaxQuadraticUtility: (number | null)[];
         EquiWeighted: (number | null)[];
-        CriticalLineAlgorithm: (number | null)[];
+        CriticalLineAlgorithm_MVO?: (number | null)[];
+        CriticalLineAlgorithm_MinVol?: (number | null)[];
+        HRP: (number | null)[];
     };
 
     dates: string[];        // ISO date strings corresponding to each data point

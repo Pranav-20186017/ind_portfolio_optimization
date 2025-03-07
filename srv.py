@@ -1,5 +1,5 @@
 from typing import List, Dict, Optional, Tuple
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
 from enum import Enum
 import yfinance as yf
@@ -8,7 +8,8 @@ from pypfopt.base_optimizer import BaseOptimizer
 from pypfopt import EfficientFrontier, expected_returns
 import statsmodels.api as sm
 from pypfopt.risk_models import CovarianceShrinkage
-from pypfopt import CLA  # <-- Added import
+from pypfopt import CLA
+from pypfopt.hierarchical_portfolio import HRPOpt
 from functools import lru_cache
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
@@ -17,6 +18,8 @@ import matplotlib.pyplot as plt
 import os
 import base64
 import numpy as np
+import warnings
+warnings.filterwarnings("ignore")
 
 # Set Matplotlib to use 'Agg' backend
 plt.switch_backend('Agg')
@@ -34,6 +37,7 @@ app = FastAPI()
 
 origins = [
     "https://indportfoliooptimization.vercel.app"
+
 ]
 
 app.add_middleware(
@@ -45,12 +49,26 @@ app.add_middleware(
 )
 
 ########################################
-# Pydantic Models
+# Pydantic Models and Enums
 ########################################
 
 class ExchangeEnum(str, Enum):
     NSE = "NSE"
     BSE = "BSE"
+
+class OptimizationMethod(str, Enum):
+    MVO = "MVO"
+    MIN_VOL = "MinVol"
+    MAX_QUADRATIC_UTILITY = "MaxQuadraticUtility"
+    EQUI_WEIGHTED = "EquiWeighted"
+    CRITICAL_LINE_ALGORITHM = "CriticalLineAlgorithm"
+    HRP = "HRP"  # New HRP optimization method
+
+# New enum for CLA sub-methods
+class CLAOptimizationMethod(str, Enum):
+    MVO = "MVO"
+    MIN_VOL = "MinVol"
+    BOTH = "Both"
 
 class PortfolioPerformance(BaseModel):
     # From PyPortfolioOpt
@@ -65,7 +83,7 @@ class PortfolioPerformance(BaseModel):
     cvar_95: float
     var_90: float
     cvar_90: float
-    cagr: float  # Newly added
+    cagr: float
     portfolio_beta: float
 
 class OptimizationResult(BaseModel):
@@ -75,13 +93,7 @@ class OptimizationResult(BaseModel):
     max_drawdown_plot: Optional[str] = None
 
 class PortfolioOptimizationResponse(BaseModel):
-    MVO: Optional[OptimizationResult]
-    MinVol: Optional[OptimizationResult]
-    MaxQuadraticUtility: Optional[OptimizationResult]
-    EquiWeighted: Optional[OptimizationResult]
-    # <-- Added CLA result
-    CriticalLineAlgorithm: Optional[OptimizationResult]
-
+    results: Dict[str, Optional[OptimizationResult]]
     start_date: datetime
     end_date: datetime
     cumulative_returns: Dict[str, List[Optional[float]]]
@@ -92,8 +104,11 @@ class StockItem(BaseModel):
     ticker: str
     exchange: ExchangeEnum
 
+# Updated request to include an optional CLA sub-method field.
 class TickerRequest(BaseModel):
     stocks: List[StockItem]
+    methods: List[OptimizationMethod] = [OptimizationMethod.MVO]
+    cla_method: Optional[CLAOptimizationMethod] = CLAOptimizationMethod.BOTH
 
 ########################################
 # Custom EquiWeighted Optimizer
@@ -153,10 +168,6 @@ def format_tickers(stocks: List[StockItem]) -> List[str]:
             raise ValueError(f"Invalid exchange: {stock.exchange}")
     return formatted_tickers
 
-
-########################################
-# 1) fetch_and_align_data
-########################################
 def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
     """
     Download & align data for each ticker, plus Nifty index.
@@ -192,11 +203,7 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
 
     return combined_df, nifty_df
 
-
-########################################
-# 2) Helper: Compute Additional Metrics
-########################################
-def compute_custom_metrics(port_returns: pd.Series, nifty_df:pd.DataFrame, risk_free_rate: float = 0.05) -> Dict[str, float]:
+def compute_custom_metrics(port_returns: pd.Series, nifty_df: pd.Series, risk_free_rate: float = 0.05) -> Dict[str, float]:
     """
     Compute custom daily-return metrics:
       - sortino
@@ -205,6 +212,7 @@ def compute_custom_metrics(port_returns: pd.Series, nifty_df:pd.DataFrame, risk_
       - var_95, cvar_95
       - var_90, cvar_90
       - cagr
+      - portfolio_beta
     """
     ann_factor = 252
 
@@ -243,12 +251,13 @@ def compute_custom_metrics(port_returns: pd.Series, nifty_df:pd.DataFrame, risk_
     else:
         cagr = 0.0
 
+    # Portfolio Beta
     nifty_ret = nifty_df.pct_change().dropna()
     merged_returns = pd.DataFrame({
-    'Portfolio': port_returns,
-    'Nifty': nifty_ret
+        'Portfolio': port_returns,
+        'Nifty': nifty_ret
     }).dropna()
-    risk_free_daily = risk_free_rate/ann_factor
+    risk_free_daily = risk_free_rate / ann_factor
     # Calculate excess returns
     excess_portfolio = merged_returns['Portfolio'] - risk_free_daily
     excess_market = merged_returns['Nifty'] - risk_free_daily
@@ -256,7 +265,6 @@ def compute_custom_metrics(port_returns: pd.Series, nifty_df:pd.DataFrame, risk_
     X = sm.add_constant(excess_market)  # Adds intercept term
     model = sm.OLS(excess_portfolio, X).fit()
     portfolio_beta = model.params['Nifty']
-
 
     return {
         "sortino": sortino,
@@ -270,237 +278,317 @@ def compute_custom_metrics(port_returns: pd.Series, nifty_df:pd.DataFrame, risk_
         "portfolio_beta": portfolio_beta
     }
 
+def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
+    """Generate distribution and drawdown plots, return base64 encoded images"""
+    # Plot distribution (histogram)
+    plt.figure(figsize=(10, 6))
+    plt.hist(port_returns, bins=50, edgecolor='black', alpha=0.7, label='Daily Returns')
+    plt.title(f"Distribution of {method} Portfolio Returns")
+    plt.xlabel("Returns")
+    plt.ylabel("Frequency")
+    plt.grid(True)
+    
+    # VaR/CVaR lines
+    var_95 = np.percentile(port_returns, 5)
+    below_95 = port_returns[port_returns <= var_95]
+    cvar_95 = below_95.mean() if not below_95.empty else var_95
+    
+    var_90 = np.percentile(port_returns, 10)
+    below_90 = port_returns[port_returns <= var_90]
+    cvar_90 = below_90.mean() if not below_90.empty else var_90
+    
+    plt.axvline(var_95, color='r', linestyle='--', label=f"VaR 95%: {var_95:.4f}")
+    plt.axvline(cvar_95, color='r', linestyle='-', label=f"CVaR 95%: {cvar_95:.4f}")
+    plt.axvline(var_90, color='g', linestyle='--', label=f"VaR 90%: {var_90:.4f}")
+    plt.axvline(cvar_90, color='g', linestyle='-', label=f"CVaR 90%: {cvar_90:.4f}")
+    plt.legend()
 
-########################################
-# 3) compute_optimal_portfolio
-########################################
-def compute_optimal_portfolio(
-    df: pd.DataFrame,
-    nifty_df: pd.Series
-) -> Tuple[Dict[str, Optional[OptimizationResult]], pd.DataFrame, pd.Series]:
-    """
-    Runs 4 portfolio optimizations plus the newly added CLA:
-      - MVO (Max Sharpe)
-      - MinVol
-      - MaxQuadraticUtility
-      - EquiWeighted
-      - CriticalLineAlgorithm (CLA)
+    dist_file = os.path.join(output_dir, f"{method.lower()}_dist.png")
+    plt.savefig(dist_file)
+    plt.close()
+    dist_b64 = file_to_base64(dist_file)
 
-    Each method returns:
-      (expected_return, volatility, sharpe)
+    # Plot drawdown
+    cum = (1 + port_returns).cumprod()
+    peak = cum.cummax()
+    drawdown = (cum - peak) / peak
+    plt.figure(figsize=(10, 6))
+    plt.plot(drawdown, color='red', label='Drawdown')
+    plt.title(f"Drawdown of {method} Portfolio")
+    plt.xlabel("Date")
+    plt.ylabel("Drawdown")
+    plt.grid(True)
+    plt.legend()
+    
+    dd_file = os.path.join(output_dir, f"{method.lower()}_drawdown.png")
+    plt.savefig(dd_file)
+    plt.close()
+    dd_b64 = file_to_base64(dd_file)
+    
+    return dist_b64, dd_b64
 
-    Additionally, we compute custom metrics (sortino, drawdown, var/cvar, cagr),
-    plus distribution & drawdown plots. We return:
-      - results dictionary keyed by method
-      - cumulative returns DataFrame
-      - cumulative Nifty returns (Series)
-    """
-    risk_free_rate = 0.05
-    mu = expected_returns.mean_historical_return(df, frequency=252)
-    S = CovarianceShrinkage(df).ledoit_wolf()
-
-    returns = df.pct_change().dropna()
-    results: Dict[str, Optional[OptimizationResult]] = {}
-
-    methods = [
-        "MVO",
-        "MinVol",
-        "MaxQuadraticUtility",
-        "EquiWeighted",
-        "CriticalLineAlgorithm"
-    ]
-
-    for method in methods:
-        try:
-            # We'll handle each method in its own block
-            if method == "MVO":
-                ef = EfficientFrontier(mu, S)
-                ef.max_sharpe(risk_free_rate=risk_free_rate)
-                label = "MVO"
-                weights = ef.clean_weights()
-                pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
-
-            elif method == "MinVol":
-                ef = EfficientFrontier(mu, S)
-                ef.min_volatility()
-                label = "MinVol"
-                weights = ef.clean_weights()
-                pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
-
-            elif method == "MaxQuadraticUtility":
-                ef = EfficientFrontier(mu, S)
-                ef.max_quadratic_utility(risk_aversion=5)
-                label = "MaxQuadraticUtility"
-                weights = ef.clean_weights()
-                pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
-
-            elif method == "EquiWeighted":
-                label = "EquiWeighted"
-                ew = EquiWeightedOptimizer(n_assets=len(mu), tickers=mu.index)
-                ew.returns = returns
-                weights = ew.optimize()
-                pfolio_perf = ew.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
-
-            else:  # method == "CriticalLineAlgorithm"
-                label = "CriticalLineAlgorithm"
-                cla = CLA(mu, S)
-                cla.max_sharpe()
-                weights = cla.clean_weights()
-                pfolio_perf = cla.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
-
-            # Convert weights to Series for daily returns
-            w_series = pd.Series(weights)
-            port_returns = returns.dot(w_series)
-
-            # Compute custom metrics
-            custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
-
-            # Plot distribution (histogram)
-            plt.figure(figsize=(10, 6))
-            plt.hist(port_returns, bins=50, edgecolor='black', alpha=0.7, label='Daily Returns')
-            plt.title(f"Distribution of {label} Portfolio Returns")
-            plt.xlabel("Returns")
-            plt.ylabel("Frequency")
-            plt.grid(True)
-            # VaR/CVaR lines
-            plt.axvline(custom["var_95"], color='r', linestyle='--',
-                        label=f"VaR 95%: {custom['var_95']:.4f}")
-            plt.axvline(custom["cvar_95"], color='r', linestyle='-',
-                        label=f"CVaR 95%: {custom['cvar_95']:.4f}")
-            plt.axvline(custom["var_90"], color='g', linestyle='--',
-                        label=f"VaR 90%: {custom['var_90']:.4f}")
-            plt.axvline(custom["cvar_90"], color='g', linestyle='-',
-                        label=f"CVaR 90%: {custom['cvar_90']:.4f}")
-            plt.legend()
-
-            dist_file = os.path.join(output_dir, f"{label.lower()}_dist.png")
-            plt.savefig(dist_file)
-            plt.close()
-            dist_b64 = file_to_base64(dist_file)
-
-            # Plot drawdown
-            cum = (1 + port_returns).cumprod()
-            peak = cum.cummax()
-            drawdown = (cum - peak) / peak
-            plt.figure(figsize=(10, 6))
-            plt.plot(drawdown, color='red', label='Drawdown')
-            plt.title(f"Drawdown of {label} Portfolio")
-            plt.xlabel("Date")
-            plt.ylabel("Drawdown")
-            plt.grid(True)
-            plt.legend()
-
-            dd_file = os.path.join(output_dir, f"{label.lower()}_drawdown.png")
-            plt.savefig(dd_file)
-            plt.close()
-            dd_b64 = file_to_base64(dd_file)
-
-            # Merge into one Performance object
-            performance = PortfolioPerformance(
-                expected_return=pfolio_perf[0],
-                volatility=pfolio_perf[1],
-                sharpe=pfolio_perf[2],
-                sortino=custom["sortino"],
-                max_drawdown=custom["max_drawdown"],
-                romad=custom["romad"],
-                var_95=custom["var_95"],
-                cvar_95=custom["cvar_95"],
-                var_90=custom["var_90"],
-                cvar_90=custom["cvar_90"],
-                cagr=custom["cagr"],
-                portfolio_beta = custom["portfolio_beta"]
-            )
-
-            # Store the result
-            results[label] = OptimizationResult(
-                weights=weights,
-                performance=performance,
-                returns_dist=dist_b64,
-                max_drawdown_plot=dd_b64
-            )
-
-        except Exception as e:
-            print(f"Error in {method} optimization: {e}")
-            results[method] = None
-
-    # 4) Cumulative returns
-    cumulative_returns = pd.DataFrame(index=df.index)
-    for method in methods:
-        label = method
-        opt_res = results.get(label)
-        if opt_res and opt_res.weights:
-            w_series = pd.Series(opt_res.weights)
-            port_daily = returns.dot(w_series)
-            cumulative_returns[label] = (1 + port_daily).cumprod()
-        else:
-            cumulative_returns[label] = None
-
-    # 5) Align with Nifty
-    nifty_ret = nifty_df.pct_change().dropna()
-    cum_nifty = (1 + nifty_ret).cumprod()
-    cumulative_returns = cumulative_returns.loc[cum_nifty.index]
-
-    return results, cumulative_returns, cum_nifty
-
-########################################
-# 4) The /optimize Endpoint
-########################################
-@app.post("/optimize", response_model=PortfolioOptimizationResponse)
-def optimize_portfolio(request: TickerRequest):
+def run_optimization(method: OptimizationMethod, mu, S, returns, nifty_df, risk_free_rate=0.05):
+    """Run a specific optimization method (non-CLA, non-HRP) and return the results"""
     try:
-        # 1) Format tickers
-        formatted_tickers = format_tickers(request.stocks)
+        if method == OptimizationMethod.MVO:
+            ef = EfficientFrontier(mu, S)
+            ef.max_sharpe(risk_free_rate=risk_free_rate)
+            weights = ef.clean_weights()
+            pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+            
+        elif method == OptimizationMethod.MIN_VOL:
+            ef = EfficientFrontier(mu, S)
+            ef.min_volatility()
+            weights = ef.clean_weights()
+            pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+            
+        elif method == OptimizationMethod.MAX_QUADRATIC_UTILITY:
+            ef = EfficientFrontier(mu, S)
+            ef.max_quadratic_utility(risk_aversion=5)
+            weights = ef.clean_weights()
+            pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+            
+        elif method == OptimizationMethod.EQUI_WEIGHTED:
+            ew = EquiWeightedOptimizer(n_assets=len(mu), tickers=list(mu.index))
+            ew.returns = returns
+            weights = ew.optimize()
+            pfolio_perf = ew.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+        else:
+            raise ValueError(f"Method {method} not handled in run_optimization.")
+        
+        # Calculate portfolio returns
+        w_series = pd.Series(weights)
+        port_returns = returns.dot(w_series)
+        
+        # Compute custom metrics
+        custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
+        
+        # Generate plots
+        dist_b64, dd_b64 = generate_plots(port_returns, method.value)
+        
+        # Create performance object
+        performance = PortfolioPerformance(
+            expected_return=pfolio_perf[0],
+            volatility=pfolio_perf[1],
+            sharpe=pfolio_perf[2],
+            sortino=custom["sortino"],
+            max_drawdown=custom["max_drawdown"],
+            romad=custom["romad"],
+            var_95=custom["var_95"],
+            cvar_95=custom["cvar_95"],
+            var_90=custom["var_90"],
+            cvar_90=custom["cvar_90"],
+            cagr=custom["cagr"],
+            portfolio_beta=custom["portfolio_beta"]
+        )
+        
+        # Create result object
+        result = OptimizationResult(
+            weights=weights,
+            performance=performance,
+            returns_dist=dist_b64,
+            max_drawdown_plot=dd_b64
+        )
+        
+        # Calculate cumulative returns
+        cum_returns = (1 + port_returns).cumprod()
+        
+        return result, cum_returns
+        
+    except Exception as e:
+        print(f"Error in {method} optimization: {e}")
+        return None, None
 
-        # 2) Fetch & align
+def run_optimization_CLA(sub_method: str, mu, S, returns, nifty_df, risk_free_rate=0.05):
+    """Run a CLA optimization using either max_sharpe (MVO) or min_volatility (MinVol)"""
+    try:
+        cla = CLA(mu, S)
+        if sub_method.upper() == "MVO":
+            cla.max_sharpe()  # Removed risk_free_rate argument
+        elif sub_method.upper() == "MINVOL" or sub_method.upper() == "MIN_VOL":
+            cla.min_volatility()  # Removed risk_free_rate argument
+        else:
+            raise ValueError(f"Invalid CLA sub-method: {sub_method}")
+        
+        weights = cla.clean_weights()
+        pfolio_perf = cla.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+        
+        # Calculate portfolio returns
+        w_series = pd.Series(weights)
+        port_returns = returns.dot(w_series)
+        
+        # Compute custom metrics
+        custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
+        
+        # Generate plots with a method name including the sub-method
+        method_label = f"CriticalLineAlgorithm_{sub_method.upper()}"
+        dist_b64, dd_b64 = generate_plots(port_returns, method_label)
+        
+        # Create performance object
+        performance = PortfolioPerformance(
+            expected_return=pfolio_perf[0],
+            volatility=pfolio_perf[1],
+            sharpe=pfolio_perf[2],
+            sortino=custom["sortino"],
+            max_drawdown=custom["max_drawdown"],
+            romad=custom["romad"],
+            var_95=custom["var_95"],
+            cvar_95=custom["cvar_95"],
+            var_90=custom["var_90"],
+            cvar_90=custom["cvar_90"],
+            cagr=custom["cagr"],
+            portfolio_beta=custom["portfolio_beta"]
+        )
+        
+        # Create result object
+        result = OptimizationResult(
+            weights=weights,
+            performance=performance,
+            returns_dist=dist_b64,
+            max_drawdown_plot=dd_b64
+        )
+        
+        # Calculate cumulative returns
+        cum_returns = (1 + port_returns).cumprod()
+        
+        return result, cum_returns
+        
+    except Exception as e:
+        print(f"Error in CLA ({sub_method}) optimization: {e}")
+        return None, None
+
+def run_optimization_HRP(returns: pd.DataFrame, cov_matrix: pd.DataFrame, nifty_df: pd.Series, risk_free_rate=0.05, linkage_method="single"):
+    """Run HRP optimization using HRPOpt"""
+    try:
+        hrp = HRPOpt(returns=returns, cov_matrix=cov_matrix)
+        weights = hrp.optimize(linkage_method=linkage_method)
+        pfolio_perf = hrp.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate, frequency=252)
+        
+        # Calculate portfolio returns
+        w_series = pd.Series(weights)
+        port_returns = returns.dot(w_series)
+        
+        # Compute custom metrics
+        custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
+        
+        # Generate plots using "HRP" as the method label
+        method_label = "HRP"
+        dist_b64, dd_b64 = generate_plots(port_returns, method_label)
+        
+        # Create performance object
+        performance = PortfolioPerformance(
+            expected_return=pfolio_perf[0],
+            volatility=pfolio_perf[1],
+            sharpe=pfolio_perf[2],
+            sortino=custom["sortino"],
+            max_drawdown=custom["max_drawdown"],
+            romad=custom["romad"],
+            var_95=custom["var_95"],
+            cvar_95=custom["cvar_95"],
+            var_90=custom["var_90"],
+            cvar_90=custom["cvar_90"],
+            cagr=custom["cagr"],
+            portfolio_beta=custom["portfolio_beta"]
+        )
+        
+        # Create result object
+        result = OptimizationResult(
+            weights=weights,
+            performance=performance,
+            returns_dist=dist_b64,
+            max_drawdown_plot=dd_b64
+        )
+        
+        # Calculate cumulative returns
+        cum_returns = (1 + port_returns).cumprod()
+        
+        return result, cum_returns
+        
+    except Exception as e:
+        print(f"Error in HRP optimization: {e}")
+        return None, None
+
+########################################
+# Main Endpoint
+########################################
+
+@app.post("/optimize")
+def optimize_portfolio(request: TickerRequest = Body(...)):
+    try:
+        # Format tickers
+        formatted_tickers = format_tickers(request.stocks)
+        
+        # Fetch & align data
         df, nifty_df = fetch_and_align_data(formatted_tickers)
         if df.empty:
             raise HTTPException(status_code=400, detail="No data found for the given tickers.")
-
-        # 3) Start/end date
+        
+        # Start/end date
         start_date = df.index.min().date()
         end_date = df.index.max().date()
-
-        # 4) Compute results
-        results, cum_returns_df, cum_nifty = compute_optimal_portfolio(df, nifty_df)
-
-        # 5) Build JSON response
-        dates = cum_returns_df.index.tolist()
-        cumulative_returns = {
-            "MVO": cum_returns_df["MVO"].tolist() if "MVO" in cum_returns_df else [],
-            "MinVol": cum_returns_df["MinVol"].tolist() if "MinVol" in cum_returns_df else [],
-            "MaxQuadraticUtility": (
-                cum_returns_df["MaxQuadraticUtility"].tolist()
-                if "MaxQuadraticUtility" in cum_returns_df
-                else []
-            ),
-            "EquiWeighted": (
-                cum_returns_df["EquiWeighted"].tolist()
-                if "EquiWeighted" in cum_returns_df
-                else []
-            ),
-            "CriticalLineAlgorithm": (
-                cum_returns_df["CriticalLineAlgorithm"].tolist()
-                if "CriticalLineAlgorithm" in cum_returns_df
-                else []
-            ),
-        }
-        nifty_returns = cum_nifty.tolist()
-
-        # 6) Construct the final response model
+        
+        # Prepare data for optimization
+        returns = df.pct_change().dropna()
+        mu = expected_returns.mean_historical_return(df, frequency=252)
+        S = CovarianceShrinkage(df).ledoit_wolf()
+        
+        # Initialize dictionaries to hold results and cumulative returns
+        results: Dict[str, Optional[OptimizationResult]] = {}
+        cum_returns_df = pd.DataFrame(index=returns.index)
+        
+        for method in request.methods:
+            if method == OptimizationMethod.HRP:
+                # For HRP, use sample covariance matrix (returns.cov())
+                sample_cov = returns.cov()
+                result, cum_returns = run_optimization_HRP(returns, sample_cov, nifty_df)
+                if result:
+                    results[method.value] = result
+                    cum_returns_df[method.value] = cum_returns
+            elif method != OptimizationMethod.CRITICAL_LINE_ALGORITHM:
+                result, cum_returns = run_optimization(method, mu, S, returns, nifty_df)
+                if result:
+                    results[method.value] = result
+                    cum_returns_df[method.value] = cum_returns
+            else:
+                # Handle CLA separately
+                if request.cla_method == CLAOptimizationMethod.BOTH:
+                    result_mvo, cum_returns_mvo = run_optimization_CLA("MVO", mu, S, returns, nifty_df)
+                    result_min_vol, cum_returns_min_vol = run_optimization_CLA("MinVol", mu, S, returns, nifty_df)
+                    if result_mvo:
+                        results["CriticalLineAlgorithm_MVO"] = result_mvo
+                        cum_returns_df["CriticalLineAlgorithm_MVO"] = cum_returns_mvo
+                    if result_min_vol:
+                        results["CriticalLineAlgorithm_MinVol"] = result_min_vol
+                        cum_returns_df["CriticalLineAlgorithm_MinVol"] = cum_returns_min_vol
+                else:
+                    sub_method = request.cla_method.value
+                    result, cum_returns = run_optimization_CLA(sub_method, mu, S, returns, nifty_df)
+                    if result:
+                        results[f"CriticalLineAlgorithm_{sub_method}"] = result
+                        cum_returns_df[f"CriticalLineAlgorithm_{sub_method}"] = cum_returns
+        
+        # Calculate Nifty returns
+        nifty_ret = nifty_df.pct_change().dropna()
+        cum_nifty = (1 + nifty_ret).cumprod()
+        
+        # Align with Nifty
+        common_dates = cum_returns_df.index.intersection(cum_nifty.index)
+        cum_returns_df = cum_returns_df.loc[common_dates]
+        cum_nifty = cum_nifty.loc[common_dates]
+        
+        # Build response
+        cumulative_returns = {key: cum_returns_df[key].tolist() for key in cum_returns_df.columns}
         response = PortfolioOptimizationResponse(
-            MVO=results.get("MVO"),
-            MinVol=results.get("MinVol"),
-            MaxQuadraticUtility=results.get("MaxQuadraticUtility"),
-            EquiWeighted=results.get("EquiWeighted"),
-            CriticalLineAlgorithm=results.get("CriticalLineAlgorithm"),
+            results=results,
             start_date=start_date,
             end_date=end_date,
             cumulative_returns=cumulative_returns,
-            dates=dates,
-            nifty_returns=nifty_returns
+            dates=cum_returns_df.index.tolist(),
+            nifty_returns=cum_nifty.tolist()
         )
+        
         return jsonable_encoder(response)
-
+        
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
