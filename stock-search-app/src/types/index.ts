@@ -1,3 +1,5 @@
+// types/index.ts
+
 // Types for stock listings and options
 export interface StockListing {
     name: string;
@@ -40,33 +42,22 @@ export interface OptimizationResult {
     performance: PortfolioPerformance;
 
     // Base64-encoded images of distribution plot & drawdown plot
-    returns_dist: string;
-    max_drawdown_plot: string;
+    returns_dist?: string;
+    max_drawdown_plot?: string;
 }
 
-// Full portfolio optimization response with additional portfolios & new metrics
+// Use a dictionary for "results", keyed by method name (e.g. "MVO", "MinVol", etc.)
 export interface PortfolioOptimizationResponse {
-    MVO?: OptimizationResult | null;
-    MinVol?: OptimizationResult | null;
-    MaxQuadraticUtility?: OptimizationResult | null;
-    EquiWeighted?: OptimizationResult | null;
-    CriticalLineAlgorithm_MVO?: OptimizationResult | null;
-    CriticalLineAlgorithm_MinVol?: OptimizationResult | null;
-    HRP?: OptimizationResult | null;
+    // The server returns a "results" object with keys like "MVO", "MinVol", "HRP", etc.
+    // Each key is an OptimizationResult or null if that method wasn't computed.
+    results: { [methodKey: string]: OptimizationResult | null };
 
-    start_date: string;  // ISO date
-    end_date: string;    // ISO date
+    start_date: string;  // e.g. "2020-01-01"
+    end_date: string;    // e.g. "2025-01-01"
 
-    cumulative_returns: {
-        MVO: (number | null)[];
-        MinVol: (number | null)[];
-        MaxQuadraticUtility: (number | null)[];
-        EquiWeighted: (number | null)[];
-        CriticalLineAlgorithm_MVO?: (number | null)[];
-        CriticalLineAlgorithm_MinVol?: (number | null)[];
-        HRP: (number | null)[];
-    };
+    // Similarly, "cumulative_returns" is also a dictionary keyed by method name
+    cumulative_returns: { [methodKey: string]: (number | null)[] };
 
-    dates: string[];        // ISO date strings corresponding to each data point
-    nifty_returns: number[];
+    dates: string[];       // e.g. ["2020-01-02", "2020-01-03", ...]
+    nifty_returns: number[]; 
 }
