@@ -76,10 +76,21 @@ const HomePage: React.FC = () => {
   const [optimizationResult, setOptimizationResult] = useState<PortfolioOptimizationResponse | null>(null);
   const [filteredOptions, setFilteredOptions] = useState<StockOption[]>([]);
 
-  // For algorithm selection
+  // For algorithm selection (controlled)
   const [selectedAlgorithms, setSelectedAlgorithms] = useState<{ label: string; value: string }[]>([]);
-  // For CLA sub-method
+  // For CLA sub-method (controlled)
   const [selectedCLA, setSelectedCLA] = useState<{ label: string; value: string }>(claSubOptions[2]); // default = "Both"
+
+  // Compute whether we can submit
+  const canSubmit = selectedStocks.length >= 2 && selectedAlgorithms.length >= 1;
+  let submitError = '';
+  if (selectedStocks.length < 2 && selectedAlgorithms.length < 1) {
+    submitError = 'Please select at least 2 stocks and 1 optimization method.';
+  } else if (selectedStocks.length < 2) {
+    submitError = 'Please select at least 2 stocks.';
+  } else if (selectedAlgorithms.length < 1) {
+    submitError = 'Please select at least 1 optimization method.';
+  }
 
   // Fetch stock data
   useEffect(() => {
@@ -91,7 +102,6 @@ const HomePage: React.FC = () => {
         }
         const data: StockData = await res.json();
         setStockData(data);
-
         const newOptions: StockOption[] = [];
         for (const [ticker, listings] of Object.entries(data)) {
           const listingsArray = Array.isArray(listings) ? listings : [listings];
@@ -152,7 +162,7 @@ const HomePage: React.FC = () => {
     setSelectedStocks(selectedStocks.filter((s) => !(s.ticker === stockToRemove.ticker && s.exchange === stockToRemove.exchange)));
   };
 
-  // Handle algorithm selection changes (controlled component)
+  // Handle algorithm selection (controlled)
   const handleAlgorithmChange = (event: any, newValue: { label: string; value: string }[]) => {
     setSelectedAlgorithms(newValue);
   };
@@ -171,6 +181,7 @@ const HomePage: React.FC = () => {
 
   // Submit data to backend
   const handleSubmit = async () => {
+    if (!canSubmit) return; // Shouldn't happen because button is disabled.
     const dataToSend = {
       stocks: selectedStocks.map((s) => ({ ticker: s.ticker, exchange: s.exchange })),
       methods: selectedAlgorithms.map((a) => a.value),
@@ -178,7 +189,7 @@ const HomePage: React.FC = () => {
         ? { cla_method: selectedCLA.value }
         : {}),
     };
-
+// aws link https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize
     try {
       const response = await axios.post('https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize', dataToSend);
       console.log('Backend response:', response.data);
@@ -193,8 +204,8 @@ const HomePage: React.FC = () => {
   const handleReset = () => {
     setSelectedStocks([]);
     setInputValue('');
-    setSelectedAlgorithms([]);          // Clear algorithm selections
-    setSelectedCLA(claSubOptions[2]);    // Reset CLA sub-method to default ("Both")
+    setSelectedAlgorithms([]); // Clear algorithm selections
+    setSelectedCLA(claSubOptions[2]); // Reset CLA sub-method to default ("Both")
     setOptimizationResult(null);
   };
 
@@ -330,14 +341,12 @@ const HomePage: React.FC = () => {
           options={algorithmOptions}
           getOptionLabel={(o) => o.label}
           onChange={handleAlgorithmChange}
-          value={selectedAlgorithms}  // Controlled component
+          value={selectedAlgorithms}
           renderInput={(params) => (
             <TextField {...params} variant="outlined" label="Choose Algorithms" placeholder="Select one or more" />
           )}
           style={{ width: '100%', maxWidth: 600 }}
         />
-
-        {/* If Critical Line Algorithm is selected, show CLA sub-method dropdown */}
         {selectedAlgorithms.some((algo) => algo.value === 'CriticalLineAlgorithm') && (
           <div className="mt-4 max-w-sm">
             <FormControl fullWidth variant="outlined">
@@ -366,13 +375,16 @@ const HomePage: React.FC = () => {
           color="primary"
           onClick={handleSubmit}
           className="mr-4"
-          disabled={selectedStocks.length === 0 || selectedAlgorithms.length === 0}
+          disabled={!canSubmit}
         >
           Submit
         </Button>
         <Button variant="outlined" color="secondary" onClick={handleReset}>
           Reset
         </Button>
+        {!canSubmit && (
+          <p style={{ color: 'red', marginTop: '0.5rem' }}>{submitError}</p>
+        )}
       </div>
 
       {/* Optimization Results */}
