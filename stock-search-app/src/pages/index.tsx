@@ -9,6 +9,7 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select, { SelectChangeEvent } from '@mui/material/Select';
+import CircularProgress from '@mui/material/CircularProgress';
 import axios from 'axios';
 import Fuse from 'fuse.js';
 import debounce from 'lodash/debounce';
@@ -75,11 +76,12 @@ const HomePage: React.FC = () => {
   const [selectedStocks, setSelectedStocks] = useState<StockOption[]>([]);
   const [optimizationResult, setOptimizationResult] = useState<PortfolioOptimizationResponse | null>(null);
   const [filteredOptions, setFilteredOptions] = useState<StockOption[]>([]);
-
   // For algorithm selection (controlled)
   const [selectedAlgorithms, setSelectedAlgorithms] = useState<{ label: string; value: string }[]>([]);
   // For CLA sub-method (controlled)
   const [selectedCLA, setSelectedCLA] = useState<{ label: string; value: string }>(claSubOptions[2]); // default = "Both"
+  // Loading state for API request
+  const [loading, setLoading] = useState(false);
 
   // Compute whether we can submit
   const canSubmit = selectedStocks.length >= 2 && selectedAlgorithms.length >= 1;
@@ -179,9 +181,10 @@ const HomePage: React.FC = () => {
     if (chosen) setSelectedCLA(chosen);
   };
 
-  // Submit data to backend
+  // Submit data to backend with loading indicator
   const handleSubmit = async () => {
-    if (!canSubmit) return; // Shouldn't happen because button is disabled.
+    if (!canSubmit) return;
+    setLoading(true); // Start loading
     const dataToSend = {
       stocks: selectedStocks.map((s) => ({ ticker: s.ticker, exchange: s.exchange })),
       methods: selectedAlgorithms.map((a) => a.value),
@@ -189,7 +192,7 @@ const HomePage: React.FC = () => {
         ? { cla_method: selectedCLA.value }
         : {}),
     };
-// aws link https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize
+    // aws link https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize
     try {
       const response = await axios.post('https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize', dataToSend);
       console.log('Backend response:', response.data);
@@ -197,6 +200,8 @@ const HomePage: React.FC = () => {
       setOptimizationResult(result);
     } catch (error) {
       console.error('API Error:', error);
+    } finally {
+      setLoading(false); // Stop loading regardless of success or error
     }
   };
 
@@ -204,8 +209,8 @@ const HomePage: React.FC = () => {
   const handleReset = () => {
     setSelectedStocks([]);
     setInputValue('');
-    setSelectedAlgorithms([]); // Clear algorithm selections
-    setSelectedCLA(claSubOptions[2]); // Reset CLA sub-method to default ("Both")
+    setSelectedAlgorithms([]);
+    setSelectedCLA(claSubOptions[2]);
     setOptimizationResult(null);
   };
 
@@ -375,7 +380,7 @@ const HomePage: React.FC = () => {
           color="primary"
           onClick={handleSubmit}
           className="mr-4"
-          disabled={!canSubmit}
+          disabled={!canSubmit || loading}
         >
           Submit
         </Button>
@@ -387,57 +392,74 @@ const HomePage: React.FC = () => {
         )}
       </div>
 
-      {/* Optimization Results */}
-      {optimizationResult && (
-        <div className="results-container">
-          <h2 className="text-2xl font-bold mb-4">Optimization Results</h2>
-          <p>
-            Data Time Period: {formatDate(optimizationResult.start_date)} to {formatDate(optimizationResult.end_date)}
-          </p>
-          {Object.entries(optimizationResult.results || {}).map(([methodKey, methodData]) => {
-            if (!methodData) return null;
-            const perf = methodData.performance;
-            return (
-              <div key={methodKey} className="result-with-plot">
-                <div className="result-details">
-                  <h3 className="text-xl font-semibold">
-                    {algoDisplayNames[methodKey] || methodKey} Results
-                  </h3>
-                  <p>Expected Return: {(perf.expected_return * 100).toFixed(2)}%</p>
-                  <p>Volatility: {(perf.volatility * 100).toFixed(2)}%</p>
-                  <p>Sharpe Ratio: {perf.sharpe.toFixed(4)}</p>
-                  <p>Sortino Ratio: {perf.sortino.toFixed(4)}</p>
-                  <p>Max Drawdown: {(perf.max_drawdown * 100).toFixed(2)}%</p>
-                  <p>RoMaD: {perf.romad.toFixed(4)}</p>
-                  <p>VaR 95%: {(perf.var_95 * 100).toFixed(2)}%</p>
-                  <p>CVaR 95%: {(perf.cvar_95 * 100).toFixed(2)}%</p>
-                  <p>VaR 90%: {(perf.var_90 * 100).toFixed(2)}%</p>
-                  <p>CVaR 90%: {(perf.cvar_90 * 100).toFixed(2)}%</p>
-                  <p>CAGR: {(perf.cagr * 100).toFixed(2)}%</p>
-                  <p>Portfolio Beta: {perf.portfolio_beta.toFixed(4)}</p>
-                  <h4 className="font-semibold mt-2">Weights:</h4>
-                  <ul>
-                    {Object.entries(methodData.weights).map(([ticker, weight]) => (
-                      <li key={ticker}>
-                        {ticker}: {(weight * 100).toFixed(2)}%
-                      </li>
-                    ))}
-                  </ul>
+      {/* Loading Spinner and Optimization Results */}
+      {loading ? (
+  <div
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '200px',
+    }}
+  >
+    <CircularProgress />
+    <div style={{ marginTop: '16px', fontSize: '1.2rem', fontWeight: 'bold' }}>
+      Running Optimizations
+    </div>
+  </div>
+) : (
+        optimizationResult && (
+          <div className="results-container">
+            <h2 className="text-2xl font-bold mb-4">Optimization Results</h2>
+            <p>
+              Data Time Period: {formatDate(optimizationResult.start_date)} to {formatDate(optimizationResult.end_date)}
+            </p>
+            {Object.entries(optimizationResult.results || {}).map(([methodKey, methodData]) => {
+              if (!methodData) return null;
+              const perf = methodData.performance;
+              return (
+                <div key={methodKey} className="result-with-plot">
+                  <div className="result-details">
+                    <h3 className="text-xl font-semibold">
+                      {algoDisplayNames[methodKey] || methodKey} Results
+                    </h3>
+                    <p>Expected Return: {(perf.expected_return * 100).toFixed(2)}%</p>
+                    <p>Volatility: {(perf.volatility * 100).toFixed(2)}%</p>
+                    <p>Sharpe Ratio: {perf.sharpe.toFixed(4)}</p>
+                    <p>Sortino Ratio: {perf.sortino.toFixed(4)}</p>
+                    <p>Max Drawdown: {(perf.max_drawdown * 100).toFixed(2)}%</p>
+                    <p>RoMaD: {perf.romad.toFixed(4)}</p>
+                    <p>VaR 95%: {(perf.var_95 * 100).toFixed(2)}%</p>
+                    <p>CVaR 95%: {(perf.cvar_95 * 100).toFixed(2)}%</p>
+                    <p>VaR 90%: {(perf.var_90 * 100).toFixed(2)}%</p>
+                    <p>CVaR 90%: {(perf.cvar_90 * 100).toFixed(2)}%</p>
+                    <p>CAGR: {(perf.cagr * 100).toFixed(2)}%</p>
+                    <p>Portfolio Beta: {perf.portfolio_beta.toFixed(4)}</p>
+                    <h4 className="font-semibold mt-2">Weights:</h4>
+                    <ul>
+                      {Object.entries(methodData.weights).map(([ticker, weight]) => (
+                        <li key={ticker}>
+                          {ticker}: {(weight * 100).toFixed(2)}%
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="plots-container">
+                    <ImageComponent base64String={methodData.returns_dist || ''} altText={`${methodKey} Distribution`} />
+                    <ImageComponent base64String={methodData.max_drawdown_plot || ''} altText={`${methodKey} Drawdown`} />
+                  </div>
                 </div>
-                <div className="plots-container">
-                  <ImageComponent base64String={methodData.returns_dist || ''} altText={`${methodKey} Distribution`} />
-                  <ImageComponent base64String={methodData.max_drawdown_plot || ''} altText={`${methodKey} Drawdown`} />
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
 
-          {/* Cumulative Returns Chart */}
-          <div className="mt-6">
-            <h2 className="text-2xl font-bold mb-4">Cumulative Returns Over Time</h2>
-            <Line data={prepareChartData(optimizationResult)} options={chartOptions} />
+            {/* Cumulative Returns Chart */}
+            <div className="mt-6">
+              <h2 className="text-2xl font-bold mb-4">Cumulative Returns Over Time</h2>
+              <Line data={prepareChartData(optimizationResult)} options={chartOptions} />
+            </div>
           </div>
-        </div>
+        )
       )}
 
       <style jsx>{`
