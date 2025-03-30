@@ -24,16 +24,28 @@ import {
   Tooltip,
 } from 'chart.js';
 
+// Material UI components
+import Grid from '@mui/material/Grid';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Typography from '@mui/material/Typography';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+
 ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Legend, Tooltip);
 
-// Component to display base64-encoded images
+// Updated ImageComponent for original size display
 const ImageComponent: React.FC<{ base64String: string; altText: string }> = ({ base64String, altText }) => (
-  <div className="image-container">
+  <div style={{ marginBottom: '1rem' }}>
     {base64String ? (
       <img
         src={`data:image/png;base64,${base64String}`}
         alt={altText}
-        style={{ width: '200%', maxWidth: '1000px', height: 'auto' }}
+        style={{
+          display: 'block', // ensures each image is on its own line
+        }}
       />
     ) : (
       <p>No image available</p>
@@ -161,7 +173,9 @@ const HomePage: React.FC = () => {
   };
 
   const handleRemoveStock = (stockToRemove: StockOption) => {
-    setSelectedStocks(selectedStocks.filter((s) => !(s.ticker === stockToRemove.ticker && s.exchange === stockToRemove.exchange)));
+    setSelectedStocks(
+      selectedStocks.filter((s) => !(s.ticker === stockToRemove.ticker && s.exchange === stockToRemove.exchange))
+    );
   };
 
   // Handle algorithm selection (controlled)
@@ -305,11 +319,15 @@ const HomePage: React.FC = () => {
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6 text-center">Indian Stock Portfolio Optimization</h1>
+      <Typography variant="h3" align="center" gutterBottom>
+        Indian Stock Portfolio Optimization
+      </Typography>
 
       {/* Stock Search Section */}
       <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-2">Search and Select Stocks</h2>
+        <Typography variant="h5" gutterBottom>
+          Search and Select Stocks
+        </Typography>
         <Autocomplete
           options={filteredOptions}
           getOptionLabel={(o) => `${o.ticker} - ${o.name} (${o.exchange})`}
@@ -324,7 +342,7 @@ const HomePage: React.FC = () => {
           value={null}
         />
         <div className="mt-4">
-          <h3 className="text-lg font-medium mb-2">Selected Stocks</h3>
+          <Typography variant="h6">Selected Stocks</Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap">
             {selectedStocks.map((stock, idx) => (
               <Chip
@@ -340,7 +358,9 @@ const HomePage: React.FC = () => {
 
       {/* Algorithm Selection Section */}
       <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-2">Select Optimization Algorithms</h2>
+        <Typography variant="h5" gutterBottom>
+          Select Optimization Algorithms
+        </Typography>
         <Autocomplete
           multiple
           options={algorithmOptions}
@@ -388,74 +408,142 @@ const HomePage: React.FC = () => {
           Reset
         </Button>
         {!canSubmit && (
-          <p style={{ color: 'red', marginTop: '0.5rem' }}>{submitError}</p>
+          <Typography color="error" style={{ marginTop: '0.5rem' }}>
+            {submitError}
+          </Typography>
         )}
       </div>
 
       {/* Loading Spinner and Optimization Results */}
       {loading ? (
-  <div
-    style={{
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '200px',
-    }}
-  >
-    <CircularProgress />
-    <div style={{ marginTop: '16px', fontSize: '1.2rem', fontWeight: 'bold' }}>
-      Running Optimizations
-    </div>
-  </div>
-) : (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            minHeight: '200px',
+          }}
+        >
+          <CircularProgress />
+          <div style={{ marginTop: '16px', fontSize: '1.2rem', fontWeight: 'bold' }}>
+            Running Optimizations
+          </div>
+        </div>
+      ) : (
         optimizationResult && (
           <div className="results-container">
-            <h2 className="text-2xl font-bold mb-4">Optimization Results</h2>
-            <p>
+            <Typography variant="h4" align="center" gutterBottom>
+              Optimization Results
+            </Typography>
+            <Typography variant="body1" align="center">
               Data Time Period: {formatDate(optimizationResult.start_date)} to {formatDate(optimizationResult.end_date)}
-            </p>
+            </Typography>
+
             {Object.entries(optimizationResult.results || {}).map(([methodKey, methodData]) => {
               if (!methodData) return null;
               const perf = methodData.performance;
               return (
-                <div key={methodKey} className="result-with-plot">
-                  <div className="result-details">
-                    <h3 className="text-xl font-semibold">
+                <Card key={methodKey} style={{ marginBottom: '1.5rem' }}>
+                  <CardContent>
+                    <Typography variant="h5" gutterBottom>
                       {algoDisplayNames[methodKey] || methodKey} Results
-                    </h3>
-                    <p>Expected Return: {(perf.expected_return * 100).toFixed(2)}%</p>
-                    <p>Volatility: {(perf.volatility * 100).toFixed(2)}%</p>
-                    <p>Sharpe Ratio: {perf.sharpe.toFixed(4)}</p>
-                    <p>Sortino Ratio: {perf.sortino.toFixed(4)}</p>
-                    <p>Max Drawdown: {(perf.max_drawdown * 100).toFixed(2)}%</p>
-                    <p>RoMaD: {perf.romad.toFixed(4)}</p>
-                    <p>VaR 95%: {(perf.var_95 * 100).toFixed(2)}%</p>
-                    <p>CVaR 95%: {(perf.cvar_95 * 100).toFixed(2)}%</p>
-                    <p>VaR 90%: {(perf.var_90 * 100).toFixed(2)}%</p>
-                    <p>CVaR 90%: {(perf.cvar_90 * 100).toFixed(2)}%</p>
-                    <p>CAGR: {(perf.cagr * 100).toFixed(2)}%</p>
-                    <p>Portfolio Beta: {perf.portfolio_beta.toFixed(4)}</p>
-                    <h4 className="font-semibold mt-2">Weights:</h4>
-                    <ul>
-                      {Object.entries(methodData.weights).map(([ticker, weight]) => (
-                        <li key={ticker}>
-                          {ticker}: {(weight * 100).toFixed(2)}%
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="plots-container">
-                    <ImageComponent base64String={methodData.returns_dist || ''} altText={`${methodKey} Distribution`} />
-                    <ImageComponent base64String={methodData.max_drawdown_plot || ''} altText={`${methodKey} Drawdown`} />
-                  </div>
-                </div>
+                    </Typography>
+                    <Grid container spacing={2}>
+                      {/* Left Column: Tables for metrics & weights */}
+                      <Grid item xs={12} md={4}>
+                        {/* Performance Metrics */}
+                        <Table size="small">
+                          <TableBody>
+                            <TableRow>
+                              <TableCell><strong>Expected Return</strong></TableCell>
+                              <TableCell>{(perf.expected_return * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>Volatility</strong></TableCell>
+                              <TableCell>{(perf.volatility * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>Sharpe Ratio</strong></TableCell>
+                              <TableCell>{perf.sharpe.toFixed(4)}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>Sortino Ratio</strong></TableCell>
+                              <TableCell>{perf.sortino.toFixed(4)}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>Max Drawdown</strong></TableCell>
+                              <TableCell>{(perf.max_drawdown * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>RoMaD</strong></TableCell>
+                              <TableCell>{perf.romad.toFixed(4)}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>VaR 95%</strong></TableCell>
+                              <TableCell>{(perf.var_95 * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>CVaR 95%</strong></TableCell>
+                              <TableCell>{(perf.cvar_95 * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>VaR 90%</strong></TableCell>
+                              <TableCell>{(perf.var_90 * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>CVaR 90%</strong></TableCell>
+                              <TableCell>{(perf.cvar_90 * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>CAGR</strong></TableCell>
+                              <TableCell>{(perf.cagr * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>Portfolio Beta</strong></TableCell>
+                              <TableCell>{perf.portfolio_beta.toFixed(4)}</TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+
+                        {/* Weights Table */}
+                        <Typography variant="subtitle1" style={{ marginTop: '1rem', fontWeight: 'bold' }}>
+                          Weights
+                        </Typography>
+                        <Table size="small">
+                          <TableBody>
+                            {Object.entries(methodData.weights).map(([ticker, weight]) => (
+                              <TableRow key={ticker}>
+                                <TableCell>{ticker}</TableCell>
+                                <TableCell>{(weight * 100).toFixed(2)}%</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </Grid>
+
+                      {/* Right Column: Distribution & Drawdown (stacked vertically) */}
+                      <Grid item xs={12} md={8}>
+                        <ImageComponent
+                          base64String={methodData.returns_dist || ''}
+                          altText={`${methodKey} Distribution`}
+                        />
+                        <ImageComponent
+                          base64String={methodData.max_drawdown_plot || ''}
+                          altText={`${methodKey} Drawdown`}
+                        />
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
               );
             })}
 
             {/* Cumulative Returns Chart */}
-            <div className="mt-6">
-              <h2 className="text-2xl font-bold mb-4">Cumulative Returns Over Time</h2>
+            <div style={{ marginTop: '2rem' }}>
+              <Typography variant="h5" align="center" gutterBottom>
+                Cumulative Returns Over Time
+              </Typography>
               <Line data={prepareChartData(optimizationResult)} options={chartOptions} />
             </div>
           </div>
@@ -463,34 +551,10 @@ const HomePage: React.FC = () => {
       )}
 
       <style jsx>{`
-        .image-container {
-          border: 1px solid #ccc;
-          padding: 10px;
-          background-color: #f9f9f9;
-        }
         .results-container {
           display: flex;
           flex-direction: column;
           gap: 2rem;
-        }
-        .result-with-plot {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 2rem;
-          margin-top: 1rem;
-          border-bottom: 1px solid #e0e0e0;
-          padding-bottom: 1rem;
-        }
-        .result-details {
-          flex: 1;
-          min-width: 280px;
-        }
-        .plots-container {
-          flex: 1;
-          min-width: 280px;
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
         }
       `}</style>
     </div>
