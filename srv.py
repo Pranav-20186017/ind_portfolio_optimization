@@ -41,7 +41,8 @@ os.makedirs(output_dir, exist_ok=True)
 app = FastAPI()
 
 origins = [
-    "https://indportfoliooptimization.vercel.app"
+    "https://indportfoliooptimization.vercel.app",
+    "*"
 ]
 
 app.add_middleware(
@@ -103,6 +104,7 @@ class PortfolioOptimizationResponse(BaseModel):
     cumulative_returns: Dict[str, List[Optional[float]]]
     dates: List[datetime]
     nifty_returns: List[float]
+    stock_yearly_returns: Optional[Dict[str, Dict[str, float]]]
 
 class StockItem(BaseModel):
     ticker: str
@@ -545,6 +547,30 @@ def get_risk_free_rate(start_date,end_date)->float:
     # Return the risk-free rate divided by 100.
     return avg_rate / 100.0
 
+def compute_yearly_returns_stocks(daily_returns: pd.DataFrame) -> Dict[str, Dict[str, float]]:
+    """
+    Compute yearly compounded returns for each stock in a DataFrame of daily returns.
+    
+    Parameters:
+        daily_returns (pd.DataFrame): Daily returns for each stock (as decimals), indexed by date.
+    
+    Returns:
+        Dict[str, Dict[str, float]]: A dictionary mapping each stock ticker to a dictionary of yearly returns.
+                                     For example:
+                                     {
+                                       "RELIANCE.NS": {"2020": 0.12, "2021": 0.08, ...},
+                                       "TCS.NS": {"2020": 0.15, "2021": 0.10, ...}
+                                     }
+    """
+    results = {}
+    for ticker in daily_returns.columns:
+        # Compute the yearly compounded return for each stock.
+        yearly_returns = (1 + daily_returns[ticker]).resample('Y').prod() - 1
+        # Use items() instead of iteritems()
+        results[ticker] = {str(date.year): ret for date, ret in yearly_returns.items()}
+    return results
+
+
 
 
 ########################################
@@ -572,6 +598,8 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         returns = df.pct_change().dropna()
         mu = expected_returns.mean_historical_return(df, frequency=252)
         S = CovarianceShrinkage(df).ledoit_wolf()
+
+        stock_yearly_returns = compute_yearly_returns_stocks(returns)
         
         # Initialize dictionaries to hold results and cumulative returns
         results: Dict[str, Optional[OptimizationResult]] = {}
@@ -611,7 +639,6 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         # Calculate Nifty returns
         nifty_ret = nifty_df.pct_change().dropna()
         cum_nifty = (1 + nifty_ret).cumprod()
-        
         # Align with Nifty
         common_dates = cum_returns_df.index.intersection(cum_nifty.index)
         cum_returns_df = cum_returns_df.loc[common_dates]
@@ -625,7 +652,8 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
             end_date=end_date,
             cumulative_returns=cumulative_returns,
             dates=cum_returns_df.index.tolist(),
-            nifty_returns=cum_nifty.tolist()
+            nifty_returns=cum_nifty.tolist(),
+            stock_yearly_returns=stock_yearly_returns
         )
         
         return jsonable_encoder(response)
