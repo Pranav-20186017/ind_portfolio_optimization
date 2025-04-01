@@ -19,6 +19,11 @@ import os
 import base64
 import numpy as np
 import warnings
+import requests
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+from io import StringIO
 warnings.filterwarnings("ignore")
 
 # Set Matplotlib to use 'Agg' backend
@@ -37,7 +42,6 @@ app = FastAPI()
 
 origins = [
     "https://indportfoliooptimization.vercel.app"
-
 ]
 
 app.add_middleware(
@@ -508,6 +512,41 @@ def run_optimization_HRP(returns: pd.DataFrame, cov_matrix: pd.DataFrame, nifty_
         print(f"Error in HRP optimization: {e}")
         return None, None
 
+def get_risk_free_rate(start_date,end_date)->float:
+    # Convert date objects to strings in YYYYMMDD format
+    start_date_str = start_date.strftime("%Y%m%d")
+    end_date_str = end_date.strftime("%Y%m%d")
+
+    url = f"https://stooq.com/q/d/l/?s=10yiny.b&f={start_date_str}&t={end_date_str}&i=m"
+    response = requests.get(url)
+    if response.status_code != 200:
+        logging.error("Error fetching data from Stooq API. Status code: %s", response.status_code)
+        raise Exception("Error fetching data from Stooq API.")
+    # Read the CSV content into a pandas DataFrame.
+    data = pd.read_csv(StringIO(response.text))
+    
+    # Ensure the 'Date' column is a datetime type and sort the DataFrame by Date.
+    data['Date'] = pd.to_datetime(data['Date'])
+    data.sort_values('Date', inplace=True)
+    
+    # Check if the 'Close' column exists.
+    if 'Close' not in data.columns:
+        logging.error("Expected 'Close' column not found in the retrieved data.")
+        raise Exception("Expected 'Close' column not found in data.")
+    
+    # Compute the full average of the 'Close' column.
+    avg_rate = data['Close'].mean()
+    
+    # Log the computed full average risk-free rate (before dividing by 100).
+    logging.info("Computed full average risk-free rate: %f", avg_rate)
+    print(f"Computed full average risk-free rate:{avg_rate}")
+
+    
+    # Return the risk-free rate divided by 100.
+    return avg_rate / 100.0
+
+
+
 ########################################
 # Main Endpoint
 ########################################
@@ -526,6 +565,8 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         # Start/end date
         start_date = df.index.min().date()
         end_date = df.index.max().date()
+
+        risk_free_rate = get_risk_free_rate(start_date,end_date)
         
         # Prepare data for optimization
         returns = df.pct_change().dropna()
@@ -540,20 +581,20 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
             if method == OptimizationMethod.HRP:
                 # For HRP, use sample covariance matrix (returns.cov())
                 sample_cov = returns.cov()
-                result, cum_returns = run_optimization_HRP(returns, sample_cov, nifty_df)
+                result, cum_returns = run_optimization_HRP(returns, sample_cov, nifty_df,risk_free_rate)
                 if result:
                     results[method.value] = result
                     cum_returns_df[method.value] = cum_returns
             elif method != OptimizationMethod.CRITICAL_LINE_ALGORITHM:
-                result, cum_returns = run_optimization(method, mu, S, returns, nifty_df)
+                result, cum_returns = run_optimization(method, mu, S, returns, nifty_df,risk_free_rate)
                 if result:
                     results[method.value] = result
                     cum_returns_df[method.value] = cum_returns
             else:
                 # Handle CLA separately
                 if request.cla_method == CLAOptimizationMethod.BOTH:
-                    result_mvo, cum_returns_mvo = run_optimization_CLA("MVO", mu, S, returns, nifty_df)
-                    result_min_vol, cum_returns_min_vol = run_optimization_CLA("MinVol", mu, S, returns, nifty_df)
+                    result_mvo, cum_returns_mvo = run_optimization_CLA("MVO", mu, S, returns, nifty_df,risk_free_rate)
+                    result_min_vol, cum_returns_min_vol = run_optimization_CLA("MinVol", mu, S, returns, nifty_df,risk_free_rate)
                     if result_mvo:
                         results["CriticalLineAlgorithm_MVO"] = result_mvo
                         cum_returns_df["CriticalLineAlgorithm_MVO"] = cum_returns_mvo
@@ -562,7 +603,7 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
                         cum_returns_df["CriticalLineAlgorithm_MinVol"] = cum_returns_min_vol
                 else:
                     sub_method = request.cla_method.value
-                    result, cum_returns = run_optimization_CLA(sub_method, mu, S, returns, nifty_df)
+                    result, cum_returns = run_optimization_CLA(sub_method, mu, S, returns, nifty_df,risk_free_rate)
                     if result:
                         results[f"CriticalLineAlgorithm_{sub_method}"] = result
                         cum_returns_df[f"CriticalLineAlgorithm_{sub_method}"] = cum_returns
