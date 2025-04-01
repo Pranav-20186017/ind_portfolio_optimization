@@ -33,10 +33,11 @@ import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
 
 ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Legend, Tooltip);
 
-// Updated ImageComponent for original size display
+// Updated ImageComponent for displaying images
 const ImageComponent: React.FC<{ base64String: string; altText: string }> = ({ base64String, altText }) => (
   <div style={{ marginBottom: '1rem' }}>
     {base64String ? (
@@ -44,7 +45,7 @@ const ImageComponent: React.FC<{ base64String: string; altText: string }> = ({ b
         src={`data:image/png;base64,${base64String}`}
         alt={altText}
         style={{
-          display: 'block', // ensures each image is on its own line
+          display: 'block',
         }}
       />
     ) : (
@@ -53,7 +54,7 @@ const ImageComponent: React.FC<{ base64String: string; altText: string }> = ({ b
   </div>
 );
 
-// Algorithm options for selection with full descriptions
+// Algorithm options for selection
 const algorithmOptions = [
   { label: 'Mean-Variance Optimization', value: 'MVO' },
   { label: 'Minimum Volatility', value: 'MinVol' },
@@ -70,7 +71,7 @@ const claSubOptions = [
   { label: 'Both', value: 'Both' },
 ];
 
-// Mapping for full descriptive headings in the results section
+// Mapping for descriptive headings in the results section
 const algoDisplayNames: { [key: string]: string } = {
   MVO: "Mean-Variance Optimization",
   MinVol: "Minimum Volatility",
@@ -81,6 +82,49 @@ const algoDisplayNames: { [key: string]: string } = {
   HRP: "Hierarchical Risk Parity (HRP)",
 };
 
+/**
+ * Helper to color-code returns using a gradient:
+ * - More positive => more green
+ * - More negative => more red
+ * - Bold black text
+ */
+function getReturnCellStyle(ret: number | undefined): React.CSSProperties {
+  if (ret === undefined) {
+    return {
+      fontWeight: 'bold',
+      color: 'black',
+    };
+  }
+  
+  // Convert to percentage
+  const pct = ret * 100;
+  
+  // Lower maxMagnitude to make moderate returns more colorful
+  const maxMagnitude = 50;
+  
+  // Scale the absolute value
+  const intensity = Math.min(Math.abs(pct), maxMagnitude) / maxMagnitude;
+  
+  const baseStyle: React.CSSProperties = {
+    fontWeight: 'bold',
+    color: 'black', // All text black for consistency
+  };
+
+  if (ret >= 0) {
+    // Positive => green (darker green for better visibility)
+    return {
+      ...baseStyle,
+      backgroundColor: `rgb(0, ${Math.floor(128 + intensity * 80)}, 0)`,
+    };
+  } else {
+    // Negative => true vibrant red
+    return {
+      ...baseStyle,
+      backgroundColor: `rgb(255, ${Math.floor(50 - intensity * 50)}, ${Math.floor(50 - intensity * 50)})`,
+    };
+  }
+}
+
 const HomePage: React.FC = () => {
   const [stockData, setStockData] = useState<StockData>({});
   const [options, setOptions] = useState<StockOption[]>([]);
@@ -88,14 +132,11 @@ const HomePage: React.FC = () => {
   const [selectedStocks, setSelectedStocks] = useState<StockOption[]>([]);
   const [optimizationResult, setOptimizationResult] = useState<PortfolioOptimizationResponse | null>(null);
   const [filteredOptions, setFilteredOptions] = useState<StockOption[]>([]);
-  // For algorithm selection (controlled)
   const [selectedAlgorithms, setSelectedAlgorithms] = useState<{ label: string; value: string }[]>([]);
-  // For CLA sub-method (controlled)
-  const [selectedCLA, setSelectedCLA] = useState<{ label: string; value: string }>(claSubOptions[2]); // default = "Both"
-  // Loading state for API request
+  const [selectedCLA, setSelectedCLA] = useState<{ label: string; value: string }>(claSubOptions[2]); // Default "Both"
   const [loading, setLoading] = useState(false);
 
-  // Compute whether we can submit
+  // Check whether the form can be submitted
   const canSubmit = selectedStocks.length >= 2 && selectedAlgorithms.length >= 1;
   let submitError = '';
   if (selectedStocks.length < 2 && selectedAlgorithms.length < 1) {
@@ -106,7 +147,7 @@ const HomePage: React.FC = () => {
     submitError = 'Please select at least 1 optimization method.';
   }
 
-  // Fetch stock data
+  // Fetch stock data from local JSON file
   useEffect(() => {
     const fetchStockData = async () => {
       try {
@@ -159,7 +200,7 @@ const HomePage: React.FC = () => {
     debouncedFilter(inputValue);
   }, [inputValue, debouncedFilter]);
 
-  // Add/remove stocks
+  // Add and remove stocks from the selection
   const handleAddStock = (event: any, newValue: StockOption | null) => {
     if (newValue) {
       const duplicate = selectedStocks.some(
@@ -183,7 +224,7 @@ const HomePage: React.FC = () => {
     setSelectedAlgorithms(newValue);
   };
 
-  // Reset CLA sub-method if Critical Line Algorithm is removed
+  // Reset CLA sub-method if CLA is removed from algorithms
   useEffect(() => {
     if (!selectedAlgorithms.find((algo) => algo.value === 'CriticalLineAlgorithm')) {
       setSelectedCLA(claSubOptions[2]);
@@ -195,10 +236,10 @@ const HomePage: React.FC = () => {
     if (chosen) setSelectedCLA(chosen);
   };
 
-  // Submit data to backend with loading indicator
+  // Submit the data to the backend
   const handleSubmit = async () => {
     if (!canSubmit) return;
-    setLoading(true); // Start loading
+    setLoading(true);
     const dataToSend = {
       stocks: selectedStocks.map((s) => ({ ticker: s.ticker, exchange: s.exchange })),
       methods: selectedAlgorithms.map((a) => a.value),
@@ -206,7 +247,6 @@ const HomePage: React.FC = () => {
         ? { cla_method: selectedCLA.value }
         : {}),
     };
-    // aws link https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize
     try {
       const response = await axios.post('https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize', dataToSend);
       console.log('Backend response:', response.data);
@@ -215,26 +255,25 @@ const HomePage: React.FC = () => {
     } catch (error) {
       console.error('API Error:', error);
     } finally {
-      setLoading(false); // Stop loading regardless of success or error
+      setLoading(false);
     }
   };
 
-  // Reset all selections
   const handleReset = () => {
-    setSelectedStocks([]);
+    setSelectedStocks([]);http://
     setInputValue('');
     setSelectedAlgorithms([]);
     setSelectedCLA(claSubOptions[2]);
     setOptimizationResult(null);
   };
 
-  // Format date
+  // Format date string for display
   const formatDate = (dateStr: string) => {
     const opts: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
     return new Date(dateStr).toLocaleDateString(undefined, opts);
   };
 
-  // Prepare data for Chart.js
+  // Prepare Chart.js data
   const prepareChartData = (res: PortfolioOptimizationResponse) => {
     const labels = res.dates.map((d) => new Date(d).toLocaleDateString());
     const datasets = [];
@@ -316,6 +355,16 @@ const HomePage: React.FC = () => {
       y: { display: true, title: { display: true, text: 'Cumulative Return' } },
     },
   };
+
+  // Extract unique years from the stock_yearly_returns field for table columns
+  const allYears = useMemo(() => {
+    if (!optimizationResult || !optimizationResult.stock_yearly_returns) return [];
+    const yearSet = new Set<string>();
+    Object.values(optimizationResult.stock_yearly_returns).forEach((yearData) => {
+      Object.keys(yearData).forEach((year) => yearSet.add(year));
+    });
+    return Array.from(yearSet).sort();
+  }, [optimizationResult]);
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
@@ -450,9 +499,8 @@ const HomePage: React.FC = () => {
                       {algoDisplayNames[methodKey] || methodKey} Results
                     </Typography>
                     <Grid container spacing={2}>
-                      {/* Left Column: Tables for metrics & weights */}
+                      {/* Left Column: Metrics & Weights */}
                       <Grid item xs={12} md={4}>
-                        {/* Performance Metrics */}
                         <Table size="small">
                           <TableBody>
                             <TableRow>
@@ -506,7 +554,6 @@ const HomePage: React.FC = () => {
                           </TableBody>
                         </Table>
 
-                        {/* Weights Table */}
                         <Typography variant="subtitle1" style={{ marginTop: '1rem', fontWeight: 'bold' }}>
                           Weights
                         </Typography>
@@ -522,7 +569,7 @@ const HomePage: React.FC = () => {
                         </Table>
                       </Grid>
 
-                      {/* Right Column: Distribution & Drawdown (stacked vertically) */}
+                      {/* Right Column: Images */}
                       <Grid item xs={12} md={8}>
                         <ImageComponent
                           base64String={methodData.returns_dist || ''}
@@ -539,13 +586,58 @@ const HomePage: React.FC = () => {
               );
             })}
 
-            {/* Cumulative Returns Chart */}
             <div style={{ marginTop: '2rem' }}>
               <Typography variant="h5" align="center" gutterBottom>
                 Cumulative Returns Over Time
               </Typography>
               <Line data={prepareChartData(optimizationResult)} options={chartOptions} />
             </div>
+
+            {/* Yearly Returns Matrix */}
+            {optimizationResult.stock_yearly_returns && (
+              <div style={{ marginTop: '2rem' }}>
+                <Typography variant="h5" align="center" gutterBottom>
+                  Yearly Stock Returns
+                </Typography>
+                <Table
+                  sx={{
+                    border: '1px solid black',
+                    borderCollapse: 'collapse',
+                    '& th, & td': {
+                      border: '1px solid black',
+                    },
+                  }}
+                >
+                  <TableHead>
+                    <TableRow>
+                      <TableCell><strong>Stock</strong></TableCell>
+                      {allYears.map((year) => (
+                        <TableCell key={year} align="center"><strong>{year}</strong></TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {Object.entries(optimizationResult.stock_yearly_returns).map(([ticker, yearData]) => (
+                      <TableRow key={ticker}>
+                        <TableCell style={{ fontWeight: 'bold', color: 'black' }}>{ticker}</TableCell>
+                        {allYears.map((year) => {
+                          const ret = yearData[year];
+                          return (
+                            <TableCell
+                              key={year}
+                              align="center"
+                              style={getReturnCellStyle(ret)}
+                            >
+                              {ret !== undefined ? (ret * 100).toFixed(2) + '%' : '-'}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </div>
         )
       )}

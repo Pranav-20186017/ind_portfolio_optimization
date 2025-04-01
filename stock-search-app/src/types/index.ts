@@ -46,7 +46,7 @@ export interface OptimizationResult {
     max_drawdown_plot?: string;
 }
 
-// Use a dictionary for "results", keyed by method name (e.g. "MVO", "MinVol", etc.)
+// Use a dictionary for "results", keyed by method name (e.g. "MVO", "MinVol", "HRP", etc.)
 export interface PortfolioOptimizationResponse {
     // The server returns a "results" object with keys like "MVO", "MinVol", "HRP", etc.
     // Each key is an OptimizationResult or null if that method wasn't computed.
@@ -55,9 +55,13 @@ export interface PortfolioOptimizationResponse {
     start_date: string;  // e.g. "2020-01-01"
     end_date: string;    // e.g. "2025-01-01"
 
-    // Similarly, "cumulative_returns" is also a dictionary keyed by method name
+    // "cumulative_returns" is also a dictionary keyed by method name
     cumulative_returns: { [methodKey: string]: (number | null)[] };
 
     dates: string[];       // e.g. ["2020-01-02", "2020-01-03", ...]
-    nifty_returns: number[]; 
+    nifty_returns: number[];
+
+    // New field: yearly returns for each stock in the portfolio.
+    // Each stock maps to a dictionary where the keys are years (as string) and the values are the returns.
+    stock_yearly_returns?: { [ticker: string]: { [year: string]: number } };
 }
