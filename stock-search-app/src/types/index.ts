@@ -64,4 +64,7 @@ export interface PortfolioOptimizationResponse {
     // New field: yearly returns for each stock in the portfolio.
     // Each stock maps to a dictionary where the keys are years (as string) and the values are the returns.
     stock_yearly_returns?: { [ticker: string]: { [year: string]: number } };
+
+    // Add the covariance heatmap field (base64 encoded image)
+    covariance_heatmap?: string;
 }

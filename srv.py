@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Union
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
 from enum import Enum
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 from io import StringIO
 warnings.filterwarnings("ignore")
-
+import seaborn as sns
 # Set Matplotlib to use 'Agg' backend
 plt.switch_backend('Agg')
 
@@ -41,8 +41,7 @@ os.makedirs(output_dir, exist_ok=True)
 app = FastAPI()
 
 origins = [
-    "https://indportfoliooptimization.vercel.app",
-    "*"
+    "https://indportfoliooptimization.vercel.app"
 ]
 
 app.add_middleware(
@@ -105,6 +104,7 @@ class PortfolioOptimizationResponse(BaseModel):
     dates: List[datetime]
     nifty_returns: List[float]
     stock_yearly_returns: Optional[Dict[str, Dict[str, float]]]
+    covariance_heatmap: Optional[str] = None
 
 class StockItem(BaseModel):
     ticker: str
@@ -570,8 +570,69 @@ def compute_yearly_returns_stocks(daily_returns: pd.DataFrame) -> Dict[str, Dict
         results[ticker] = {str(date.year): ret for date, ret in yearly_returns.items()}
     return results
 
-
-
+def generate_covariance_heatmap(
+    cov_matrix: Union[pd.DataFrame, np.ndarray],
+    method: str = "covariance",
+    show_tickers: bool = True
+) -> str:
+    """
+    Generate a variance–covariance matrix heatmap using seaborn and updated matplotlib settings,
+    save the plot in the output directory, and return the base64‑encoded image string.
+    
+    The covariance matrix shows the variances on the diagonal and the covariances off-diagonal,
+    which provides insight into the absolute risk (variance) of each asset and their joint movements.
+    
+    Parameters:
+        cov_matrix (pd.DataFrame or np.ndarray): The covariance matrix to plot.
+        method (str, optional): A label for naming the file. Defaults to "covariance".
+        show_tickers (bool, optional): Whether to display the numerical values in the heatmap.
+                                       Defaults to True.
+    
+    Returns:
+        str: Base64‑encoded string of the saved heatmap image.
+    """
+    # Ensure cov_matrix is a DataFrame.
+    if not isinstance(cov_matrix, pd.DataFrame):
+        cov_matrix = pd.DataFrame(cov_matrix)
+    
+    # Update seaborn theme and matplotlib rcParams for a modern look.
+    sns.set_theme(style="whitegrid", palette="deep")
+    plt.rcParams.update({
+        'figure.figsize': (10, 8),
+        'axes.titlesize': 16,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'savefig.dpi': 300
+    })
+    
+    # Create the heatmap with a more modern palette ("rocket") and additional styling.
+    plt.figure()
+    ax = sns.heatmap(
+        cov_matrix,
+        annot=show_tickers,
+        fmt=".2f",
+        cmap="rocket",       # using the "rocket" palette for a robust look
+        square=True,
+        linewidths=0.5,
+        cbar_kws={'shrink': 0.75}
+    )
+    
+    
+    # Optionally remove tick labels if not desired.
+    if not show_tickers:
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+    
+    # Construct the file path using your global output_dir (assumed to be defined).
+    filepath = os.path.join(output_dir, f"{method.lower()}_cov_heatmap.png")
+    
+    # Save the figure.
+    plt.savefig(filepath, bbox_inches="tight")
+    plt.close()
+    
+    # Return the base64-encoded image string using your existing utility function.
+    return file_to_base64(filepath)
 
 ########################################
 # Main Endpoint
@@ -598,6 +659,7 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         returns = df.pct_change().dropna()
         mu = expected_returns.mean_historical_return(df, frequency=252)
         S = CovarianceShrinkage(df).ledoit_wolf()
+        cov_heatmap_b64 = generate_covariance_heatmap(S)
 
         stock_yearly_returns = compute_yearly_returns_stocks(returns)
         
@@ -653,7 +715,8 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
             cumulative_returns=cumulative_returns,
             dates=cum_returns_df.index.tolist(),
             nifty_returns=cum_nifty.tolist(),
-            stock_yearly_returns=stock_yearly_returns
+            stock_yearly_returns=stock_yearly_returns,
+            covariance_heatmap = cov_heatmap_b64
         )
         
         return jsonable_encoder(response)

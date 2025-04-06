@@ -44,9 +44,7 @@ const ImageComponent: React.FC<{ base64String: string; altText: string }> = ({ b
       <img
         src={`data:image/png;base64,${base64String}`}
         alt={altText}
-        style={{
-          display: 'block',
-        }}
+        style={{ display: 'block' }}
       />
     ) : (
       <p>No image available</p>
@@ -90,38 +88,19 @@ const algoDisplayNames: { [key: string]: string } = {
  */
 function getReturnCellStyle(ret: number | undefined): React.CSSProperties {
   if (ret === undefined) {
-    return {
-      fontWeight: 'bold',
-      color: 'black',
-    };
+    return { fontWeight: 'bold', color: 'black' };
   }
   
-  // Convert to percentage
   const pct = ret * 100;
-  
-  // Lower maxMagnitude to make moderate returns more colorful
   const maxMagnitude = 50;
-  
-  // Scale the absolute value
   const intensity = Math.min(Math.abs(pct), maxMagnitude) / maxMagnitude;
   
-  const baseStyle: React.CSSProperties = {
-    fontWeight: 'bold',
-    color: 'black', // All text black for consistency
-  };
+  const baseStyle: React.CSSProperties = { fontWeight: 'bold', color: 'black' };
 
   if (ret >= 0) {
-    // Positive => green (darker green for better visibility)
-    return {
-      ...baseStyle,
-      backgroundColor: `rgb(0, ${Math.floor(128 + intensity * 80)}, 0)`,
-    };
+    return { ...baseStyle, backgroundColor: `rgb(0, ${Math.floor(128 + intensity * 80)}, 0)` };
   } else {
-    // Negative => true vibrant red
-    return {
-      ...baseStyle,
-      backgroundColor: `rgb(255, ${Math.floor(50 - intensity * 50)}, ${Math.floor(50 - intensity * 50)})`,
-    };
+    return { ...baseStyle, backgroundColor: `rgb(255, ${Math.floor(50 - intensity * 50)}, ${Math.floor(50 - intensity * 50)})` };
   }
 }
 
@@ -136,7 +115,6 @@ const HomePage: React.FC = () => {
   const [selectedCLA, setSelectedCLA] = useState<{ label: string; value: string }>(claSubOptions[2]); // Default "Both"
   const [loading, setLoading] = useState(false);
 
-  // Check whether the form can be submitted
   const canSubmit = selectedStocks.length >= 2 && selectedAlgorithms.length >= 1;
   let submitError = '';
   if (selectedStocks.length < 2 && selectedAlgorithms.length < 1) {
@@ -147,14 +125,11 @@ const HomePage: React.FC = () => {
     submitError = 'Please select at least 1 optimization method.';
   }
 
-  // Fetch stock data from local JSON file
   useEffect(() => {
     const fetchStockData = async () => {
       try {
         const res = await fetch('/stock_data.json');
-        if (!res.ok) {
-          throw new Error(`HTTP error! Status: ${res.status}`);
-        }
+        if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
         const data: StockData = await res.json();
         setStockData(data);
         const newOptions: StockOption[] = [];
@@ -176,12 +151,8 @@ const HomePage: React.FC = () => {
     fetchStockData();
   }, []);
 
-  // Fuzzy search with Fuse.js
   const fuse = useMemo(() => {
-    return new Fuse(options, {
-      keys: ['ticker', 'name'],
-      threshold: 0.3,
-    });
+    return new Fuse(options, { keys: ['ticker', 'name'], threshold: 0.3 });
   }, [options]);
 
   const debouncedFilter = useCallback(
@@ -200,31 +171,24 @@ const HomePage: React.FC = () => {
     debouncedFilter(inputValue);
   }, [inputValue, debouncedFilter]);
 
-  // Add and remove stocks from the selection
   const handleAddStock = (event: any, newValue: StockOption | null) => {
     if (newValue) {
       const duplicate = selectedStocks.some(
         (s) => s.ticker === newValue.ticker && s.exchange === newValue.exchange
       );
-      if (!duplicate) {
-        setSelectedStocks([...selectedStocks, newValue]);
-      }
+      if (!duplicate) setSelectedStocks([...selectedStocks, newValue]);
     }
     setInputValue('');
   };
 
   const handleRemoveStock = (stockToRemove: StockOption) => {
-    setSelectedStocks(
-      selectedStocks.filter((s) => !(s.ticker === stockToRemove.ticker && s.exchange === stockToRemove.exchange))
-    );
+    setSelectedStocks(selectedStocks.filter((s) => !(s.ticker === stockToRemove.ticker && s.exchange === stockToRemove.exchange)));
   };
 
-  // Handle algorithm selection (controlled)
   const handleAlgorithmChange = (event: any, newValue: { label: string; value: string }[]) => {
     setSelectedAlgorithms(newValue);
   };
 
-  // Reset CLA sub-method if CLA is removed from algorithms
   useEffect(() => {
     if (!selectedAlgorithms.find((algo) => algo.value === 'CriticalLineAlgorithm')) {
       setSelectedCLA(claSubOptions[2]);
@@ -236,7 +200,6 @@ const HomePage: React.FC = () => {
     if (chosen) setSelectedCLA(chosen);
   };
 
-  // Submit the data to the backend
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setLoading(true);
@@ -247,6 +210,7 @@ const HomePage: React.FC = () => {
         ? { cla_method: selectedCLA.value }
         : {}),
     };
+    //https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com
     try {
       const response = await axios.post('https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize', dataToSend);
       console.log('Backend response:', response.data);
@@ -260,86 +224,44 @@ const HomePage: React.FC = () => {
   };
 
   const handleReset = () => {
-    setSelectedStocks([]);http://
+    setSelectedStocks([]);
     setInputValue('');
     setSelectedAlgorithms([]);
     setSelectedCLA(claSubOptions[2]);
     setOptimizationResult(null);
   };
 
-  // Format date string for display
   const formatDate = (dateStr: string) => {
     const opts: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
     return new Date(dateStr).toLocaleDateString(undefined, opts);
   };
 
-  // Prepare Chart.js data
   const prepareChartData = (res: PortfolioOptimizationResponse) => {
     const labels = res.dates.map((d) => new Date(d).toLocaleDateString());
     const datasets = [];
     if (res.cumulative_returns.MVO?.length) {
-      datasets.push({
-        label: 'Mean-Variance Optimization',
-        data: res.cumulative_returns.MVO,
-        borderColor: 'blue',
-        fill: false,
-      });
+      datasets.push({ label: 'Mean-Variance Optimization', data: res.cumulative_returns.MVO, borderColor: 'blue', fill: false });
     }
     if (res.cumulative_returns.MinVol?.length) {
-      datasets.push({
-        label: 'Minimum Volatility',
-        data: res.cumulative_returns.MinVol,
-        borderColor: 'green',
-        fill: false,
-      });
+      datasets.push({ label: 'Minimum Volatility', data: res.cumulative_returns.MinVol, borderColor: 'green', fill: false });
     }
     if (res.cumulative_returns.MaxQuadraticUtility?.length) {
-      datasets.push({
-        label: 'Max Quadratic Utility',
-        data: res.cumulative_returns.MaxQuadraticUtility,
-        borderColor: 'purple',
-        fill: false,
-      });
+      datasets.push({ label: 'Max Quadratic Utility', data: res.cumulative_returns.MaxQuadraticUtility, borderColor: 'purple', fill: false });
     }
     if (res.cumulative_returns.EquiWeighted?.length) {
-      datasets.push({
-        label: 'Equally Weighted',
-        data: res.cumulative_returns.EquiWeighted,
-        borderColor: 'orange',
-        fill: false,
-      });
+      datasets.push({ label: 'Equally Weighted', data: res.cumulative_returns.EquiWeighted, borderColor: 'orange', fill: false });
     }
     if (res.cumulative_returns.CriticalLineAlgorithm_MVO?.length) {
-      datasets.push({
-        label: 'CLA (MVO)',
-        data: res.cumulative_returns.CriticalLineAlgorithm_MVO,
-        borderColor: 'magenta',
-        fill: false,
-      });
+      datasets.push({ label: 'CLA (MVO)', data: res.cumulative_returns.CriticalLineAlgorithm_MVO, borderColor: 'magenta', fill: false });
     }
     if (res.cumulative_returns.CriticalLineAlgorithm_MinVol?.length) {
-      datasets.push({
-        label: 'CLA (MinVol)',
-        data: res.cumulative_returns.CriticalLineAlgorithm_MinVol,
-        borderColor: 'teal',
-        fill: false,
-      });
+      datasets.push({ label: 'CLA (MinVol)', data: res.cumulative_returns.CriticalLineAlgorithm_MinVol, borderColor: 'teal', fill: false });
     }
     if (res.cumulative_returns.HRP?.length) {
-      datasets.push({
-        label: 'Hierarchical Risk Parity (HRP)',
-        data: res.cumulative_returns.HRP,
-        borderColor: 'brown',
-        fill: false,
-      });
+      datasets.push({ label: 'Hierarchical Risk Parity (HRP)', data: res.cumulative_returns.HRP, borderColor: 'brown', fill: false });
     }
     if (res.nifty_returns?.length) {
-      datasets.push({
-        label: 'Nifty Index',
-        data: res.nifty_returns,
-        borderColor: 'red',
-        fill: false,
-      });
+      datasets.push({ label: 'Nifty Index', data: res.nifty_returns, borderColor: 'red', fill: false });
     }
     return { labels, datasets };
   };
@@ -356,7 +278,6 @@ const HomePage: React.FC = () => {
     },
   };
 
-  // Extract unique years from the stock_yearly_returns field for table columns
   const allYears = useMemo(() => {
     if (!optimizationResult || !optimizationResult.stock_yearly_returns) return [];
     const yearSet = new Set<string>();
@@ -465,15 +386,7 @@ const HomePage: React.FC = () => {
 
       {/* Loading Spinner and Optimization Results */}
       {loading ? (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            minHeight: '200px',
-          }}
-        >
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
           <CircularProgress />
           <div style={{ marginTop: '16px', fontSize: '1.2rem', fontWeight: 'bold' }}>
             Running Optimizations
@@ -499,7 +412,6 @@ const HomePage: React.FC = () => {
                       {algoDisplayNames[methodKey] || methodKey} Results
                     </Typography>
                     <Grid container spacing={2}>
-                      {/* Left Column: Metrics & Weights */}
                       <Grid item xs={12} md={4}>
                         <Table size="small">
                           <TableBody>
@@ -569,7 +481,6 @@ const HomePage: React.FC = () => {
                         </Table>
                       </Grid>
 
-                      {/* Right Column: Images */}
                       <Grid item xs={12} md={8}>
                         <ImageComponent
                           base64String={methodData.returns_dist || ''}
@@ -593,7 +504,6 @@ const HomePage: React.FC = () => {
               <Line data={prepareChartData(optimizationResult)} options={chartOptions} />
             </div>
 
-            {/* Yearly Returns Matrix */}
             {optimizationResult.stock_yearly_returns && (
               <div style={{ marginTop: '2rem' }}>
                 <Typography variant="h5" align="center" gutterBottom>
@@ -603,9 +513,7 @@ const HomePage: React.FC = () => {
                   sx={{
                     border: '1px solid black',
                     borderCollapse: 'collapse',
-                    '& th, & td': {
-                      border: '1px solid black',
-                    },
+                    '& th, & td': { border: '1px solid black' },
                   }}
                 >
                   <TableHead>
@@ -623,11 +531,7 @@ const HomePage: React.FC = () => {
                         {allYears.map((year) => {
                           const ret = yearData[year];
                           return (
-                            <TableCell
-                              key={year}
-                              align="center"
-                              style={getReturnCellStyle(ret)}
-                            >
+                            <TableCell key={year} align="center" style={getReturnCellStyle(ret)}>
                               {ret !== undefined ? (ret * 100).toFixed(2) + '%' : '-'}
                             </TableCell>
                           );
@@ -638,6 +542,22 @@ const HomePage: React.FC = () => {
                 </Table>
               </div>
             )}
+
+{/* Covariance Heatmap Section */}
+{optimizationResult?.covariance_heatmap && (
+  <div style={{ marginTop: '2rem', textAlign: 'center' }}>
+    <Typography variant="h5" gutterBottom>
+      Variance-Covariance Matrix
+    </Typography>
+    <div style={{ display: 'inline-block' }}>
+      <ImageComponent
+        base64String={optimizationResult.covariance_heatmap}
+        altText="Covariance Heatmap"
+      />
+    </div>
+  </div>
+)}
+
           </div>
         )
       )}
