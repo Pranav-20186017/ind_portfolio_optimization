@@ -6,6 +6,8 @@ import yfinance as yf
 import pandas as pd
 from pypfopt.base_optimizer import BaseOptimizer
 from pypfopt import EfficientFrontier, expected_returns
+from pypfopt.efficient_frontier import EfficientCVaR
+from pypfopt.efficient_frontier import EfficientCDaR
 import statsmodels.api as sm
 from pypfopt.risk_models import CovarianceShrinkage
 from pypfopt import CLA
@@ -41,7 +43,8 @@ os.makedirs(output_dir, exist_ok=True)
 app = FastAPI()
 
 origins = [
-    "https://indportfoliooptimization.vercel.app"
+    "https://indportfoliooptimization.vercel.app",
+    "*"
 ]
 
 app.add_middleware(
@@ -67,6 +70,8 @@ class OptimizationMethod(str, Enum):
     EQUI_WEIGHTED = "EquiWeighted"
     CRITICAL_LINE_ALGORITHM = "CriticalLineAlgorithm"
     HRP = "HRP"  # New HRP optimization method
+    MIN_CVAR = "MinCVaR"
+    MIN_CDAR = "MinCDaR"
 
 # New enum for CLA sub-methods
 class CLAOptimizationMethod(str, Enum):
@@ -404,6 +409,125 @@ def run_optimization(method: OptimizationMethod, mu, S, returns, nifty_df, risk_
     except Exception as e:
         print(f"Error in {method} optimization: {e}")
         return None, None
+    
+def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
+    try:
+        # Initialize EfficientCVaR with the provided expected returns and historical returns.
+        ef_cvar = EfficientCVaR(expected_returns=mu, returns=returns, beta=0.95, weight_bounds=(0, 1))
+        
+        # Obtain weights by minimizing CVaR.
+        weights = ef_cvar.min_cvar()
+        
+        # Although ef_cvar.portfolio_performance() returns (expected_return, CVaR),
+        # we will compute full metrics manually from the portfolio’s daily returns.
+        w_series = pd.Series(weights)
+        port_returns = returns.dot(w_series)
+
+        pfolio_perf = ef_cvar.portfolio_performance(verbose=False)
+        
+        # Compute annualized return, volatility, and Sharpe ratio manually.
+        ann_factor = 252
+        annual_return = port_returns.mean() * ann_factor
+        annual_volatility = port_returns.std() * np.sqrt(ann_factor)
+        sharpe = ((annual_return - risk_free_rate) / annual_volatility) if annual_volatility > 0 else 0.0
+        
+        # Compute additional custom metrics (sortino, drawdown, CVaRs, CAGR, beta, etc.)
+        custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
+        
+        # Generate plots: return distribution and drawdown (both encoded to base64)
+        dist_b64, dd_b64 = generate_plots(port_returns, OptimizationMethod.MIN_CVAR.value)
+        
+        # Create a performance object with all required metrics.
+        performance = PortfolioPerformance(
+            expected_return=pfolio_perf[0],
+            volatility=annual_volatility,
+            sharpe=sharpe,
+            sortino=custom["sortino"],
+            max_drawdown=custom["max_drawdown"],
+            romad=custom["romad"],
+            var_95=custom["var_95"],
+            cvar_95=custom["cvar_95"],
+            var_90=custom["var_90"],
+            cvar_90=custom["cvar_90"],
+            cagr=custom["cagr"],
+            portfolio_beta=custom["portfolio_beta"]
+        )
+        
+        # Bundle the results.
+        result = OptimizationResult(
+            weights=weights,
+            performance=performance,
+            returns_dist=dist_b64,
+            max_drawdown_plot=dd_b64
+        )
+        
+        # Compute cumulative portfolio returns.
+        cum_returns = (1 + port_returns).cumprod()
+        
+        return result, cum_returns
+    except Exception as e:
+        print(f"Error in MIN_CVAR optimization: {e}")
+        return None, None
+
+def run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate=0.05):
+    try:
+        # Initialize EfficientCDaR with the provided expected returns and historical returns.
+        ef_cdar = EfficientCDaR(expected_returns=mu, returns=returns, beta=0.95, weight_bounds=(0, 1))
+        
+        # Obtain weights by minimizing CDaR.
+        weights = ef_cdar.min_cdar()
+        
+        # Although ef_cdar.portfolio_performance() returns (expected_return, CVaR),
+        # we will compute full metrics manually from the portfolio’s daily returns.
+        w_series = pd.Series(weights)
+        port_returns = returns.dot(w_series)
+
+        pfolio_perf = ef_cdar.portfolio_performance(verbose=False)
+        
+        # Compute annualized return, volatility, and Sharpe ratio manually.
+        ann_factor = 252
+        annual_return = port_returns.mean() * ann_factor
+        annual_volatility = port_returns.std() * np.sqrt(ann_factor)
+        sharpe = ((annual_return - risk_free_rate) / annual_volatility) if annual_volatility > 0 else 0.0
+        
+        # Compute additional custom metrics (sortino, drawdown, CVaRs, CAGR, beta, etc.)
+        custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
+        
+        # Generate plots: return distribution and drawdown (both encoded to base64)
+        dist_b64, dd_b64 = generate_plots(port_returns, OptimizationMethod.MIN_CDAR.value)
+        
+        # Create a performance object with all required metrics.
+        performance = PortfolioPerformance(
+            expected_return=pfolio_perf[0],
+            volatility=annual_volatility,
+            sharpe=sharpe,
+            sortino=custom["sortino"],
+            max_drawdown=custom["max_drawdown"],
+            romad=custom["romad"],
+            var_95=custom["var_95"],
+            cvar_95=custom["cvar_95"],
+            var_90=custom["var_90"],
+            cvar_90=custom["cvar_90"],
+            cagr=custom["cagr"],
+            portfolio_beta=custom["portfolio_beta"]
+        )
+        
+        # Bundle the results.
+        result = OptimizationResult(
+            weights=weights,
+            performance=performance,
+            returns_dist=dist_b64,
+            max_drawdown_plot=dd_b64
+        )
+        
+        # Compute cumulative portfolio returns.
+        cum_returns = (1 + port_returns).cumprod()
+        
+        return result, cum_returns
+    except Exception as e:
+        print(f"Error in MIN_CDAR optimization: {e}")
+        return None, None
+
 
 def run_optimization_CLA(sub_method: str, mu, S, returns, nifty_df, risk_free_rate=0.05):
     """Run a CLA optimization using either max_sharpe (MVO) or min_volatility (MinVol)"""
@@ -672,6 +796,16 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
                 # For HRP, use sample covariance matrix (returns.cov())
                 sample_cov = returns.cov()
                 result, cum_returns = run_optimization_HRP(returns, sample_cov, nifty_df,risk_free_rate)
+                if result:
+                    results[method.value] = result
+                    cum_returns_df[method.value] = cum_returns
+            elif method == OptimizationMethod.MIN_CVAR:
+                result, cum_returns = run_optimization_MIN_CVAR(mu,returns,nifty_df,risk_free_rate)
+                if result:
+                    results[method.value] = result
+                    cum_returns_df[method.value] = cum_returns
+            elif method == OptimizationMethod.MIN_CDAR:
+                result, cum_returns = run_optimization_MIN_CDAR(mu,returns,nifty_df,risk_free_rate)
                 if result:
                     results[method.value] = result
                     cum_returns_df[method.value] = cum_returns

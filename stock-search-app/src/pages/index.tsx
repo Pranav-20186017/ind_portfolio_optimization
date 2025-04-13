@@ -41,11 +41,7 @@ ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Legend, 
 const ImageComponent: React.FC<{ base64String: string; altText: string }> = ({ base64String, altText }) => (
   <div style={{ marginBottom: '1rem' }}>
     {base64String ? (
-      <img
-        src={`data:image/png;base64,${base64String}`}
-        alt={altText}
-        style={{ display: 'block' }}
-      />
+      <img src={`data:image/png;base64,${base64String}`} alt={altText} style={{ display: 'block' }} />
     ) : (
       <p>No image available</p>
     )}
@@ -60,6 +56,9 @@ const algorithmOptions = [
   { label: 'Equally Weighted', value: 'EquiWeighted' },
   { label: 'Critical Line Algorithm', value: 'CriticalLineAlgorithm' },
   { label: 'Hierarchical Risk Parity (HRP)', value: 'HRP' },
+  { label: 'Minimum Conditional Value at Risk (CVaR)', value: 'MinCVaR' },
+  { label: 'Minimum Conditional Drawdown at Risk (CDaR)', value: 'MinCDaR' },
+  
 ];
 
 // CLA sub-method options
@@ -78,6 +77,8 @@ const algoDisplayNames: { [key: string]: string } = {
   CriticalLineAlgorithm_MVO: "Critical Line Algorithm (Mean-Variance Optimization)",
   CriticalLineAlgorithm_MinVol: "Critical Line Algorithm (Minimum Volatility)",
   HRP: "Hierarchical Risk Parity (HRP)",
+  MinCVaR: "Minimum Conditional Value at Risk (CVaR)",
+  MinCDaR: "Minimum Conditional Drawdown at Risk (CDaR)"
 };
 
 /**
@@ -90,13 +91,10 @@ function getReturnCellStyle(ret: number | undefined): React.CSSProperties {
   if (ret === undefined) {
     return { fontWeight: 'bold', color: 'black' };
   }
-  
   const pct = ret * 100;
   const maxMagnitude = 50;
   const intensity = Math.min(Math.abs(pct), maxMagnitude) / maxMagnitude;
-  
   const baseStyle: React.CSSProperties = { fontWeight: 'bold', color: 'black' };
-
   if (ret >= 0) {
     return { ...baseStyle, backgroundColor: `rgb(0, ${Math.floor(128 + intensity * 80)}, 0)` };
   } else {
@@ -210,9 +208,8 @@ const HomePage: React.FC = () => {
         ? { cla_method: selectedCLA.value }
         : {}),
     };
-    //https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com
     try {
-      const response = await axios.post('https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize', dataToSend);
+      const response = await axios.post('http://127.0.0.1:8000/optimize', dataToSend);
       console.log('Backend response:', response.data);
       const result = response.data as PortfolioOptimizationResponse;
       setOptimizationResult(result);
@@ -236,6 +233,7 @@ const HomePage: React.FC = () => {
     return new Date(dateStr).toLocaleDateString(undefined, opts);
   };
 
+  // Update prepareChartData to include the new MinCVaR key with its own color (cyan)
   const prepareChartData = (res: PortfolioOptimizationResponse) => {
     const labels = res.dates.map((d) => new Date(d).toLocaleDateString());
     const datasets = [];
@@ -260,8 +258,15 @@ const HomePage: React.FC = () => {
     if (res.cumulative_returns.HRP?.length) {
       datasets.push({ label: 'Hierarchical Risk Parity (HRP)', data: res.cumulative_returns.HRP, borderColor: 'brown', fill: false });
     }
+    // New: Include Minimum CVaR (MinCVaR) with cyan color
+    if (res.cumulative_returns.MinCVaR?.length) {
+      datasets.push({ label: 'Minimum Conditional VaR (MCVar)', data: res.cumulative_returns.MinCVaR, borderColor: 'cyan', fill: false });
+    }
+    if (res.cumulative_returns.MinCDaR?.length) {
+      datasets.push({ label: 'Minimum Conditional Drawdown at Risk (CDaR)', data: res.cumulative_returns.MinCDaR, borderColor: 'purple', fill: false });
+    }
     if (res.nifty_returns?.length) {
-      datasets.push({ label: 'Nifty Index', data: res.nifty_returns, borderColor: 'red', fill: false });
+      datasets.push({ label: 'Nifty Index', data: res.cumulative_returns.nifty_returns || res.nifty_returns, borderColor: 'red', fill: false });
     }
     return { labels, datasets };
   };
@@ -482,14 +487,8 @@ const HomePage: React.FC = () => {
                       </Grid>
 
                       <Grid item xs={12} md={8}>
-                        <ImageComponent
-                          base64String={methodData.returns_dist || ''}
-                          altText={`${methodKey} Distribution`}
-                        />
-                        <ImageComponent
-                          base64String={methodData.max_drawdown_plot || ''}
-                          altText={`${methodKey} Drawdown`}
-                        />
+                        <ImageComponent base64String={methodData.returns_dist || ''} altText={`${methodKey} Distribution`} />
+                        <ImageComponent base64String={methodData.max_drawdown_plot || ''} altText={`${methodKey} Drawdown`} />
                       </Grid>
                     </Grid>
                   </CardContent>
@@ -543,21 +542,17 @@ const HomePage: React.FC = () => {
               </div>
             )}
 
-{/* Covariance Heatmap Section */}
-{optimizationResult?.covariance_heatmap && (
-  <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-    <Typography variant="h5" gutterBottom>
-      Variance-Covariance Matrix
-    </Typography>
-    <div style={{ display: 'inline-block' }}>
-      <ImageComponent
-        base64String={optimizationResult.covariance_heatmap}
-        altText="Covariance Heatmap"
-      />
-    </div>
-  </div>
-)}
-
+            {/* Covariance Heatmap Section */}
+            {optimizationResult?.covariance_heatmap && (
+              <div style={{ marginTop: '2rem', textAlign: 'center' }}>
+                <Typography variant="h5" gutterBottom>
+                  Variance-Covariance Matrix
+                </Typography>
+                <div style={{ display: 'inline-block' }}>
+                  <ImageComponent base64String={optimizationResult.covariance_heatmap} altText="Covariance Heatmap" />
+                </div>
+              </div>
+            )}
           </div>
         )
       )}
