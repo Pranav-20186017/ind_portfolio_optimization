@@ -9,6 +9,7 @@ function MyApp({ Component, pageProps }: AppProps) {
         <>
             <Component {...pageProps} />
             <Analytics /> {/* Add Vercel Analytics */}
+             <SpeedInsights /> {}
         </>
     );
 }
