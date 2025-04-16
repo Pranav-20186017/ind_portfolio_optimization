@@ -208,6 +208,7 @@ const HomePage: React.FC = () => {
         ? { cla_method: selectedCLA.value }
         : {}),
     };
+    //https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com
     try {
       const response = await axios.post('https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize', dataToSend);
       console.log('Backend response:', response.data);
@@ -472,6 +473,18 @@ const HomePage: React.FC = () => {
                             <TableRow>
                               <TableCell><strong>Portfolio Beta</strong></TableCell>
                               <TableCell>{perf.portfolio_beta.toFixed(4)}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>Skewness</strong></TableCell>
+                              <TableCell>{perf.skewness.toFixed(4)}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>Kurtosis</strong></TableCell>
+                              <TableCell>{perf.kurtosis.toFixed(4)}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell><strong>Entropy</strong></TableCell>
+                              <TableCell>{perf.entropy.toFixed(4)}</TableCell>
                             </TableRow>
                           </TableBody>
                         </Table>

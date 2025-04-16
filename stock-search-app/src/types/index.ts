@@ -34,6 +34,9 @@ export interface PortfolioPerformance {
     cvar_90: number;
     cagr: number;
     portfolio_beta: number;
+    skewness: number;
+    kurtosis: number;
+    entropy: number
 }
 
 // Extended optimization result, now including drawdown plot images

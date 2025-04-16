@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from enum import Enum
 import yfinance as yf
 import pandas as pd
+from scipy.stats import entropy
 from pypfopt.base_optimizer import BaseOptimizer
 from pypfopt import EfficientFrontier, expected_returns
 from pypfopt.efficient_frontier import EfficientCVaR
@@ -93,6 +94,9 @@ class PortfolioPerformance(BaseModel):
     cvar_90: float
     cagr: float
     portfolio_beta: float
+    skewness: float
+    kurtosis: float
+    entropy: float
 
 class OptimizationResult(BaseModel):
     weights: Dict[str, float]
@@ -214,6 +218,29 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
 
     return combined_df, nifty_df
 
+def freedman_diaconis_bins(port_returns: pd.Series) -> int:
+    n = len(port_returns)
+    if n < 2:
+        return 1  # minimal bin count for very small datasets
+
+    # Calculate IQR (Interquartile Range)
+    iqr = port_returns.quantile(0.75) - port_returns.quantile(0.25)
+    
+    # Compute bin width using Freedman-Diaconis rule
+    bin_width = 2 * iqr / np.cbrt(n)
+    
+    # If bin_width is zero (e.g., when returns are nearly constant), default to a fixed number
+    if bin_width == 0:
+        return 50
+
+    # Calculate the number of bins over the data range
+    data_range = port_returns.max() - port_returns.min()
+    bins = int(np.ceil(data_range / bin_width))
+    logging.info(f"no of bins computed: {bins}")
+    return bins if bins > 0 else 50
+
+
+
 def compute_custom_metrics(port_returns: pd.Series, nifty_df: pd.Series, risk_free_rate: float = 0.05) -> Dict[str, float]:
     """
     Compute custom daily-return metrics:
@@ -277,6 +304,12 @@ def compute_custom_metrics(port_returns: pd.Series, nifty_df: pd.Series, risk_fr
     model = sm.OLS(excess_portfolio, X).fit()
     portfolio_beta = model.params['Nifty']
 
+    skewness = port_returns.skew()
+    kurtosis = port_returns.kurt()
+    bins = freedman_diaconis_bins(port_returns)
+    counts, _ = np.histogram(port_returns, bins=bins)
+    probs = counts / counts.sum()
+    port_entropy  = entropy(probs)
     return {
         "sortino": sortino,
         "max_drawdown": max_dd,
@@ -286,7 +319,10 @@ def compute_custom_metrics(port_returns: pd.Series, nifty_df: pd.Series, risk_fr
         "var_90": var_90,
         "cvar_90": cvar_90,
         "cagr": cagr,
-        "portfolio_beta": portfolio_beta
+        "portfolio_beta": portfolio_beta,
+        "skewness": skewness,
+        "kurtosis": kurtosis,
+        "entropy" : port_entropy
     }
 
 def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
@@ -390,7 +426,11 @@ def run_optimization(method: OptimizationMethod, mu, S, returns, nifty_df, risk_
             var_90=custom["var_90"],
             cvar_90=custom["cvar_90"],
             cagr=custom["cagr"],
-            portfolio_beta=custom["portfolio_beta"]
+            portfolio_beta=custom["portfolio_beta"],
+            skewness=custom["skewness"],
+            kurtosis=custom["kurtosis"],
+            entropy=custom["entropy"]
+
         )
         
         # Create result object
@@ -450,7 +490,10 @@ def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
             var_90=custom["var_90"],
             cvar_90=custom["cvar_90"],
             cagr=custom["cagr"],
-            portfolio_beta=custom["portfolio_beta"]
+            portfolio_beta=custom["portfolio_beta"],
+            skewness=custom["skewness"],
+            kurtosis=custom["kurtosis"],
+            entropy=custom["entropy"]
         )
         
         # Bundle the results.
@@ -509,7 +552,10 @@ def run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate=0.05):
             var_90=custom["var_90"],
             cvar_90=custom["cvar_90"],
             cagr=custom["cagr"],
-            portfolio_beta=custom["portfolio_beta"]
+            portfolio_beta=custom["portfolio_beta"],
+            skewness=custom["skewness"],
+            kurtosis=custom["kurtosis"],
+            entropy=custom["entropy"]
         )
         
         # Bundle the results.
@@ -567,7 +613,10 @@ def run_optimization_CLA(sub_method: str, mu, S, returns, nifty_df, risk_free_ra
             var_90=custom["var_90"],
             cvar_90=custom["cvar_90"],
             cagr=custom["cagr"],
-            portfolio_beta=custom["portfolio_beta"]
+            portfolio_beta=custom["portfolio_beta"],
+            skewness=custom["skewness"],
+            kurtosis=custom["kurtosis"],
+            entropy=custom["entropy"]
         )
         
         # Create result object
@@ -618,7 +667,10 @@ def run_optimization_HRP(returns: pd.DataFrame, cov_matrix: pd.DataFrame, nifty_
             var_90=custom["var_90"],
             cvar_90=custom["cvar_90"],
             cagr=custom["cagr"],
-            portfolio_beta=custom["portfolio_beta"]
+            portfolio_beta=custom["portfolio_beta"],
+            skewness=custom["skewness"],
+            kurtosis=custom["kurtosis"],
+            entropy=custom["entropy"]
         )
         
         # Create result object
