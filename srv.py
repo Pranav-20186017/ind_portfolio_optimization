@@ -236,7 +236,7 @@ def freedman_diaconis_bins(port_returns: pd.Series) -> int:
     # Calculate the number of bins over the data range
     data_range = port_returns.max() - port_returns.min()
     bins = int(np.ceil(data_range / bin_width))
-    logging.info(f"no of bins computed: {bins}")
+    logging.info("no of bins computed based on freedman-diaconis rule: %f", bins)
     return bins if bins > 0 else 50
 
 
@@ -329,7 +329,7 @@ def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
     """Generate distribution and drawdown plots, return base64 encoded images"""
     # Plot distribution (histogram)
     plt.figure(figsize=(10, 6))
-    plt.hist(port_returns, bins=50, edgecolor='black', alpha=0.7, label='Daily Returns')
+    plt.hist(port_returns, bins=freedman_diaconis_bins(port_returns), edgecolor='black', alpha=0.7, label='Daily Returns')
     plt.title(f"Distribution of {method} Portfolio Returns")
     plt.xlabel("Returns")
     plt.ylabel("Frequency")

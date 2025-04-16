@@ -208,7 +208,7 @@ const HomePage: React.FC = () => {
         ? { cla_method: selectedCLA.value }
         : {}),
     };
-    //https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com
+    //
     try {
       const response = await axios.post('https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize', dataToSend);
       console.log('Backend response:', response.data);
