@@ -109,6 +109,7 @@ class PortfolioOptimizationResponse(BaseModel):
     nifty_returns: List[float]
     stock_yearly_returns: Optional[Dict[str, Dict[str, float]]]
     covariance_heatmap: Optional[str] = None
+    risk_free_rate : float
 
 class StockItem(BaseModel):
     ticker: str
@@ -849,7 +850,8 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
             dates=cum_returns_df.index.tolist(),
             nifty_returns=cum_nifty.tolist(),
             stock_yearly_returns=stock_yearly_returns,
-            covariance_heatmap = cov_heatmap_b64
+            covariance_heatmap = cov_heatmap_b64,
+            risk_free_rate = risk_free_rate
         )
         
         return jsonable_encoder(response)

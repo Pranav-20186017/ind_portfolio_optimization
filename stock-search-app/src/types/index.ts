@@ -67,4 +67,6 @@ export interface PortfolioOptimizationResponse {
 
     // Add the covariance heatmap field (base64 encoded image)
     covariance_heatmap?: string;
+
+    risk_free_rate?: number;
 }

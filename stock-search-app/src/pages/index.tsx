@@ -404,7 +404,12 @@ const HomePage: React.FC = () => {
               Optimization Results
             </Typography>
             <Typography variant="body1" align="center">
-              Data Time Period: {formatDate(optimizationResult.start_date)} to {formatDate(optimizationResult.end_date)}
+              Data Time Period: {formatDate(optimizationResult.start_date)} to {formatDate(optimizationResult.end_date)} <br></br>
+              <div>
+                <strong>
+                    Benchmark Risk Free Rate (Based on Mean 10-Y GSec yields) : {(optimizationResult.risk_free_rate! * 100).toFixed(4)}%
+                </strong>
+              </div>
             </Typography>
 
             {Object.entries(optimizationResult.results || {}).map(([methodKey, methodData]) => {
