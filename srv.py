@@ -24,8 +24,25 @@ import numpy as np
 import warnings
 import requests
 import logging
+import sys
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+# Create a stream handler that outputs to stdout
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.INFO)
+
+# Set a formatter for the handler
+formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+handler.setFormatter(formatter)
+
+# Add the handler to the logger
+logger.addHandler(handler)
+
+# Ensure that the logger propagates messages
+logger.propagate = True
+
 from io import StringIO
 warnings.filterwarnings("ignore")
 import seaborn as sns
@@ -169,7 +186,7 @@ def file_to_base64(filepath: str) -> str:
 @lru_cache(maxsize=128)
 def cached_yf_download(ticker: str, start_date: datetime) -> pd.Series:
     """Cached download of 'Close' price from yfinance."""
-    return yf.download(ticker, start=start_date, multi_level_index=False)['Close']
+    return yf.download(ticker, start=start_date, multi_level_index=False, progress=False, auto_adjust=True)['Close']
 
 def format_tickers(stocks: List[StockItem]) -> List[str]:
     """Convert StockItem list into yfinance-friendly tickers (adding .BO or .NS)."""
@@ -211,7 +228,7 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
     combined_df.dropna(inplace=True)
 
     # Nifty
-    nifty_df = yf.download('^NSEI', start=min_date, multi_level_index=False)['Close'].dropna()
+    nifty_df = yf.download('^NSEI', start=min_date, multi_level_index=False, progress=False, auto_adjust=True)['Close'].dropna()
     common_dates = combined_df.index.intersection(nifty_df.index)
     combined_df = combined_df.loc[common_dates]
     nifty_df = nifty_df.loc[common_dates]
@@ -220,24 +237,29 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
 
 def freedman_diaconis_bins(port_returns: pd.Series) -> int:
     n = len(port_returns)
+    logger.info("Computing bins for %d data points", n)
     if n < 2:
+        logger.info("Not enough data points. Returning 1 bin.")
         return 1  # minimal bin count for very small datasets
 
     # Calculate IQR (Interquartile Range)
     iqr = port_returns.quantile(0.75) - port_returns.quantile(0.25)
-    
+
     # Compute bin width using Freedman-Diaconis rule
     bin_width = 2 * iqr / np.cbrt(n)
+    logger.info("Computed bin width: %f", bin_width)
     
-    # If bin_width is zero (e.g., when returns are nearly constant), default to a fixed number
     if bin_width == 0:
+        logger.info("Bin width is zero; returning 50 bins.")
         return 50
 
     # Calculate the number of bins over the data range
     data_range = port_returns.max() - port_returns.min()
     bins = int(np.ceil(data_range / bin_width))
-    logging.info("no of bins computed based on freedman-diaconis rule: %f", bins)
+    logger.info("No. of bins computed based on Freedman-Diaconis rule: %d", bins)
     return bins if bins > 0 else 50
+
+
 
 
 
@@ -327,9 +349,10 @@ def compute_custom_metrics(port_returns: pd.Series, nifty_df: pd.Series, risk_fr
 
 def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
     """Generate distribution and drawdown plots, return base64 encoded images"""
+    bins = freedman_diaconis_bins(port_returns)
     # Plot distribution (histogram)
     plt.figure(figsize=(10, 6))
-    plt.hist(port_returns, bins=freedman_diaconis_bins(port_returns), edgecolor='black', alpha=0.7, label='Daily Returns')
+    plt.hist(port_returns, bins=bins, edgecolor='black', alpha=0.7, label='Daily Returns')
     plt.title(f"Distribution of {method} Portfolio Returns")
     plt.xlabel("Returns")
     plt.ylabel("Frequency")
@@ -716,12 +739,11 @@ def get_risk_free_rate(start_date,end_date)->float:
     avg_rate = data['Close'].mean()
     
     # Log the computed full average risk-free rate (before dividing by 100).
-    logging.info("Computed full average risk-free rate: %f", avg_rate)
-    print(f"Computed full average risk-free rate:{avg_rate}")
+    logger.info("Computed full average risk-free rate: %f", avg_rate)
+    # print(f"Computed full average risk-free rate:{avg_rate}")
 
-    
-    # Return the risk-free rate divided by 100.
-    return avg_rate / 100.0
+    final_rf = avg_rate / 100.0
+    return final_rf if final_rf >= 0 else 0.05
 
 def compute_yearly_returns_stocks(daily_returns: pd.DataFrame) -> Dict[str, Dict[str, float]]:
     """
@@ -819,7 +841,9 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
     try:
         # Format tickers
         formatted_tickers = format_tickers(request.stocks)
-        
+        logger.info("Stock tickers chosen: %s", formatted_tickers)
+        if len(formatted_tickers) < 2:
+            raise HTTPException(status_code=400, detail="Minium no of stocks required is 2, user chose less than that")
         # Fetch & align data
         df, nifty_df = fetch_and_align_data(formatted_tickers)
         if df.empty:
