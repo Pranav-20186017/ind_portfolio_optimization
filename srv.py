@@ -25,23 +25,36 @@ import warnings
 import requests
 import logging
 import sys
+from dotenv import load_dotenv
+import logfire
 
+
+# ── Logger & Handlers Setup ───────────────────────────────────────────────────
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Create a stream handler that outputs to stdout
-handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.INFO)
+# 1) Console handler
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
-# Set a formatter for the handler
-formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-handler.setFormatter(formatter)
+# 2) Logfire handler
+load_dotenv()  # loads your .env containing LOGFIRE_TOKEN
+LOGFIRE_TOKEN = os.getenv("LOGFIRE_TOKEN")
+logfire.configure(token=LOGFIRE_TOKEN, environment="production")
+lf_handler = logfire.LogfireLoggingHandler()
+lf_handler.setLevel(logging.INFO)
+lf_handler.setFormatter(formatter)
+logger.addHandler(lf_handler)
 
-# Add the handler to the logger
-logger.addHandler(handler)
-
-# Ensure that the logger propagates messages
-logger.propagate = True
+# Prevent double-logging up the hierarchy
+logger.propagate = False
+# ──────────────────────────────────────────────────────────────────────────────
 
 from io import StringIO
 warnings.filterwarnings("ignore")
@@ -212,11 +225,12 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
             if not df.empty:
                 data[ticker] = df
             else:
-                print(f"No data for ticker: {ticker}")
+                logger.warning("No data for ticker %s", ticker)
         except Exception as e:
-            print(f"Error fetching data for {ticker}: {e}")
+            logger.exception("Error fetching data for %s", ticker)
 
     if not data:
+        logger.warning("No valid data available for the provided tickers. %s", ticker)
         raise ValueError("No valid data available for the provided tickers.")
 
     # Align all tickers to the latest min_date among them
@@ -469,7 +483,7 @@ def run_optimization(method: OptimizationMethod, mu, S, returns, nifty_df, risk_
         return result, cum_returns
         
     except Exception as e:
-        print(f"Error in {method} optimization: {e}")
+        logger.exception("Error in %s optimization", method.value)
         return None, None
     
 def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
@@ -531,7 +545,7 @@ def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
         
         return result, cum_returns
     except Exception as e:
-        print(f"Error in MIN_CVAR optimization: {e}")
+        logger.exception("Error in MinCVaR optimization")
         return None, None
 
 def run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate=0.05):
@@ -593,7 +607,7 @@ def run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate=0.05):
         
         return result, cum_returns
     except Exception as e:
-        print(f"Error in MIN_CDAR optimization: {e}")
+        logger.exception("Error in MinCDaR optimization")
         return None, None
 
 
@@ -655,7 +669,7 @@ def run_optimization_CLA(sub_method: str, mu, S, returns, nifty_df, risk_free_ra
         return result, cum_returns
         
     except Exception as e:
-        print(f"Error in CLA ({sub_method}) optimization: {e}")
+        logger.exception("Error in CLA %s optimization", sub_method)
         return None, None
 
 def run_optimization_HRP(returns: pd.DataFrame, cov_matrix: pd.DataFrame, nifty_df: pd.Series, risk_free_rate=0.05, linkage_method="single"):
@@ -709,7 +723,7 @@ def run_optimization_HRP(returns: pd.DataFrame, cov_matrix: pd.DataFrame, nifty_
         return result, cum_returns
         
     except Exception as e:
-        print(f"Error in HRP optimization: {e}")
+        logger.exception("Error in HRP optimization")
         return None, None
 
 def get_risk_free_rate(start_date,end_date)->float:
@@ -934,5 +948,5 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"Internal Server Error: {e}")
+        logger.exception("Internal Server Error in /optimize")
         raise HTTPException(status_code=500, detail="Internal Server Error")
