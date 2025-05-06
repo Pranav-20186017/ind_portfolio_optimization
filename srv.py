@@ -453,7 +453,6 @@ def run_optimization(method: OptimizationMethod, mu, S, returns, nifty_df, risk_
             skewness=custom["skewness"],
             kurtosis=custom["kurtosis"],
             entropy=custom["entropy"]
-
         )
         
         # Create result object
