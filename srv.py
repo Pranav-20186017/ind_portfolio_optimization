@@ -49,13 +49,21 @@ def configure_mosek_license():
         try:
             # Decode the base64 content
             license_content = base64.b64decode(mosek_license_content).decode('utf-8')
-            # Create a temporary license file
-            license_path = os.path.join(os.getcwd(), 'mosek.lic')
+            # Create a temporary license file in the current directory
+            license_path = os.path.abspath(os.path.join(os.getcwd(), 'mosek', 'mosek.lic'))
+            os.makedirs(os.path.dirname(license_path), exist_ok=True)
+            
             with open(license_path, 'w') as f:
                 f.write(license_content)
+                
             # Set the license path environment variable
             os.environ['MOSEKLM_LICENSE_FILE'] = license_path
-            logger.info("MOSEK license configured from environment variable")
+            logger.info(f"MOSEK license configured from environment variable at path: {license_path}")
+            
+            # Log the current value of the environment variable
+            current_env = os.environ.get('MOSEKLM_LICENSE_FILE', 'Not set')
+            logger.info(f"Current MOSEKLM_LICENSE_FILE value: {current_env}")
+            
             return True
         except Exception as e:
             logger.warning(f"Failed to configure MOSEK license from environment variable: {e}")
@@ -69,9 +77,11 @@ def configure_mosek_license():
     
     # Check common locations
     common_paths = [
-        os.path.join(os.getcwd(), 'mosek', 'mosek.lic'),
-        os.path.join(os.getcwd(), 'mosek.lic'),
-        os.path.expanduser('~/mosek/mosek.lic')
+        os.path.abspath(os.path.join(os.getcwd(), 'mosek', 'mosek.lic')),
+        os.path.abspath(os.path.join(os.getcwd(), 'mosek.lic')),
+        os.path.expanduser('~/mosek/mosek.lic'),
+        '/app/mosek/mosek.lic',  # Docker container path
+        '/root/mosek/mosek.lic'   # Alternative Docker path
     ]
     
     for path in common_paths:
@@ -757,19 +767,12 @@ def run_optimization(method: OptimizationMethod, mu, S, returns, nifty_df, risk_
     
 def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
     try:
-        # Try EfficientCVaR optimization with MOSEK solver
-        try:
-            # Initialize EfficientCVaR with the provided expected returns and historical returns.
-            ef_cvar = EfficientCVaR(expected_returns=mu, returns=returns, beta=0.95, weight_bounds=(0, 1))
-            weights = ef_cvar.min_cvar()
-            
-            # Get portfolio metrics
-            pfolio_perf = ef_cvar.portfolio_performance(verbose=False)
-            
-        except Exception as solver_error:
-            # If it's a MOSEK license error or any other error, fall back to standard optimization
-            logger.warning("Error in CVaR optimization: %s. Using min_volatility as fallback.", str(solver_error))
-            
+        # Check if the MOSEK license is configured
+        mosek_env_var = os.environ.get('MOSEKLM_LICENSE_FILE', None)
+        mosek_available = mosek_env_var is not None and os.path.exists(mosek_env_var)
+        
+        if not mosek_available:
+            logger.warning(f"MOSEK license file not found at '{mosek_env_var}'. Using min_volatility as fallback for MIN_CVAR.")
             # Create a standard EfficientFrontier object instead
             ef_alt = EfficientFrontier(mu, returns.cov())
             # Min volatility as a proxy since we can't do min_cvar
@@ -778,7 +781,32 @@ def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
             
             # Calculate standard performance metrics
             pfolio_perf = ef_alt.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
-            logger.info("Used min_volatility as fallback for min_cvar")
+            logger.info("Used min_volatility as fallback for min_cvar (no MOSEK license)")
+        else:
+            # Try EfficientCVaR optimization with MOSEK solver
+            try:
+                # Initialize EfficientCVaR with the provided expected returns and historical returns.
+                logger.info(f"Attempting MIN_CVAR optimization with MOSEK license at: {mosek_env_var}")
+                ef_cvar = EfficientCVaR(expected_returns=mu, returns=returns, beta=0.95, weight_bounds=(0, 1))
+                weights = ef_cvar.min_cvar()
+                
+                # Get portfolio metrics
+                pfolio_perf = ef_cvar.portfolio_performance(verbose=False)
+                logger.info("Successfully used MOSEK solver for MIN_CVAR optimization")
+                
+            except Exception as solver_error:
+                # If any error occurs during MOSEK optimization, fall back to standard optimization
+                logger.warning("Error in CVaR optimization: %s. Using min_volatility as fallback.", str(solver_error))
+                
+                # Create a standard EfficientFrontier object instead
+                ef_alt = EfficientFrontier(mu, returns.cov())
+                # Min volatility as a proxy since we can't do min_cvar
+                ef_alt.min_volatility()
+                weights = ef_alt.clean_weights()
+                
+                # Calculate standard performance metrics
+                pfolio_perf = ef_alt.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+                logger.info("Used min_volatility as fallback for min_cvar (MOSEK error)")
 
         # Calculate portfolio returns for custom metrics
         w_series = pd.Series(weights)
@@ -839,19 +867,12 @@ def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
 
 def run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate=0.05):
     try:
-        # Try EfficientCDaR optimization with MOSEK solver
-        try:
-            # Initialize EfficientCDaR with the provided expected returns and historical returns.
-            ef_cdar = EfficientCDaR(expected_returns=mu, returns=returns, beta=0.95, weight_bounds=(0, 1))
-            weights = ef_cdar.min_cdar()
-            
-            # Get portfolio metrics
-            pfolio_perf = ef_cdar.portfolio_performance(verbose=False)
-            
-        except Exception as solver_error:
-            # If it's a MOSEK license error or any other error, fall back to standard optimization
-            logger.warning("Error in CDaR optimization: %s. Using min_volatility as fallback.", str(solver_error))
-            
+        # Check if the MOSEK license is configured
+        mosek_env_var = os.environ.get('MOSEKLM_LICENSE_FILE', None)
+        mosek_available = mosek_env_var is not None and os.path.exists(mosek_env_var)
+        
+        if not mosek_available:
+            logger.warning(f"MOSEK license file not found at '{mosek_env_var}'. Using min_volatility as fallback for MIN_CDAR.")
             # Create a standard EfficientFrontier object instead
             ef_alt = EfficientFrontier(mu, returns.cov())
             # Min volatility as a proxy since we can't do min_cdar
@@ -860,7 +881,32 @@ def run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate=0.05):
             
             # Calculate standard performance metrics
             pfolio_perf = ef_alt.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
-            logger.info("Used min_volatility as fallback for min_cdar")
+            logger.info("Used min_volatility as fallback for min_cdar (no MOSEK license)")
+        else:
+            # Try EfficientCDaR optimization with MOSEK solver
+            try:
+                # Initialize EfficientCDaR with the provided expected returns and historical returns.
+                logger.info(f"Attempting MIN_CDAR optimization with MOSEK license at: {mosek_env_var}")
+                ef_cdar = EfficientCDaR(expected_returns=mu, returns=returns, beta=0.95, weight_bounds=(0, 1))
+                weights = ef_cdar.min_cdar()
+                
+                # Get portfolio metrics
+                pfolio_perf = ef_cdar.portfolio_performance(verbose=False)
+                logger.info("Successfully used MOSEK solver for MIN_CDAR optimization")
+                
+            except Exception as solver_error:
+                # If any error occurs during MOSEK optimization, fall back to standard optimization
+                logger.warning("Error in CDaR optimization: %s. Using min_volatility as fallback.", str(solver_error))
+                
+                # Create a standard EfficientFrontier object instead
+                ef_alt = EfficientFrontier(mu, returns.cov())
+                # Min volatility as a proxy since we can't do min_cdar
+                ef_alt.min_volatility()
+                weights = ef_alt.clean_weights()
+                
+                # Calculate standard performance metrics
+                pfolio_perf = ef_alt.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+                logger.info("Used min_volatility as fallback for min_cdar (MOSEK error)")
 
         # Calculate portfolio returns for custom metrics
         w_series = pd.Series(weights)
