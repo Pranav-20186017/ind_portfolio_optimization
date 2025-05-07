@@ -10,7 +10,7 @@ load_dotenv()
 LOGFIRE_TOKEN = os.getenv("LOGFIRE_TOKEN")
 
 def setup_logging():
-    """Configure logging to capture all Uvicorn logs and send to Logfire"""
+    """Configure logging to capture all Uvicorn logs and send to Logfire only"""
     # Create formatter
     formatter = logging.Formatter(
         "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -20,10 +20,7 @@ def setup_logging():
     # Configure Logfire
     logfire.configure(token=LOGFIRE_TOKEN, environment="production")
     
-    # Create handlers
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
-    
+    # Create Logfire handler
     lf_handler = logfire.LogfireLoggingHandler()
     lf_handler.setFormatter(formatter)
     
@@ -38,7 +35,10 @@ def setup_logging():
     
     for logger in loggers:
         logger.setLevel(logging.INFO)
-        logger.addHandler(console_handler)
+        # Remove any existing handlers
+        for handler in logger.handlers:
+            logger.removeHandler(handler)
+        # Add only the Logfire handler
         logger.addHandler(lf_handler)
         logger.propagate = False
     
