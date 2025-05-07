@@ -30,6 +30,8 @@ jobs:
         run: |
           python test.py
         continue-on-error: false
+        env:
+          LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
 
       # Step 3: Log in to Docker Hub (only runs if tests pass)
       - name: Log in to Docker Hub
