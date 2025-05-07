@@ -16,7 +16,8 @@ from srv import (
     run_optimization_CLA, run_optimization_HRP, run_optimization_MIN_CVAR,
     run_optimization_MIN_CDAR, get_risk_free_rate, compute_yearly_returns_stocks,
     generate_covariance_heatmap, file_to_base64, EquiWeightedOptimizer,
-    OptimizationMethod, CLAOptimizationMethod, StockItem, ExchangeEnum
+    OptimizationMethod, CLAOptimizationMethod, StockItem, ExchangeEnum,
+    APIError
 )
 
 # Suppress warnings for cleaner test output
