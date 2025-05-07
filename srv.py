@@ -118,21 +118,20 @@ root_logger.setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# 1) Console handler
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setLevel(logging.INFO)
+# Remove any existing handlers to avoid duplication
+for handler in root_logger.handlers:
+    root_logger.removeHandler(handler)
+for handler in logger.handlers:
+    logger.removeHandler(handler)
+
+# Configure Logfire handler only
+load_dotenv()  # loads your .env containing LOGFIRE_TOKEN
+LOGFIRE_TOKEN = os.getenv("LOGFIRE_TOKEN")
+logfire.configure(token=LOGFIRE_TOKEN, environment="production")
 formatter = logging.Formatter(
     "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-root_logger.addHandler(console_handler)
-
-# 2) Logfire handler
-load_dotenv()  # loads your .env containing LOGFIRE_TOKEN
-LOGFIRE_TOKEN = os.getenv("LOGFIRE_TOKEN")
-logfire.configure(token=LOGFIRE_TOKEN, environment="production")
 lf_handler = logfire.LogfireLoggingHandler()
 lf_handler.setLevel(logging.INFO)
 lf_handler.setFormatter(formatter)
@@ -183,15 +182,26 @@ async def log_requests(request, call_next):
     # Generate a request ID
     request_id = str(uuid.uuid4())
     
-    # Log request details
+    # Extract client details
+    client_host = request.client.host if request.client else "unknown"
+    client_port = request.client.port if request.client else 0
+    
+    # Log request details in a format similar to Uvicorn's access logs
+    request_line = f"{request.method} {request.url.path}"
+    if request.url.query:
+        request_line += f"?{request.url.query}"
+    
     logger.info(
-        f"Request started",
+        f"{client_host}:{client_port} - \"{request_line} HTTP/{request.scope.get('http_version', '1.1')}\"",
         extra={
             "request_id": request_id,
             "method": request.method,
-            "url": str(request.url),
-            "client_host": request.client.host if request.client else None,
+            "path": request.url.path,
+            "query_params": str(request.url.query),
+            "client_host": client_host,
+            "client_port": client_port,
             "headers": dict(request.headers),
+            "http_version": request.scope.get("http_version", "1.1")
         }
     )
     
@@ -199,14 +209,19 @@ async def log_requests(request, call_next):
     try:
         response = await call_next(request)
         process_time = time.time() - start_time
+        process_time_ms = round(process_time * 1000, 2)
         
-        # Log successful response
+        # Log successful response in a format similar to Uvicorn's access logs
         logger.info(
-            f"Request completed",
+            f"{client_host}:{client_port} - \"{request_line} HTTP/{request.scope.get('http_version', '1.1')}\" {response.status_code} {process_time_ms}ms",
             extra={
                 "request_id": request_id,
                 "status_code": response.status_code,
-                "process_time_ms": round(process_time * 1000, 2),
+                "process_time_ms": process_time_ms,
+                "client_host": client_host,
+                "client_port": client_port,
+                "path": request.url.path,
+                "method": request.method
             }
         )
         
@@ -217,12 +232,18 @@ async def log_requests(request, call_next):
     except Exception as e:
         # Log failed response
         process_time = time.time() - start_time
+        process_time_ms = round(process_time * 1000, 2)
+        
         logger.error(
-            f"Request failed: {str(e)}",
+            f"{client_host}:{client_port} - \"{request_line} HTTP/{request.scope.get('http_version', '1.1')}\" ERROR {process_time_ms}ms: {str(e)}",
             extra={
                 "request_id": request_id,
                 "error": str(e),
-                "process_time_ms": round(process_time * 1000, 2),
+                "process_time_ms": process_time_ms,
+                "client_host": client_host,
+                "client_port": client_port,
+                "path": request.url.path,
+                "method": request.method
             },
             exc_info=True
         )
@@ -1037,60 +1058,35 @@ def get_risk_free_rate(start_date, end_date) -> float:
     try:
         response = requests.get(url)
         if response.status_code != 200:
-            logger.error("Error fetching data from Stooq API. Status code: %s", response.status_code)
-            raise APIError(
-                code=ErrorCode.RISK_FREE_RATE_ERROR,
-                message="Error fetching risk-free rate data",
-                status_code=500,
-                details={"status_code": response.status_code}
-            )
+            # Downgrade to warning instead of error for 404s
+            logger.warning("Could not fetch data from Stooq API. Status code: %s. Using default risk-free rate of 0.05", response.status_code)
+            return 0.05
             
         # Check if the response body is empty or too small
         if len(response.text) < 10:  # Just a basic sanity check
-            logger.error("Empty or invalid response from Stooq API")
-            raise APIError(
-                code=ErrorCode.RISK_FREE_RATE_ERROR,
-                message="Empty or invalid response from risk-free rate data source",
-                status_code=500
-            )
+            logger.warning("Empty or invalid response from Stooq API. Using default risk-free rate of 0.05")
+            return 0.05
             
         # Read the CSV content into a pandas DataFrame
         data = pd.read_csv(StringIO(response.text))
         
         # Ensure the 'Date' column is a datetime type and sort the DataFrame by Date
         if 'Date' not in data.columns:
-            logger.error("Expected 'Date' column not found in the retrieved data")
-            raise APIError(
-                code=ErrorCode.RISK_FREE_RATE_ERROR, 
-                message="Invalid data format from risk-free rate data source",
-                status_code=500,
-                details={"columns": list(data.columns)}
-            )
+            logger.warning("Expected 'Date' column not found in the retrieved data. Using default risk-free rate of 0.05")
+            return 0.05
             
         data['Date'] = pd.to_datetime(data['Date'])
         data.sort_values('Date', inplace=True)
         
         # Check if the 'Close' column exists
         if 'Close' not in data.columns:
-            logger.error("Expected 'Close' column not found in the retrieved data")
-            raise APIError(
-                code=ErrorCode.RISK_FREE_RATE_ERROR,
-                message="Invalid data format from risk-free rate data source",
-                status_code=500,
-                details={"columns": list(data.columns)}
-            )
+            logger.warning("Expected 'Close' column not found in the retrieved data. Using default risk-free rate of 0.05")
+            return 0.05
         
         # Check if data is empty after filtering
         if data.empty:
-            logger.warning("No risk-free rate data available for the specified period")
-            raise APIError(
-                code=ErrorCode.RISK_FREE_RATE_ERROR,
-                message="No risk-free rate data available for the specified period",
-                status_code=500,
-                details={
-                    "date_range": [start_date_str, end_date_str]
-                }
-            )
+            logger.warning("No risk-free rate data available for the specified period. Using default risk-free rate of 0.05")
+            return 0.05
         
         # Compute the full average of the 'Close' column
         avg_rate = data['Close'].mean()
@@ -1106,18 +1102,10 @@ def get_risk_free_rate(start_date, end_date) -> float:
             
         return final_rf
         
-    except APIError:
-        # Re-raise specific APIErrors
-        raise
     except Exception as e:
-        # For any other exceptions, provide a structured error
-        logger.exception("Unexpected error getting risk-free rate: %s", str(e))
-        raise APIError(
-            code=ErrorCode.RISK_FREE_RATE_ERROR,
-            message="Error fetching or processing risk-free rate data",
-            status_code=500,
-            details={"error": str(e)}
-        )
+        # For any exception, use default risk-free rate with warning
+        logger.warning("Unexpected error getting risk-free rate: %s. Using default risk-free rate of 0.05", str(e))
+        return 0.05
 
 def compute_yearly_returns_stocks(daily_returns: pd.DataFrame) -> Dict[str, Dict[str, float]]:
     """
