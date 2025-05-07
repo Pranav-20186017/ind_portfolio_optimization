@@ -17,6 +17,12 @@ export interface StockOption {
     exchange: string;
 }
 
+// Error handling type
+export interface APIError {
+    message: string;
+    details?: string[] | Record<string, any> | string | number;
+}
+
 // Extended types for portfolio performance
 export interface PortfolioPerformance {
     // From PyPortfolioOpt

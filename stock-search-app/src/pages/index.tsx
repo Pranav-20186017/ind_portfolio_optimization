@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { StockData, StockOption, PortfolioOptimizationResponse, OptimizationResult } from '../types';
+import { StockData, StockOption, PortfolioOptimizationResponse, OptimizationResult, APIError } from '../types';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import Chip from '@mui/material/Chip';
@@ -112,6 +112,7 @@ const HomePage: React.FC = () => {
   const [selectedAlgorithms, setSelectedAlgorithms] = useState<{ label: string; value: string }[]>([]);
   const [selectedCLA, setSelectedCLA] = useState<{ label: string; value: string }>(claSubOptions[2]); // Default "Both"
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<APIError | null>(null);
 
   const canSubmit = selectedStocks.length >= 2 && selectedAlgorithms.length >= 1;
   let submitError = '';
@@ -201,6 +202,7 @@ const HomePage: React.FC = () => {
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setLoading(true);
+    setError(null); // Clear any previous errors
     const dataToSend = {
       stocks: selectedStocks.map((s) => ({ ticker: s.ticker, exchange: s.exchange })),
       methods: selectedAlgorithms.map((a) => a.value),
@@ -214,8 +216,37 @@ const HomePage: React.FC = () => {
       console.log('Backend response:', response.data);
       const result = response.data as PortfolioOptimizationResponse;
       setOptimizationResult(result);
+      
+      // Check for warnings in the response
+      if (response.data.warnings) {
+        setError({
+          message: response.data.warnings.message,
+          details: response.data.warnings.failed_methods
+        });
+      }
     } catch (error) {
       console.error('API Error:', error);
+      // Handle axios errors
+      if (axios.isAxiosError(error) && error.response) {
+        // Extract the error details from the backend response
+        const errorData = error.response.data.error;
+        if (errorData) {
+          setError({
+            message: errorData.message || 'An error occurred during optimization',
+            details: errorData.details
+          });
+        } else {
+          setError({
+            message: `Error ${error.response.status}: ${error.response.statusText}`,
+          });
+        }
+      } else {
+        // Handle non-axios errors
+        setError({
+          message: 'Failed to connect to the optimization service. Please try again later.',
+        });
+      }
+      setOptimizationResult(null);
     } finally {
       setLoading(false);
     }
@@ -227,6 +258,7 @@ const HomePage: React.FC = () => {
     setSelectedAlgorithms([]);
     setSelectedCLA(claSubOptions[2]);
     setOptimizationResult(null);
+    setError(null); // Clear any errors on reset
   };
 
   const formatDate = (dateStr: string) => {
@@ -348,6 +380,19 @@ const HomePage: React.FC = () => {
           )}
           style={{ width: '100%', maxWidth: 600 }}
         />
+        
+        {/* Display info about MOSEK requirement */}
+        {selectedAlgorithms.some(algo => ['MinCVaR', 'MinCDaR'].includes(algo.value)) && (
+          <Card style={{ marginTop: '1rem', backgroundColor: '#e8f4fd', maxWidth: 600 }}>
+            <CardContent>
+              <Typography variant="body2" color="info.dark">
+                <strong>Note:</strong> MinCVaR and MinCDaR optimizations require a MOSEK license. 
+                If license is not available, the system will fall back to Minimum Volatility optimization.
+              </Typography>
+            </CardContent>
+          </Card>
+        )}
+        
         {selectedAlgorithms.some((algo) => algo.value === 'CriticalLineAlgorithm') && (
           <div className="mt-4 max-w-sm">
             <FormControl fullWidth variant="outlined">
@@ -398,6 +443,45 @@ const HomePage: React.FC = () => {
             Running Optimizations
           </div>
         </div>
+      ) : error ? (
+        <Card style={{ marginTop: '2rem', backgroundColor: '#ffebee' }}>
+          <CardContent>
+            <Typography variant="h5" color="error" gutterBottom>
+              Optimization Error
+            </Typography>
+            <Typography variant="body1" gutterBottom>
+              {(error as APIError).message}
+            </Typography>
+            {(error as APIError).details && (
+              <div style={{ marginTop: '1rem' }}>
+                <Typography variant="subtitle1" fontWeight="bold">
+                  Details:
+                </Typography>
+                {Array.isArray((error as APIError).details) ? (
+                  <ul>
+                    {((error as APIError).details as any[]).map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                ) : typeof (error as APIError).details === 'object' ? (
+                  <pre style={{ whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: '200px' }}>
+                    {JSON.stringify((error as APIError).details, null, 2)}
+                  </pre>
+                ) : (
+                  <Typography>{String((error as APIError).details)}</Typography>
+                )}
+              </div>
+            )}
+            <Button 
+              variant="contained" 
+              color="primary" 
+              style={{ marginTop: '1rem' }}
+              onClick={() => setError(null)}
+            >
+              Dismiss
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         optimizationResult && (
           <div className="results-container">
@@ -405,15 +489,54 @@ const HomePage: React.FC = () => {
               Optimization Results
             </Typography>
             <Typography variant="body1" align="center">
-              Data Time Period: {formatDate(optimizationResult.start_date)} to {formatDate(optimizationResult.end_date)} <br></br>
+              Data Time Period: {formatDate(optimizationResult!.start_date)} to {formatDate(optimizationResult!.end_date)} <br></br>
               <div>
                 <strong>
-                    Benchmark Risk Free Rate (Based on Mean 10-Y GSec yields) : {(optimizationResult.risk_free_rate! * 100).toFixed(4)}%
+                    Benchmark Risk Free Rate (Based on Mean 10-Y GSec yields) : {(optimizationResult!.risk_free_rate! * 100).toFixed(4)}%
                 </strong>
               </div>
             </Typography>
 
-            {Object.entries(optimizationResult.results || {}).map(([methodKey, methodData]) => {
+            {/* Display warnings about failed methods if present */}
+            {error !== null && (
+              <Card style={{ marginBottom: '1.5rem', backgroundColor: '#fff3e0', padding: '0.5rem' }}>
+                <CardContent>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <Typography variant="subtitle1" color="warning.dark" gutterBottom>
+                        <strong>Warning:</strong> {(error as APIError).message}
+                      </Typography>
+                      {(error as APIError).details && Array.isArray((error as APIError).details) && ((error as APIError).details as string[]).length > 0 && (
+                        <>
+                          <Typography variant="body2">
+                            The following optimization methods failed:
+                          </Typography>
+                          <ul style={{ margin: '0.5rem 0' }}>
+                            {((error as APIError).details as string[]).map((method: string, idx: number) => (
+                              <li key={idx}>{algoDisplayNames[method] || method}</li>
+                            ))}
+                          </ul>
+                          <Typography variant="body2">
+                            Results from successful methods are still displayed below.
+                          </Typography>
+                        </>
+                      )}
+                    </div>
+                    <Button 
+                      variant="outlined" 
+                      color="warning" 
+                      size="small"
+                      onClick={() => setError(null)}
+                      style={{ marginLeft: '1rem', minWidth: 'auto' }}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {Object.entries(optimizationResult!.results || {}).map(([methodKey, methodData]) => {
               if (!methodData) return null;
               const perf = methodData.performance;
               return (
@@ -518,10 +641,10 @@ const HomePage: React.FC = () => {
               <Typography variant="h5" align="center" gutterBottom>
                 Cumulative Returns Over Time
               </Typography>
-              <Line data={prepareChartData(optimizationResult)} options={chartOptions} />
+              <Line data={prepareChartData(optimizationResult!)} options={chartOptions} />
             </div>
 
-            {optimizationResult.stock_yearly_returns && (
+            {optimizationResult!.stock_yearly_returns && (
               <div style={{ marginTop: '2rem' }}>
                 <Typography variant="h5" align="center" gutterBottom>
                   Yearly Stock Returns
@@ -542,7 +665,7 @@ const HomePage: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {Object.entries(optimizationResult.stock_yearly_returns).map(([ticker, yearData]) => (
+                    {Object.entries(optimizationResult!.stock_yearly_returns).map(([ticker, yearData]) => (
                       <TableRow key={ticker}>
                         <TableCell style={{ fontWeight: 'bold', color: 'black' }}>{ticker}</TableCell>
                         {allYears.map((year) => {
@@ -561,13 +684,13 @@ const HomePage: React.FC = () => {
             )}
 
             {/* Covariance Heatmap Section */}
-            {optimizationResult?.covariance_heatmap && (
+            {optimizationResult!.covariance_heatmap && (
               <div style={{ marginTop: '2rem', textAlign: 'center' }}>
                 <Typography variant="h5" gutterBottom>
                   Variance-Covariance Matrix
                 </Typography>
                 <div style={{ display: 'inline-block' }}>
-                  <ImageComponent base64String={optimizationResult.covariance_heatmap} altText="Covariance Heatmap" />
+                  <ImageComponent base64String={optimizationResult!.covariance_heatmap} altText="Covariance Heatmap" />
                 </div>
               </div>
             )}
