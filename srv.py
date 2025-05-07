@@ -1125,7 +1125,8 @@ def compute_yearly_returns_stocks(daily_returns: pd.DataFrame) -> Dict[str, Dict
     results = {}
     for ticker in daily_returns.columns:
         # Compute the yearly compounded return for each stock.
-        yearly_returns = (1 + daily_returns[ticker]).resample('Y').prod() - 1
+        # Using 'YE' instead of deprecated 'Y' frequency
+        yearly_returns = (1 + daily_returns[ticker]).resample('YE').prod() - 1
         # Use items() instead of iteritems()
         results[ticker] = {str(date.year): ret for date, ret in yearly_returns.items()}
     return results

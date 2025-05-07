@@ -396,16 +396,16 @@ class TestPortfolioOptimization(unittest.TestCase):
         # Expected average of the 'Close' column: (6.5 + 6.6) / 2 = 6.55, then divided by 100
         self.assertAlmostEqual(rf_rate, 6.55 / 100, places=4)
         
-        # Test with API error
+        # Test with API error - should now return default value instead of raising exception
         mock_response.status_code = 404
-        with self.assertRaises(Exception):
-            get_risk_free_rate(start_date, end_date)
+        rf_rate = get_risk_free_rate(start_date, end_date)
+        self.assertEqual(rf_rate, 0.05)
         
-        # Test with missing 'Close' column
+        # Test with missing 'Close' column - should now return default value instead of raising exception
         mock_response.status_code = 200
         mock_response.text = "Date,Open,High,Low,Volume\n2022-01-01,6.5,6.6,6.4,1000\n"
-        with self.assertRaises(Exception):
-            get_risk_free_rate(start_date, end_date)
+        rf_rate = get_risk_free_rate(start_date, end_date)
+        self.assertEqual(rf_rate, 0.05)
         
         # Test with negative average (should return default 0.05)
         mock_response.status_code = 200
