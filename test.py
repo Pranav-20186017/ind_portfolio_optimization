@@ -133,8 +133,8 @@ class TestPortfolioOptimization(unittest.TestCase):
             # Test with all invalid tickers
             mock_cached_yf_download.side_effect = lambda ticker, start_date: pd.Series([])
             
-            # Should raise ValueError
-            with self.assertRaises(ValueError):
+            # Should raise APIError instead of ValueError
+            with self.assertRaises(APIError):
                 fetch_and_align_data(['INVALID1.NS', 'INVALID2.NS'])
 
     def test_freedman_diaconis_bins(self):

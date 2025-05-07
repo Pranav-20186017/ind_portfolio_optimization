@@ -28,8 +28,9 @@ jobs:
       - name: Run tests
         id: run_tests
         run: |
+          # Run all tests now that we've fixed the issues
           python test.py
-        continue-on-error: false
+        continue-on-error: false # Make the build fail if tests fail
         env:
           LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
 

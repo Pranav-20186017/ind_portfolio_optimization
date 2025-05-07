@@ -652,11 +652,22 @@ def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
         # Generate plots
         dist_b64, dd_b64 = generate_plots(port_returns, OptimizationMethod.MIN_CVAR.value)
         
+        # Handle case where portfolio_performance doesn't return sharpe ratio
+        expected_return = pfolio_perf[0] if len(pfolio_perf) > 0 else 0.0
+        volatility = pfolio_perf[1] if len(pfolio_perf) > 1 else 0.0
+        # If sharpe ratio is missing, calculate it manually or use a default
+        if len(pfolio_perf) > 2:
+            sharpe = pfolio_perf[2]
+        else:
+            # Calculate manually if we have expected_return and volatility
+            sharpe = (expected_return - risk_free_rate) / volatility if volatility > 0 else 0.0
+            logger.info("Calculated sharpe ratio manually: %f", sharpe)
+        
         # Create performance object
         performance = PortfolioPerformance(
-            expected_return=pfolio_perf[0],
-            volatility=pfolio_perf[1],
-            sharpe=pfolio_perf[2],
+            expected_return=expected_return,
+            volatility=volatility,
+            sharpe=sharpe,
             sortino=custom["sortino"],
             max_drawdown=custom["max_drawdown"],
             romad=custom["romad"],
@@ -723,11 +734,22 @@ def run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate=0.05):
         # Generate plots
         dist_b64, dd_b64 = generate_plots(port_returns, OptimizationMethod.MIN_CDAR.value)
         
+        # Handle case where portfolio_performance doesn't return sharpe ratio
+        expected_return = pfolio_perf[0] if len(pfolio_perf) > 0 else 0.0
+        volatility = pfolio_perf[1] if len(pfolio_perf) > 1 else 0.0
+        # If sharpe ratio is missing, calculate it manually or use a default
+        if len(pfolio_perf) > 2:
+            sharpe = pfolio_perf[2]
+        else:
+            # Calculate manually if we have expected_return and volatility
+            sharpe = (expected_return - risk_free_rate) / volatility if volatility > 0 else 0.0
+            logger.info("Calculated sharpe ratio manually for MIN_CDAR: %f", sharpe)
+        
         # Create performance object
         performance = PortfolioPerformance(
-            expected_return=pfolio_perf[0],
-            volatility=pfolio_perf[1],
-            sharpe=pfolio_perf[2],
+            expected_return=expected_return,
+            volatility=volatility,
+            sharpe=sharpe,
             sortino=custom["sortino"],
             max_drawdown=custom["max_drawdown"],
             romad=custom["romad"],
