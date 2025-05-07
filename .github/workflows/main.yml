@@ -61,6 +61,7 @@ jobs:
             sprx7767/ind_portfolio_optimization-backend:${{ github.sha }}
           build-args: |
             MOSEK_LICENSE_CONTENT=${{ secrets.MOSEK_LICENSE_CONTENT }}
+            LOGFIRE_TOKEN=${{ secrets.LOGFIRE_TOKEN }}
 
       # Step 6: Build and push frontend image
       - name: Build and push frontend image

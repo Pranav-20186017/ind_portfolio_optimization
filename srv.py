@@ -28,6 +28,8 @@ import sys
 from dotenv import load_dotenv
 import logfire
 from fastapi.responses import JSONResponse
+import time
+import uuid
 
 # ---- MOSEK License Configuration ----
 def configure_mosek_license():
@@ -108,6 +110,11 @@ class APIError(Exception):
         super().__init__(self.message)
 
 # ── Logger & Handlers Setup ───────────────────────────────────────────────────
+# Set up root logger first for all logs including FastAPI and Uvicorn
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+
+# Application logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -120,6 +127,7 @@ formatter = logging.Formatter(
 )
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
+root_logger.addHandler(console_handler)
 
 # 2) Logfire handler
 load_dotenv()  # loads your .env containing LOGFIRE_TOKEN
@@ -129,6 +137,7 @@ lf_handler = logfire.LogfireLoggingHandler()
 lf_handler.setLevel(logging.INFO)
 lf_handler.setFormatter(formatter)
 logger.addHandler(lf_handler)
+root_logger.addHandler(lf_handler)
 
 # Prevent double-logging up the hierarchy
 logger.propagate = False
@@ -165,6 +174,59 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add request logging middleware
+@app.middleware("http")
+async def log_requests(request, call_next):
+    start_time = time.time()
+    
+    # Generate a request ID
+    request_id = str(uuid.uuid4())
+    
+    # Log request details
+    logger.info(
+        f"Request started",
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "url": str(request.url),
+            "client_host": request.client.host if request.client else None,
+            "headers": dict(request.headers),
+        }
+    )
+    
+    # Process the request
+    try:
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        
+        # Log successful response
+        logger.info(
+            f"Request completed",
+            extra={
+                "request_id": request_id,
+                "status_code": response.status_code,
+                "process_time_ms": round(process_time * 1000, 2),
+            }
+        )
+        
+        # Add custom header with processing time
+        response.headers["X-Process-Time"] = str(process_time)
+        return response
+        
+    except Exception as e:
+        # Log failed response
+        process_time = time.time() - start_time
+        logger.error(
+            f"Request failed: {str(e)}",
+            extra={
+                "request_id": request_id,
+                "error": str(e),
+                "process_time_ms": round(process_time * 1000, 2),
+            },
+            exc_info=True
+        )
+        raise
 
 # Register exception handlers
 @app.exception_handler(APIError)

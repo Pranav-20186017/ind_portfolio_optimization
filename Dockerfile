@@ -14,6 +14,7 @@ RUN mkdir -p /app/mosek
 # Copy the server files
 COPY srv.py .
 COPY test.py .
+COPY main.py .
 
 # Create outputs directory
 RUN mkdir -p /app/outputs
@@ -38,4 +39,4 @@ EXPOSE 80
 
 # Set entrypoint and command
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["uvicorn", "srv:app", "--host", "0.0.0.0", "--port", "80"]
+CMD ["python", "main.py"]
