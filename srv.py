@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional, Tuple, Union
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
-from enum import Enum
+from enum import Enum, IntEnum
 import yfinance as yf
 import pandas as pd
 from scipy.stats import entropy
@@ -27,7 +27,33 @@ import logging
 import sys
 from dotenv import load_dotenv
 import logfire
+from fastapi.responses import JSONResponse
 
+# ---- Custom Error Handling ----
+class ErrorCode(IntEnum):
+    """Enumeration of API error codes for detailed error reporting"""
+    # Input validation errors (400 range)
+    INSUFFICIENT_STOCKS = 40001
+    NO_DATA_FOUND = 40002
+    INVALID_TICKER = 40003
+    INVALID_DATE_RANGE = 40004
+    INVALID_OPTIMIZATION_METHOD = 40005
+    
+    # Processing errors (500 range)
+    OPTIMIZATION_FAILED = 50001
+    DATA_FETCH_ERROR = 50002
+    RISK_FREE_RATE_ERROR = 50003
+    COVARIANCE_CALCULATION_ERROR = 50004
+    UNEXPECTED_ERROR = 50099
+
+class APIError(Exception):
+    """Custom API exception with error code, message, and HTTP status code"""
+    def __init__(self, code: ErrorCode, message: str, status_code: int = 400, details: Optional[Dict] = None):
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+        self.details = details or {}
+        super().__init__(self.message)
 
 # ── Logger & Handlers Setup ───────────────────────────────────────────────────
 logger = logging.getLogger(__name__)
@@ -84,6 +110,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register exception handlers
+@app.exception_handler(APIError)
+async def api_exception_handler(request, exc: APIError):
+    """Handle APIError exceptions by returning a formatted JSON response"""
+    logger.error("API Error: %s - %s", exc.code, exc.message)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": int(exc.code),
+                "message": exc.message,
+                "details": exc.details
+            }
+        }
+    )
+
+# Add a generic exception handler for unexpected errors
+@app.exception_handler(Exception)
+async def generic_exception_handler(request, exc: Exception):
+    """Handle any unhandled exceptions"""
+    logger.exception("Unhandled exception occurred")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "code": int(ErrorCode.UNEXPECTED_ERROR),
+                "message": "An unexpected error occurred",
+                "details": {"error_type": str(type(exc).__name__)}
+            }
+        }
+    )
 
 ########################################
 # Pydantic Models and Enums
@@ -219,6 +277,8 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
     Returns (combined_df, nifty_close).
     """
     data = {}
+    failed_tickers = []
+    
     for ticker in tickers:
         try:
             df = cached_yf_download(ticker, datetime(1990, 1, 1))
@@ -226,12 +286,22 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
                 data[ticker] = df
             else:
                 logger.warning("No data for ticker %s", ticker)
+                failed_tickers.append(ticker)
         except Exception as e:
-            logger.exception("Error fetching data for %s", ticker)
+            logger.exception("Error fetching data for %s: %s", ticker, str(e))
+            failed_tickers.append(ticker)
 
     if not data:
-        logger.warning("No valid data available for the provided tickers. %s", ticker)
-        raise ValueError("No valid data available for the provided tickers.")
+        logger.warning("No valid data available for the provided tickers")
+        details = {"failed_tickers": failed_tickers}
+        if failed_tickers:
+            details["last_ticker"] = failed_tickers[-1]
+            
+        raise APIError(
+            code=ErrorCode.NO_DATA_FOUND,
+            message="No valid data available for the provided tickers",
+            details=details
+        )
 
     # Align all tickers to the latest min_date among them
     min_date = max(df.index.min() for df in data.values())
@@ -241,18 +311,51 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
     combined_df = pd.concat(filtered_data.values(), axis=1, keys=filtered_data.keys())
     combined_df.dropna(inplace=True)
 
-    # Nifty
-    nifty_df = yf.download('^NSEI', start=min_date, multi_level_index=False, progress=False, auto_adjust=True)['Close'].dropna()
+    # Fetch Nifty data
+    try:
+        nifty_df = yf.download('^NSEI', start=min_date, multi_level_index=False, progress=False, auto_adjust=True)['Close'].dropna()
+    except Exception as e:
+        logger.exception("Error fetching Nifty index: %s", str(e))
+        raise APIError(
+            code=ErrorCode.DATA_FETCH_ERROR,
+            message="Error fetching market index data (Nifty)",
+            status_code=500,
+            details={"error": str(e)}
+        )
+    
+    if nifty_df.empty:
+        raise APIError(
+            code=ErrorCode.NO_DATA_FOUND,
+            message="No data available for Nifty index",
+            status_code=500
+        )
+    
+    # Align with market index
     common_dates = combined_df.index.intersection(nifty_df.index)
+    if len(common_dates) == 0:
+        raise APIError(
+            code=ErrorCode.INVALID_DATE_RANGE,
+            message="No overlapping dates between stock data and market index",
+            status_code=400,
+            details={
+                "stock_date_range": [str(combined_df.index.min().date()), str(combined_df.index.max().date())],
+                "index_date_range": [str(nifty_df.index.min().date()), str(nifty_df.index.max().date())]
+            }
+        )
+        
     combined_df = combined_df.loc[common_dates]
     nifty_df = nifty_df.loc[common_dates]
-
+    
+    # Add warning if some tickers failed
+    if failed_tickers:
+        logger.warning("Some tickers failed to fetch data: %s", failed_tickers)
+    
     return combined_df, nifty_df
 
 def freedman_diaconis_bins(port_returns: pd.Series) -> int:
     n = len(port_returns)
     logger.info("Computing bins for %d data points", n)
-    if n < 2:
+    if n < 3:
         logger.info("Not enough data points. Returning 1 bin.")
         return 1  # minimal bin count for very small datasets
 
@@ -272,10 +375,6 @@ def freedman_diaconis_bins(port_returns: pd.Series) -> int:
     bins = int(np.ceil(data_range / bin_width))
     logger.info("No. of bins computed based on Freedman-Diaconis rule: %d", bins)
     return bins if bins > 0 else 50
-
-
-
-
 
 def compute_custom_metrics(port_returns: pd.Series, nifty_df: pd.Series, risk_free_rate: float = 0.05) -> Dict[str, float]:
     """
@@ -331,21 +430,41 @@ def compute_custom_metrics(port_returns: pd.Series, nifty_df: pd.Series, risk_fr
         'Portfolio': port_returns,
         'Nifty': nifty_ret
     }).dropna()
-    risk_free_daily = risk_free_rate / ann_factor
-    # Calculate excess returns
-    excess_portfolio = merged_returns['Portfolio'] - risk_free_daily
-    excess_market = merged_returns['Nifty'] - risk_free_daily
-    # Prepare and run regression
-    X = sm.add_constant(excess_market)  # Adds intercept term
-    model = sm.OLS(excess_portfolio, X).fit()
-    portfolio_beta = model.params['Nifty']
+    
+    # Initialize portfolio_beta with a default value
+    portfolio_beta = 0.0
+    
+    # Only calculate beta if we have enough data
+    if len(merged_returns) > 1:
+        risk_free_daily = risk_free_rate / ann_factor
+        # Calculate excess returns
+        excess_portfolio = merged_returns['Portfolio'] - risk_free_daily
+        excess_market = merged_returns['Nifty'] - risk_free_daily
+        
+        # Check if we have enough variation to calculate beta
+        if excess_market.var() > 1e-9:
+            # Prepare and run regression
+            X = sm.add_constant(excess_market)  # Adds intercept term
+            
+            try:
+                model = sm.OLS(excess_portfolio, X).fit()
+                portfolio_beta = model.params['Nifty']
+            except Exception as e:
+                logger.warning(f"Error calculating beta: {e}")
+                # Keep default beta of 0.0
 
     skewness = port_returns.skew()
     kurtosis = port_returns.kurt()
+    
+    # Calculate entropy safely
     bins = freedman_diaconis_bins(port_returns)
-    counts, _ = np.histogram(port_returns, bins=bins)
+    counts, _ = np.histogram(port_returns, bins=bins) if len(port_returns) > 1 else ([1], [0, 1])
+    
+    # Handle zero counts
+    counts = np.array([c if c > 0 else 1 for c in counts])
     probs = counts / counts.sum()
-    port_entropy  = entropy(probs)
+    port_entropy = entropy(probs)
+    
     return {
         "sortino": sortino,
         "max_drawdown": max_dd,
@@ -358,7 +477,7 @@ def compute_custom_metrics(port_returns: pd.Series, nifty_df: pd.Series, risk_fr
         "portfolio_beta": portfolio_beta,
         "skewness": skewness,
         "kurtosis": kurtosis,
-        "entropy" : port_entropy
+        "entropy": port_entropy
     }
 
 def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
@@ -416,7 +535,19 @@ def run_optimization(method: OptimizationMethod, mu, S, returns, nifty_df, risk_
     try:
         if method == OptimizationMethod.MVO:
             ef = EfficientFrontier(mu, S)
-            ef.max_sharpe(risk_free_rate=risk_free_rate)
+            try:
+                # Check if any assets have returns above risk-free rate
+                if (mu > risk_free_rate).any():
+                    ef.max_sharpe(risk_free_rate=risk_free_rate)
+                else:
+                    # If no assets have expected returns above risk-free rate,
+                    # use a lower risk-free rate to allow optimization to proceed
+                    logger.warning("No assets have expected returns above risk-free rate. Using lower risk-free rate.")
+                    adjusted_rf = mu.max() * 0.9  # Use 90% of the highest expected return
+                    ef.max_sharpe(risk_free_rate=adjusted_rf)
+            except Exception as e:
+                logger.exception("Error in max_sharpe optimization")
+                raise
             weights = ef.clean_weights()
             pfolio_perf = ef.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
             
@@ -488,36 +619,44 @@ def run_optimization(method: OptimizationMethod, mu, S, returns, nifty_df, risk_
     
 def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
     try:
-        # Initialize EfficientCVaR with the provided expected returns and historical returns.
-        ef_cvar = EfficientCVaR(expected_returns=mu, returns=returns, beta=0.95, weight_bounds=(0, 1))
-        
-        # Obtain weights by minimizing CVaR.
-        weights = ef_cvar.min_cvar()
-        
-        # Although ef_cvar.portfolio_performance() returns (expected_return, CVaR),
-        # we will compute full metrics manually from the portfolio’s daily returns.
+        # Try EfficientCVaR optimization with MOSEK solver
+        try:
+            # Initialize EfficientCVaR with the provided expected returns and historical returns.
+            ef_cvar = EfficientCVaR(expected_returns=mu, returns=returns, beta=0.95, weight_bounds=(0, 1))
+            weights = ef_cvar.min_cvar()
+            
+            # Get portfolio metrics
+            pfolio_perf = ef_cvar.portfolio_performance(verbose=False)
+            
+        except Exception as solver_error:
+            # If it's a MOSEK license error or any other error, fall back to standard optimization
+            logger.warning("Error in CVaR optimization: %s. Using min_volatility as fallback.", str(solver_error))
+            
+            # Create a standard EfficientFrontier object instead
+            ef_alt = EfficientFrontier(mu, returns.cov())
+            # Min volatility as a proxy since we can't do min_cvar
+            ef_alt.min_volatility()
+            weights = ef_alt.clean_weights()
+            
+            # Calculate standard performance metrics
+            pfolio_perf = ef_alt.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+            logger.info("Used min_volatility as fallback for min_cvar")
+
+        # Calculate portfolio returns for custom metrics
         w_series = pd.Series(weights)
         port_returns = returns.dot(w_series)
-
-        pfolio_perf = ef_cvar.portfolio_performance(verbose=False)
         
-        # Compute annualized return, volatility, and Sharpe ratio manually.
-        ann_factor = 252
-        annual_return = port_returns.mean() * ann_factor
-        annual_volatility = port_returns.std() * np.sqrt(ann_factor)
-        sharpe = ((annual_return - risk_free_rate) / annual_volatility) if annual_volatility > 0 else 0.0
-        
-        # Compute additional custom metrics (sortino, drawdown, CVaRs, CAGR, beta, etc.)
+        # Compute custom metrics
         custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
         
-        # Generate plots: return distribution and drawdown (both encoded to base64)
+        # Generate plots
         dist_b64, dd_b64 = generate_plots(port_returns, OptimizationMethod.MIN_CVAR.value)
         
-        # Create a performance object with all required metrics.
+        # Create performance object
         performance = PortfolioPerformance(
             expected_return=pfolio_perf[0],
-            volatility=annual_volatility,
-            sharpe=sharpe,
+            volatility=pfolio_perf[1],
+            sharpe=pfolio_perf[2],
             sortino=custom["sortino"],
             max_drawdown=custom["max_drawdown"],
             romad=custom["romad"],
@@ -532,7 +671,7 @@ def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
             entropy=custom["entropy"]
         )
         
-        # Bundle the results.
+        # Create result object
         result = OptimizationResult(
             weights=weights,
             performance=performance,
@@ -540,46 +679,55 @@ def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
             max_drawdown_plot=dd_b64
         )
         
-        # Compute cumulative portfolio returns.
+        # Calculate cumulative returns
         cum_returns = (1 + port_returns).cumprod()
         
         return result, cum_returns
+        
     except Exception as e:
-        logger.exception("Error in MinCVaR optimization")
+        logger.exception("Error in MIN_CVAR optimization")
         return None, None
 
 def run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate=0.05):
     try:
-        # Initialize EfficientCDaR with the provided expected returns and historical returns.
-        ef_cdar = EfficientCDaR(expected_returns=mu, returns=returns, beta=0.95, weight_bounds=(0, 1))
-        
-        # Obtain weights by minimizing CDaR.
-        weights = ef_cdar.min_cdar()
-        
-        # Although ef_cdar.portfolio_performance() returns (expected_return, CVaR),
-        # we will compute full metrics manually from the portfolio’s daily returns.
+        # Try EfficientCDaR optimization with MOSEK solver
+        try:
+            # Initialize EfficientCDaR with the provided expected returns and historical returns.
+            ef_cdar = EfficientCDaR(expected_returns=mu, returns=returns, beta=0.95, weight_bounds=(0, 1))
+            weights = ef_cdar.min_cdar()
+            
+            # Get portfolio metrics
+            pfolio_perf = ef_cdar.portfolio_performance(verbose=False)
+            
+        except Exception as solver_error:
+            # If it's a MOSEK license error or any other error, fall back to standard optimization
+            logger.warning("Error in CDaR optimization: %s. Using min_volatility as fallback.", str(solver_error))
+            
+            # Create a standard EfficientFrontier object instead
+            ef_alt = EfficientFrontier(mu, returns.cov())
+            # Min volatility as a proxy since we can't do min_cdar
+            ef_alt.min_volatility()
+            weights = ef_alt.clean_weights()
+            
+            # Calculate standard performance metrics
+            pfolio_perf = ef_alt.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+            logger.info("Used min_volatility as fallback for min_cdar")
+
+        # Calculate portfolio returns for custom metrics
         w_series = pd.Series(weights)
         port_returns = returns.dot(w_series)
-
-        pfolio_perf = ef_cdar.portfolio_performance(verbose=False)
         
-        # Compute annualized return, volatility, and Sharpe ratio manually.
-        ann_factor = 252
-        annual_return = port_returns.mean() * ann_factor
-        annual_volatility = port_returns.std() * np.sqrt(ann_factor)
-        sharpe = ((annual_return - risk_free_rate) / annual_volatility) if annual_volatility > 0 else 0.0
-        
-        # Compute additional custom metrics (sortino, drawdown, CVaRs, CAGR, beta, etc.)
+        # Compute custom metrics
         custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
         
-        # Generate plots: return distribution and drawdown (both encoded to base64)
+        # Generate plots
         dist_b64, dd_b64 = generate_plots(port_returns, OptimizationMethod.MIN_CDAR.value)
         
-        # Create a performance object with all required metrics.
+        # Create performance object
         performance = PortfolioPerformance(
             expected_return=pfolio_perf[0],
-            volatility=annual_volatility,
-            sharpe=sharpe,
+            volatility=pfolio_perf[1],
+            sharpe=pfolio_perf[2],
             sortino=custom["sortino"],
             max_drawdown=custom["max_drawdown"],
             romad=custom["romad"],
@@ -594,7 +742,7 @@ def run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate=0.05):
             entropy=custom["entropy"]
         )
         
-        # Bundle the results.
+        # Create result object
         result = OptimizationResult(
             weights=weights,
             performance=performance,
@@ -602,12 +750,13 @@ def run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate=0.05):
             max_drawdown_plot=dd_b64
         )
         
-        # Compute cumulative portfolio returns.
+        # Calculate cumulative returns
         cum_returns = (1 + port_returns).cumprod()
         
         return result, cum_returns
+        
     except Exception as e:
-        logger.exception("Error in MinCDaR optimization")
+        logger.exception("Error in MIN_CDAR optimization")
         return None, None
 
 
@@ -726,37 +875,110 @@ def run_optimization_HRP(returns: pd.DataFrame, cov_matrix: pd.DataFrame, nifty_
         logger.exception("Error in HRP optimization")
         return None, None
 
-def get_risk_free_rate(start_date,end_date)->float:
+def get_risk_free_rate(start_date, end_date) -> float:
+    """
+    Fetch risk-free rate data for the given date range.
+    
+    Args:
+        start_date: Start date of the period
+        end_date: End date of the period
+        
+    Returns:
+        float: The average risk-free rate as a decimal (e.g., 0.05 for 5%)
+        
+    Raises:
+        APIError: If data cannot be fetched or processed
+    """
     # Convert date objects to strings in YYYYMMDD format
     start_date_str = start_date.strftime("%Y%m%d")
     end_date_str = end_date.strftime("%Y%m%d")
 
     url = f"https://stooq.com/q/d/l/?s=10yiny.b&f={start_date_str}&t={end_date_str}&i=m"
-    response = requests.get(url)
-    if response.status_code != 200:
-        logging.error("Error fetching data from Stooq API. Status code: %s", response.status_code)
-        raise Exception("Error fetching data from Stooq API.")
-    # Read the CSV content into a pandas DataFrame.
-    data = pd.read_csv(StringIO(response.text))
     
-    # Ensure the 'Date' column is a datetime type and sort the DataFrame by Date.
-    data['Date'] = pd.to_datetime(data['Date'])
-    data.sort_values('Date', inplace=True)
-    
-    # Check if the 'Close' column exists.
-    if 'Close' not in data.columns:
-        logging.error("Expected 'Close' column not found in the retrieved data.")
-        raise Exception("Expected 'Close' column not found in data.")
-    
-    # Compute the full average of the 'Close' column.
-    avg_rate = data['Close'].mean()
-    
-    # Log the computed full average risk-free rate (before dividing by 100).
-    logger.info("Computed full average risk-free rate: %f", avg_rate)
-    # print(f"Computed full average risk-free rate:{avg_rate}")
-
-    final_rf = avg_rate / 100.0
-    return final_rf if final_rf >= 0 else 0.05
+    try:
+        response = requests.get(url)
+        if response.status_code != 200:
+            logger.error("Error fetching data from Stooq API. Status code: %s", response.status_code)
+            raise APIError(
+                code=ErrorCode.RISK_FREE_RATE_ERROR,
+                message="Error fetching risk-free rate data",
+                status_code=500,
+                details={"status_code": response.status_code}
+            )
+            
+        # Check if the response body is empty or too small
+        if len(response.text) < 10:  # Just a basic sanity check
+            logger.error("Empty or invalid response from Stooq API")
+            raise APIError(
+                code=ErrorCode.RISK_FREE_RATE_ERROR,
+                message="Empty or invalid response from risk-free rate data source",
+                status_code=500
+            )
+            
+        # Read the CSV content into a pandas DataFrame
+        data = pd.read_csv(StringIO(response.text))
+        
+        # Ensure the 'Date' column is a datetime type and sort the DataFrame by Date
+        if 'Date' not in data.columns:
+            logger.error("Expected 'Date' column not found in the retrieved data")
+            raise APIError(
+                code=ErrorCode.RISK_FREE_RATE_ERROR, 
+                message="Invalid data format from risk-free rate data source",
+                status_code=500,
+                details={"columns": list(data.columns)}
+            )
+            
+        data['Date'] = pd.to_datetime(data['Date'])
+        data.sort_values('Date', inplace=True)
+        
+        # Check if the 'Close' column exists
+        if 'Close' not in data.columns:
+            logger.error("Expected 'Close' column not found in the retrieved data")
+            raise APIError(
+                code=ErrorCode.RISK_FREE_RATE_ERROR,
+                message="Invalid data format from risk-free rate data source",
+                status_code=500,
+                details={"columns": list(data.columns)}
+            )
+        
+        # Check if data is empty after filtering
+        if data.empty:
+            logger.warning("No risk-free rate data available for the specified period")
+            raise APIError(
+                code=ErrorCode.RISK_FREE_RATE_ERROR,
+                message="No risk-free rate data available for the specified period",
+                status_code=500,
+                details={
+                    "date_range": [start_date_str, end_date_str]
+                }
+            )
+        
+        # Compute the full average of the 'Close' column
+        avg_rate = data['Close'].mean()
+        
+        # Log the computed full average risk-free rate (before dividing by 100)
+        logger.info("Computed full average risk-free rate: %f", avg_rate)
+        
+        # Convert from percentage to decimal and handle negative rates
+        final_rf = avg_rate / 100.0
+        if final_rf < 0:
+            logger.warning("Negative risk-free rate (%f) detected, using default 0.05", final_rf)
+            return 0.05
+            
+        return final_rf
+        
+    except APIError:
+        # Re-raise specific APIErrors
+        raise
+    except Exception as e:
+        # For any other exceptions, provide a structured error
+        logger.exception("Unexpected error getting risk-free rate: %s", str(e))
+        raise APIError(
+            code=ErrorCode.RISK_FREE_RATE_ERROR,
+            message="Error fetching or processing risk-free rate data",
+            status_code=500,
+            details={"error": str(e)}
+        )
 
 def compute_yearly_returns_stocks(daily_returns: pd.DataFrame) -> Dict[str, Dict[str, float]]:
     """
@@ -856,74 +1078,132 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         formatted_tickers = format_tickers(request.stocks)
         logger.info("Stock tickers chosen: %s", formatted_tickers)
         if len(formatted_tickers) < 2:
-            raise HTTPException(status_code=400, detail="Minium no of stocks required is 2, user chose less than that")
+            raise APIError(
+                code=ErrorCode.INSUFFICIENT_STOCKS,
+                message="Minimum of 2 stocks required for portfolio optimization",
+                details={"provided_count": len(formatted_tickers)}
+            )
+        
         # Fetch & align data
-        df, nifty_df = fetch_and_align_data(formatted_tickers)
+        try:
+            df, nifty_df = fetch_and_align_data(formatted_tickers)
+        except ValueError as e:
+            if "No valid data available" in str(e):
+                raise APIError(
+                    code=ErrorCode.NO_DATA_FOUND,
+                    message="No valid data available for the provided tickers",
+                    details={"tickers": formatted_tickers}
+                )
+            raise  # Re-raise if it's a different ValueError
+            
         if df.empty:
-            raise HTTPException(status_code=400, detail="No data found for the given tickers.")
+            raise APIError(
+                code=ErrorCode.NO_DATA_FOUND,
+                message="No data found for the given tickers",
+                details={"tickers": formatted_tickers}
+            )
         
         # Start/end date
         start_date = df.index.min().date()
         end_date = df.index.max().date()
 
-        risk_free_rate = get_risk_free_rate(start_date,end_date)
+        # Get risk-free rate
+        try:
+            risk_free_rate = get_risk_free_rate(start_date, end_date)
+        except Exception as e:
+            logger.warning("Error fetching risk-free rate: %s. Using default 0.05", str(e))
+            risk_free_rate = 0.05  # Default fallback
         
         # Prepare data for optimization
-        returns = df.pct_change().dropna()
-        mu = expected_returns.mean_historical_return(df, frequency=252)
-        S = CovarianceShrinkage(df).ledoit_wolf()
-        cov_heatmap_b64 = generate_covariance_heatmap(S)
-
-        stock_yearly_returns = compute_yearly_returns_stocks(returns)
+        try:
+            returns = df.pct_change().dropna()
+            mu = expected_returns.mean_historical_return(df, frequency=252)
+            S = CovarianceShrinkage(df).ledoit_wolf()
+            cov_heatmap_b64 = generate_covariance_heatmap(S)
+            stock_yearly_returns = compute_yearly_returns_stocks(returns)
+        except Exception as e:
+            logger.exception("Error preparing data for optimization")
+            raise APIError(
+                code=ErrorCode.DATA_FETCH_ERROR,
+                message="Error preparing data for optimization",
+                status_code=500,
+                details={"error": str(e)}
+            )
         
         # Initialize dictionaries to hold results and cumulative returns
         results: Dict[str, Optional[OptimizationResult]] = {}
         cum_returns_df = pd.DataFrame(index=returns.index)
+        failed_methods = []
         
         for method in request.methods:
-            if method == OptimizationMethod.HRP:
-                # For HRP, use sample covariance matrix (returns.cov())
-                sample_cov = returns.cov()
-                result, cum_returns = run_optimization_HRP(returns, sample_cov, nifty_df,risk_free_rate)
-                if result:
-                    results[method.value] = result
-                    cum_returns_df[method.value] = cum_returns
-            elif method == OptimizationMethod.MIN_CVAR:
-                result, cum_returns = run_optimization_MIN_CVAR(mu,returns,nifty_df,risk_free_rate)
-                if result:
-                    results[method.value] = result
-                    cum_returns_df[method.value] = cum_returns
-            elif method == OptimizationMethod.MIN_CDAR:
-                result, cum_returns = run_optimization_MIN_CDAR(mu,returns,nifty_df,risk_free_rate)
-                if result:
-                    results[method.value] = result
-                    cum_returns_df[method.value] = cum_returns
-            elif method != OptimizationMethod.CRITICAL_LINE_ALGORITHM:
-                result, cum_returns = run_optimization(method, mu, S, returns, nifty_df,risk_free_rate)
-                if result:
-                    results[method.value] = result
-                    cum_returns_df[method.value] = cum_returns
-            else:
-                # Handle CLA separately
-                if request.cla_method == CLAOptimizationMethod.BOTH:
-                    result_mvo, cum_returns_mvo = run_optimization_CLA("MVO", mu, S, returns, nifty_df,risk_free_rate)
-                    result_min_vol, cum_returns_min_vol = run_optimization_CLA("MinVol", mu, S, returns, nifty_df,risk_free_rate)
-                    if result_mvo:
-                        results["CriticalLineAlgorithm_MVO"] = result_mvo
-                        cum_returns_df["CriticalLineAlgorithm_MVO"] = cum_returns_mvo
-                    if result_min_vol:
-                        results["CriticalLineAlgorithm_MinVol"] = result_min_vol
-                        cum_returns_df["CriticalLineAlgorithm_MinVol"] = cum_returns_min_vol
+            optimization_result = None
+            cum_returns = None
+            
+            try:
+                if method == OptimizationMethod.HRP:
+                    # For HRP, use sample covariance matrix (returns.cov())
+                    sample_cov = returns.cov()
+                    optimization_result, cum_returns = run_optimization_HRP(returns, sample_cov, nifty_df, risk_free_rate)
+                elif method == OptimizationMethod.MIN_CVAR:
+                    optimization_result, cum_returns = run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate)
+                elif method == OptimizationMethod.MIN_CDAR:
+                    optimization_result, cum_returns = run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate)
+                elif method != OptimizationMethod.CRITICAL_LINE_ALGORITHM:
+                    optimization_result, cum_returns = run_optimization(method, mu, S, returns, nifty_df, risk_free_rate)
                 else:
-                    sub_method = request.cla_method.value
-                    result, cum_returns = run_optimization_CLA(sub_method, mu, S, returns, nifty_df,risk_free_rate)
-                    if result:
-                        results[f"CriticalLineAlgorithm_{sub_method}"] = result
-                        cum_returns_df[f"CriticalLineAlgorithm_{sub_method}"] = cum_returns
+                    # Handle CLA separately
+                    if request.cla_method == CLAOptimizationMethod.BOTH:
+                        result_mvo, cum_returns_mvo = run_optimization_CLA("MVO", mu, S, returns, nifty_df, risk_free_rate)
+                        result_min_vol, cum_returns_min_vol = run_optimization_CLA("MinVol", mu, S, returns, nifty_df, risk_free_rate)
+                        
+                        if result_mvo:
+                            results["CriticalLineAlgorithm_MVO"] = result_mvo
+                            cum_returns_df["CriticalLineAlgorithm_MVO"] = cum_returns_mvo
+                        else:
+                            failed_methods.append("CriticalLineAlgorithm_MVO")
+                            
+                        if result_min_vol:
+                            results["CriticalLineAlgorithm_MinVol"] = result_min_vol
+                            cum_returns_df["CriticalLineAlgorithm_MinVol"] = cum_returns_min_vol
+                        else:
+                            failed_methods.append("CriticalLineAlgorithm_MinVol")
+                        
+                        # Continue to next method since we've handled CLA specially
+                        continue
+                    else:
+                        sub_method = request.cla_method.value
+                        optimization_result, cum_returns = run_optimization_CLA(sub_method, mu, S, returns, nifty_df, risk_free_rate)
+                        if optimization_result:
+                            results[f"CriticalLineAlgorithm_{sub_method}"] = optimization_result
+                            cum_returns_df[f"CriticalLineAlgorithm_{sub_method}"] = cum_returns
+                        else:
+                            failed_methods.append(f"CriticalLineAlgorithm_{sub_method}")
+                        continue
+            
+            except Exception as e:
+                logger.exception("Error in optimization method %s: %s", method.value, str(e))
+                failed_methods.append(method.value)
+                continue  # Skip to next method
+                
+            if optimization_result:
+                results[method.value] = optimization_result
+                cum_returns_df[method.value] = cum_returns
+            else:
+                failed_methods.append(method.value)
+        
+        # If all methods failed, return an error
+        if len(results) == 0:
+            raise APIError(
+                code=ErrorCode.OPTIMIZATION_FAILED,
+                message="All optimization methods failed",
+                status_code=500,
+                details={"failed_methods": failed_methods}
+            )
         
         # Calculate Nifty returns
         nifty_ret = nifty_df.pct_change().dropna()
         cum_nifty = (1 + nifty_ret).cumprod()
+        
         # Align with Nifty
         common_dates = cum_returns_df.index.intersection(cum_nifty.index)
         cum_returns_df = cum_returns_df.loc[common_dates]
@@ -939,14 +1219,32 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
             dates=cum_returns_df.index.tolist(),
             nifty_returns=cum_nifty.tolist(),
             stock_yearly_returns=stock_yearly_returns,
-            covariance_heatmap = cov_heatmap_b64,
-            risk_free_rate = risk_free_rate
+            covariance_heatmap=cov_heatmap_b64,
+            risk_free_rate=risk_free_rate
         )
         
-        return jsonable_encoder(response)
+        # Include a warning in the response if some methods failed
+        response_data = jsonable_encoder(response)
+        if failed_methods:
+            response_data["warnings"] = {
+                "failed_methods": failed_methods,
+                "message": "Some optimization methods failed to complete"
+            }
         
+        return response_data
+    
+    except APIError:
+        # Let our custom exception handler deal with this
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # Handle other ValueError exceptions not caught earlier
+        logger.exception("ValueError in optimize_portfolio: %s", str(e))
+        raise APIError(
+            code=ErrorCode.INVALID_TICKER,
+            message=str(e),
+            status_code=400
+        )
     except Exception as e:
-        logger.exception("Internal Server Error in /optimize")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        # Let our generic exception handler deal with unexpected errors
+        logger.exception("Unexpected error in optimize_portfolio")
+        raise

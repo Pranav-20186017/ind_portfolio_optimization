@@ -164,6 +164,8 @@ cython_debug/
 *.png
 *.pyc
 
+*.md
+
 .ouptuts/
 
 mvo_port_report.html
