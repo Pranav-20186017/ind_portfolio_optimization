@@ -33,6 +33,7 @@ jobs:
         continue-on-error: false # Make the build fail if tests fail
         env:
           LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
+          MOSEK_LICENSE_CONTENT: ${{ secrets.MOSEK_LICENSE_CONTENT }}
 
       # Step 3: Log in to Docker Hub (only runs if tests pass)
       - name: Log in to Docker Hub
@@ -58,6 +59,8 @@ jobs:
           tags: |
             sprx7767/ind_portfolio_optimization-backend:latest
             sprx7767/ind_portfolio_optimization-backend:${{ github.sha }}
+          build-args: |
+            MOSEK_LICENSE_CONTENT=${{ secrets.MOSEK_LICENSE_CONTENT }}
 
       # Step 6: Build and push frontend image
       - name: Build and push frontend image

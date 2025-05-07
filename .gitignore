@@ -170,3 +170,8 @@ cython_debug/
 
 mvo_port_report.html
 min_vol_port_report.html
+
+# MOSEK license files
+mosek/
+mosek.lic
+**/mosek.lic

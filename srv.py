@@ -29,6 +29,58 @@ from dotenv import load_dotenv
 import logfire
 from fastapi.responses import JSONResponse
 
+# ---- MOSEK License Configuration ----
+def configure_mosek_license():
+    """Configure MOSEK license by setting the appropriate environment variable.
+    
+    This function looks for the MOSEK license in the following locations:
+    1. Environment variable MOSEK_LICENSE_CONTENT (base64 encoded license)
+    2. Environment variable MOSEK_LICENSE_PATH (path to license file)
+    3. Default locations: './mosek/mosek.lic', './mosek.lic', '~/mosek/mosek.lic'
+    
+    Returns:
+        bool: True if a license was found and configured, False otherwise
+    """
+    # Check if license content is provided as environment variable (CI/CD)
+    mosek_license_content = os.environ.get('MOSEK_LICENSE_CONTENT')
+    if mosek_license_content:
+        try:
+            # Decode the base64 content
+            license_content = base64.b64decode(mosek_license_content).decode('utf-8')
+            # Create a temporary license file
+            license_path = os.path.join(os.getcwd(), 'mosek.lic')
+            with open(license_path, 'w') as f:
+                f.write(license_content)
+            # Set the license path environment variable
+            os.environ['MOSEKLM_LICENSE_FILE'] = license_path
+            logger.info("MOSEK license configured from environment variable")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to configure MOSEK license from environment variable: {e}")
+    
+    # Check if license path is provided
+    mosek_license_path = os.environ.get('MOSEK_LICENSE_PATH')
+    if mosek_license_path and os.path.exists(mosek_license_path):
+        os.environ['MOSEKLM_LICENSE_FILE'] = mosek_license_path
+        logger.info(f"MOSEK license configured from path: {mosek_license_path}")
+        return True
+    
+    # Check common locations
+    common_paths = [
+        os.path.join(os.getcwd(), 'mosek', 'mosek.lic'),
+        os.path.join(os.getcwd(), 'mosek.lic'),
+        os.path.expanduser('~/mosek/mosek.lic')
+    ]
+    
+    for path in common_paths:
+        if os.path.exists(path):
+            os.environ['MOSEKLM_LICENSE_FILE'] = path
+            logger.info(f"MOSEK license configured from path: {path}")
+            return True
+    
+    logger.warning("MOSEK license not found. Optimization methods requiring MOSEK will use fallbacks.")
+    return False
+
 # ---- Custom Error Handling ----
 class ErrorCode(IntEnum):
     """Enumeration of API error codes for detailed error reporting"""
@@ -93,6 +145,9 @@ plt.switch_backend('Agg')
 ########################################
 output_dir = './outputs'
 os.makedirs(output_dir, exist_ok=True)
+
+# Configure MOSEK license
+has_mosek_license = configure_mosek_license()
 
 ########################################
 # FastAPI app + CORS
