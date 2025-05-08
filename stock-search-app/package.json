@@ -18,6 +18,8 @@
     "axios": "^1.7.7",
     "chart.js": "^4.4.5",
     "fuse.js": "^7.0.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.1",
     "jwt-decode": "^4.0.0",
     "lodash": "^4.17.21",
     "next": "^15.2.4",
@@ -27,6 +29,8 @@
     "react-window": "^1.8.10"
   },
   "devDependencies": {
+    "@types/html2canvas": "^1.0.0",
+    "@types/jspdf": "^2.0.0",
     "@types/jwt-decode": "^3.1.0",
     "@types/lodash": "^4.17.12",
     "@types/node": "^20",

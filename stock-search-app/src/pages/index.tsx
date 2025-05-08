@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { StockData, StockOption, PortfolioOptimizationResponse, OptimizationResult, APIError } from '../types';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
@@ -23,6 +23,8 @@ import {
   Legend,
   Tooltip,
 } from 'chart.js';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // Material UI components
 import Grid from '@mui/material/Grid';
@@ -34,6 +36,7 @@ import TableBody from '@mui/material/TableBody';
 import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
+import GetApp from '@mui/icons-material/GetApp';
 
 ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Legend, Tooltip);
 
@@ -325,6 +328,110 @@ const HomePage: React.FC = () => {
     return Array.from(yearSet).sort();
   }, [optimizationResult]);
 
+  const generatePDF = async () => {
+    if (!optimizationResult) return;
+
+    try {
+      // Show loading state while generating PDF
+      const loadingElement = document.createElement('div');
+      loadingElement.style.position = 'fixed';
+      loadingElement.style.top = '0';
+      loadingElement.style.left = '0';
+      loadingElement.style.width = '100%';
+      loadingElement.style.height = '100%';
+      loadingElement.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+      loadingElement.style.display = 'flex';
+      loadingElement.style.justifyContent = 'center';
+      loadingElement.style.alignItems = 'center';
+      loadingElement.style.zIndex = '1000';
+      loadingElement.innerHTML = '<div style="text-align: center;"><div style="font-size: 24px; margin-bottom: 10px;">Generating PDF...</div><div style="font-size: 14px;">This may take a few seconds</div></div>';
+      document.body.appendChild(loadingElement);
+
+      const resultsContainer = document.getElementById('optimization-results');
+      if (!resultsContainer) {
+        console.error('Results container not found');
+        document.body.removeChild(loadingElement);
+        return;
+      }
+
+      // Calculate when the PDF was generated
+      const now = new Date();
+      const dateStr = now.toLocaleDateString();
+      const timeStr = now.toLocaleTimeString();
+
+      // Create a new PDF with A4 size
+      const pdfDoc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // Add metadata
+      const pageWidth = pdfDoc.internal.pageSize.getWidth();
+      pdfDoc.setFontSize(16);
+      pdfDoc.text('Indian Stock Portfolio Optimization Results', pageWidth / 2, 15, { align: 'center' });
+      
+      pdfDoc.setFontSize(10);
+      pdfDoc.text(`Generated on: ${dateStr} at ${timeStr}`, pageWidth / 2, 22, { align: 'center' });
+      
+      pdfDoc.setFontSize(12);
+      pdfDoc.text(`Stocks: ${selectedStocks.map(s => s.ticker).join(', ')}`, 10, 30);
+      pdfDoc.text(`Time Period: ${formatDate(optimizationResult.start_date)} to ${formatDate(optimizationResult.end_date)}`, 10, 37);
+      pdfDoc.text(`Risk-free Rate: ${(optimizationResult.risk_free_rate! * 100).toFixed(4)}%`, 10, 44);
+
+      // Add the captured content
+      const canvas = await html2canvas(resultsContainer, {
+        scale: 1,
+        useCORS: true,
+        logging: false,
+        allowTaint: true
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const imgWidth = pageWidth - 20; // 10mm margins on each side
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      // Split across multiple pages if needed
+      const pageHeight = pdfDoc.internal.pageSize.getHeight();
+      let heightLeft = imgHeight;
+      let position = 55; // Start position after metadata
+      
+      // Add first page
+      pdfDoc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+      heightLeft -= (pageHeight - position);
+      
+      // Add additional pages if needed
+      while (heightLeft > 0) {
+        position = 0;
+        pdfDoc.addPage();
+        pdfDoc.addImage(
+          imgData, 
+          'PNG', 
+          10, 
+          position - (pageHeight - 55), 
+          imgWidth, 
+          imgHeight
+        );
+        heightLeft -= pageHeight;
+      }
+
+      // Save the PDF
+      pdfDoc.save(`portfolio_optimization_${dateStr.replace(/\//g, '-')}.pdf`);
+      
+      // Remove loading overlay
+      document.body.removeChild(loadingElement);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+      
+      // Make sure to remove loading overlay in case of error
+      const loadingElement = document.querySelector('div[style*="position: fixed"]');
+      if (loadingElement && loadingElement.parentNode) {
+        loadingElement.parentNode.removeChild(loadingElement);
+      }
+    }
+  };
+
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <Typography variant="h3" align="center" gutterBottom>
@@ -484,7 +591,7 @@ const HomePage: React.FC = () => {
         </Card>
       ) : (
         optimizationResult && (
-          <div className="results-container">
+          <div id="optimization-results" className="results-container">
             <Typography variant="h4" align="center" gutterBottom>
               Optimization Results
             </Typography>
@@ -496,6 +603,19 @@ const HomePage: React.FC = () => {
                 </strong>
               </div>
             </Typography>
+
+            {/* Download Results Button */}
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '1rem 0' }}>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={generatePDF}
+                startIcon={<GetApp />}
+                style={{ borderRadius: '20px' }}
+              >
+                Download Results as PDF
+              </Button>
+            </div>
 
             {/* Display warnings about failed methods if present */}
             {error !== null && (
