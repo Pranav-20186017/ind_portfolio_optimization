@@ -328,12 +328,31 @@ const HomePage: React.FC = () => {
     return Array.from(yearSet).sort();
   }, [optimizationResult]);
 
+  // Cache for storing generated PDFs to avoid regeneration
+  const [pdfCache, setPdfCache] = useState<{[key: string]: string}>({});
+
   const generatePDF = async () => {
     if (!optimizationResult) return;
+
+    // Create a cache key based on selected stocks and optimization result
+    const cacheKey = selectedStocks.map(s => s.ticker).join('-') + '-' + 
+                     (optimizationResult.start_date || '') + '-' + 
+                     (optimizationResult.end_date || '');
+
+    // Check if we already have this PDF cached
+    if (pdfCache[cacheKey]) {
+      // Use the cached PDF
+      const link = document.createElement('a');
+      link.href = pdfCache[cacheKey];
+      link.download = `portfolio_optimization_${new Date().toISOString().split('T')[0]}.pdf`;
+      link.click();
+      return;
+    }
 
     try {
       // Create loading overlay
       const loadingElement = document.createElement('div');
+      loadingElement.setAttribute('id', 'pdf-loading-overlay'); // Add an ID for easier removal
       loadingElement.style.position = 'fixed';
       loadingElement.style.top = '0';
       loadingElement.style.left = '0';
@@ -347,10 +366,14 @@ const HomePage: React.FC = () => {
       loadingElement.innerHTML = '<div style="text-align: center;"><div style="font-size: 24px; margin-bottom: 10px;">Generating PDF...</div><div style="font-size: 14px;">This may take a few seconds</div></div>';
       document.body.appendChild(loadingElement);
 
-      // Calculate when the PDF was generated
+      // Calculate when the PDF was generated with proper formatting
       const now = new Date();
-      const dateStr = now.toLocaleDateString();
-      const timeStr = now.toLocaleTimeString();
+      const dateOptions: Intl.DateTimeFormatOptions = { 
+        year: 'numeric', month: 'long', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: true
+      };
+      const formattedDateTime = now.toLocaleString(undefined, dateOptions);
 
       // Create a new PDF with A4 size
       const pdfDoc = new jsPDF({
@@ -364,12 +387,12 @@ const HomePage: React.FC = () => {
       const pageHeight = pdfDoc.internal.pageSize.getHeight();
       const margin = 10; // 10mm margin
 
-      // Add title page
+      // ----------- 1. TITLE PAGE -----------
       pdfDoc.setFontSize(24);
       pdfDoc.text('Portfolio Optimization Report', pageWidth / 2, 40, { align: 'center' });
       
       pdfDoc.setFontSize(12);
-      pdfDoc.text(`Generated on: ${dateStr} at ${timeStr}`, pageWidth / 2, 50, { align: 'center' });
+      pdfDoc.text(`Generated on: ${formattedDateTime}`, pageWidth / 2, 50, { align: 'center' });
       
       pdfDoc.setFontSize(14);
       pdfDoc.text('Selected Stocks:', pageWidth / 2, 70, { align: 'center' });
@@ -387,46 +410,7 @@ const HomePage: React.FC = () => {
       pdfDoc.text(`Time Period: ${formatDate(optimizationResult.start_date)} to ${formatDate(optimizationResult.end_date)}`, pageWidth / 2, 100, { align: 'center' });
       pdfDoc.text(`Risk-free Rate: ${(optimizationResult.risk_free_rate! * 100).toFixed(4)}%`, pageWidth / 2, 110, { align: 'center' });
 
-      // Add cumulative returns chart
-      pdfDoc.addPage();
-      pdfDoc.setFontSize(16);
-      pdfDoc.text('Cumulative Returns Over Time', pageWidth / 2, 20, { align: 'center' });
-      
-      const chartElement = document.querySelector('#cumulative-returns-chart canvas');
-      if (chartElement) {
-        const chartCanvas = await html2canvas(chartElement as HTMLElement, {
-          scale: 2,
-          useCORS: true,
-          logging: false
-        });
-        
-        const chartImgData = chartCanvas.toDataURL('image/png');
-        const chartImgWidth = pageWidth - (margin * 2);
-        const chartImgHeight = (chartCanvas.height * chartImgWidth) / chartCanvas.width;
-        
-        pdfDoc.addImage(chartImgData, 'PNG', margin, 30, chartImgWidth, chartImgHeight);
-      }
-
-      // Add covariance heatmap if available
-      if (optimizationResult.covariance_heatmap) {
-        pdfDoc.addPage();
-        pdfDoc.setFontSize(16);
-        pdfDoc.text('Variance-Covariance Matrix', pageWidth / 2, 20, { align: 'center' });
-        
-        const covImgWidth = pageWidth - (margin * 2);
-        const covImgHeight = covImgWidth * 0.8; // Approximate aspect ratio
-        
-        pdfDoc.addImage(
-          `data:image/png;base64,${optimizationResult.covariance_heatmap}`, 
-          'PNG', 
-          margin, 
-          30, 
-          covImgWidth, 
-          covImgHeight
-        );
-      }
-
-      // Process each optimization method result
+      // ----------- 2. OPTIMIZATION METHOD RESULTS -----------
       const resultsContainer = document.getElementById('optimization-results');
       if (resultsContainer) {
         const methodCards = resultsContainer.querySelectorAll('.method-card');
@@ -442,11 +426,13 @@ const HomePage: React.FC = () => {
           pdfDoc.setFontSize(16);
           pdfDoc.text(methodName, pageWidth / 2, 20, { align: 'center' });
           
-          // Capture each card
+          // Capture each card - use existing rendered content
           const cardCanvas = await html2canvas(card as HTMLElement, {
             scale: 1.5, // Lower scale to reduce memory usage
             useCORS: true,
-            logging: false
+            logging: false,
+            allowTaint: true,
+            backgroundColor: null
           });
           
           // Add image to PDF
@@ -466,7 +452,30 @@ const HomePage: React.FC = () => {
         }
       }
 
-      // Add yearly returns table if available
+      // ----------- 3. CUMULATIVE RETURNS CHART -----------
+      pdfDoc.addPage();
+      pdfDoc.setFontSize(16);
+      pdfDoc.text('Cumulative Returns Over Time', pageWidth / 2, 20, { align: 'center' });
+      
+      // Use existing chart element without reloading
+      const chartElement = document.querySelector('#cumulative-returns-chart canvas');
+      if (chartElement) {
+        const chartCanvas = await html2canvas(chartElement as HTMLElement, {
+          scale: 1.5, // Reduced scale to improve performance
+          useCORS: true,
+          logging: false,
+          allowTaint: true, // Allow using images from the same origin
+          backgroundColor: null // Preserve transparency
+        });
+        
+        const chartImgData = chartCanvas.toDataURL('image/png');
+        const chartImgWidth = pageWidth - (margin * 2);
+        const chartImgHeight = (chartCanvas.height * chartImgWidth) / chartCanvas.width;
+        
+        pdfDoc.addImage(chartImgData, 'PNG', margin, 30, chartImgWidth, chartImgHeight);
+      }
+
+      // ----------- 4. YEARLY RETURNS TABLE -----------
       const yearlyReturnsSection = document.querySelector('.yearly-returns-section');
       if (yearlyReturnsSection) {
         pdfDoc.addPage();
@@ -477,7 +486,9 @@ const HomePage: React.FC = () => {
           const tableCanvas = await html2canvas(yearlyReturnsSection as HTMLElement, {
             scale: 1.5, // Lower scale for better performance
             useCORS: true,
-            logging: false
+            logging: false,
+            allowTaint: true,
+            backgroundColor: null
           });
           
           const tableImgData = tableCanvas.toDataURL('image/png');
@@ -505,17 +516,49 @@ const HomePage: React.FC = () => {
         }
       }
 
-      // Save the PDF with ISO date format (YYYY-MM-DD)
-      pdfDoc.save(`portfolio_optimization_${now.toISOString().split('T')[0]}.pdf`);
+      // ----------- 5. COVARIANCE HEATMAP -----------
+      if (optimizationResult.covariance_heatmap) {
+        pdfDoc.addPage();
+        pdfDoc.setFontSize(16);
+        pdfDoc.text('Variance-Covariance Matrix', pageWidth / 2, 20, { align: 'center' });
+        
+        const covImgWidth = pageWidth - (margin * 2);
+        const covImgHeight = covImgWidth * 0.8; // Approximate aspect ratio
+        
+        // Use the base64 data that's already available instead of fetching again
+        pdfDoc.addImage(
+          `data:image/png;base64,${optimizationResult.covariance_heatmap}`, 
+          'PNG', 
+          margin, 
+          30, 
+          covImgWidth, 
+          covImgHeight
+        );
+      }
+      
+      // Generate PDF as data URL
+      const pdfOutput = pdfDoc.output('dataurlstring');
+      
+      // Cache the generated PDF for future use
+      setPdfCache(prev => ({
+        ...prev,
+        [cacheKey]: pdfOutput
+      }));
+      
+      // Trigger download through a link element
+      const downloadLink = document.createElement('a');
+      downloadLink.href = pdfOutput;
+      downloadLink.download = `portfolio_optimization_${now.toISOString().split('T')[0]}.pdf`;
+      downloadLink.click();
       
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Failed to generate PDF. Please try again.');
     } finally {
-      // Clean up loading overlay
-      const loadingOverlay = document.querySelector('div[style*="position: fixed"][style*="zIndex: 1000"]');
-      if (loadingOverlay && loadingOverlay.parentNode) {
-        loadingOverlay.parentNode.removeChild(loadingOverlay);
+      // Clean up loading overlay - use the ID to ensure it's removed
+      const loadingOverlay = document.getElementById('pdf-loading-overlay');
+      if (loadingOverlay) {
+        loadingOverlay.remove();
       }
     }
   };
