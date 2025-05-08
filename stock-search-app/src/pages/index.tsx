@@ -330,6 +330,9 @@ const HomePage: React.FC = () => {
 
   // Cache for storing generated PDFs to avoid regeneration
   const [pdfCache, setPdfCache] = useState<{[key: string]: string}>({});
+  
+  // Image cache to avoid refetching base64 images
+  const imageCache = useRef<{[key: string]: HTMLImageElement}>({});
 
   const generatePDF = async () => {
     if (!optimizationResult) return;
@@ -350,7 +353,7 @@ const HomePage: React.FC = () => {
     }
 
     try {
-      // Create loading overlay
+      // Create a loading overlay
       const loadingElement = document.createElement('div');
       loadingElement.setAttribute('id', 'pdf-loading-overlay'); // Add an ID for easier removal
       loadingElement.style.position = 'fixed';
@@ -366,6 +369,9 @@ const HomePage: React.FC = () => {
       loadingElement.innerHTML = '<div style="text-align: center;"><div style="font-size: 24px; margin-bottom: 10px;">Generating PDF...</div><div style="font-size: 14px;">This may take a few seconds</div></div>';
       document.body.appendChild(loadingElement);
 
+      // Pre-load and cache all base64 images before PDF generation
+      await preloadImages();
+      
       // Calculate when the PDF was generated with proper formatting
       const now = new Date();
       const dateOptions: Intl.DateTimeFormatOptions = { 
@@ -426,28 +432,87 @@ const HomePage: React.FC = () => {
           pdfDoc.setFontSize(16);
           pdfDoc.text(methodName, pageWidth / 2, 20, { align: 'center' });
           
-          // Capture each card - use existing rendered content
-          const cardCanvas = await html2canvas(card as HTMLElement, {
-            scale: 1.5, // Lower scale to reduce memory usage
-            useCORS: true,
-            logging: false,
-            allowTaint: true,
-            backgroundColor: null
-          });
-          
-          // Add image to PDF
-          const cardImgData = cardCanvas.toDataURL('image/png');
-          const cardImgWidth = pageWidth - (margin * 2);
-          const cardImgHeight = (cardCanvas.height * cardImgWidth) / cardCanvas.width;
-          
-          // Scale image if too large
-          if (cardImgHeight > pageHeight - 30) {
-            const scaleFactor = (pageHeight - 30) / cardImgHeight;
-            const adjustedWidth = cardImgWidth * scaleFactor;
-            const adjustedHeight = cardImgHeight * scaleFactor;
-            pdfDoc.addImage(cardImgData, 'PNG', margin, 30, adjustedWidth, adjustedHeight);
+          // Direct image extraction approach for method results
+          const methodKey = getMethodKeyFromName(methodName);
+          if (methodKey && optimizationResult.results && optimizationResult.results[methodKey]) {
+            const methodData = optimizationResult.results[methodKey];
+            
+            // Add returns distribution and drawdown plots directly if available
+            let yOffset = 30;
+            
+            // Add weights and performance table first (text-based)
+            yOffset = addWeightsAndPerformanceTable(pdfDoc, methodData, pageWidth, margin, yOffset);
+            
+            // Add distribution plot if available
+            if (methodData.returns_dist) {
+              const distImgWidth = pageWidth - (margin * 2);
+              const distImgHeight = distImgWidth * 0.6;
+              pdfDoc.addImage(
+                `data:image/png;base64,${methodData.returns_dist}`, 
+                'PNG', 
+                margin, 
+                yOffset, 
+                distImgWidth, 
+                distImgHeight
+              );
+              yOffset += distImgHeight + 10;
+            }
+            
+            // Add drawdown plot if available
+            if (methodData.max_drawdown_plot) {
+              // Check if we need to add a new page for the drawdown plot
+              if (yOffset + (pageWidth - margin * 2) * 0.6 > pageHeight - 20) {
+                pdfDoc.addPage();
+                pdfDoc.setFontSize(14);
+                pdfDoc.text(`${methodName} - Drawdown`, pageWidth / 2, 20, { align: 'center' });
+                yOffset = 30;
+              }
+              
+              const drawdownImgWidth = pageWidth - (margin * 2);
+              const drawdownImgHeight = drawdownImgWidth * 0.6;
+              pdfDoc.addImage(
+                `data:image/png;base64,${methodData.max_drawdown_plot}`, 
+                'PNG', 
+                margin, 
+                yOffset, 
+                drawdownImgWidth, 
+                drawdownImgHeight
+              );
+            }
           } else {
-            pdfDoc.addImage(cardImgData, 'PNG', margin, 30, cardImgWidth, cardImgHeight);
+            // Fallback to canvas capture if direct extraction fails
+            const cardCanvas = await html2canvas(card as HTMLElement, {
+              scale: 1.5,
+              useCORS: true,
+              logging: false,
+              allowTaint: true,
+              backgroundColor: null,
+              imageTimeout: 0, // Prevent timeouts
+              onclone: (clonedDoc) => {
+                // Replace all img elements with cached versions if available
+                const imgs = clonedDoc.querySelectorAll('img');
+                imgs.forEach(img => {
+                  const src = img.getAttribute('src');
+                  if (src && src.startsWith('data:image/png;base64,') && imageCache.current[src]) {
+                    img.src = imageCache.current[src].src;
+                  }
+                });
+              }
+            });
+            
+            const cardImgData = cardCanvas.toDataURL('image/png');
+            const cardImgWidth = pageWidth - (margin * 2);
+            const cardImgHeight = (cardCanvas.height * cardImgWidth) / cardCanvas.width;
+            
+            // Scale image if too large
+            if (cardImgHeight > pageHeight - 30) {
+              const scaleFactor = (pageHeight - 30) / cardImgHeight;
+              const adjustedWidth = cardImgWidth * scaleFactor;
+              const adjustedHeight = cardImgHeight * scaleFactor;
+              pdfDoc.addImage(cardImgData, 'PNG', margin, 30, adjustedWidth, adjustedHeight);
+            } else {
+              pdfDoc.addImage(cardImgData, 'PNG', margin, 30, cardImgWidth, cardImgHeight);
+            }
           }
         }
       }
@@ -461,11 +526,12 @@ const HomePage: React.FC = () => {
       const chartElement = document.querySelector('#cumulative-returns-chart canvas');
       if (chartElement) {
         const chartCanvas = await html2canvas(chartElement as HTMLElement, {
-          scale: 1.5, // Reduced scale to improve performance
+          scale: 1.5,
           useCORS: true,
           logging: false,
-          allowTaint: true, // Allow using images from the same origin
-          backgroundColor: null // Preserve transparency
+          allowTaint: true,
+          backgroundColor: null,
+          imageTimeout: 0
         });
         
         const chartImgData = chartCanvas.toDataURL('image/png');
@@ -484,11 +550,12 @@ const HomePage: React.FC = () => {
         
         try {
           const tableCanvas = await html2canvas(yearlyReturnsSection as HTMLElement, {
-            scale: 1.5, // Lower scale for better performance
+            scale: 1.5,
             useCORS: true,
             logging: false,
             allowTaint: true,
-            backgroundColor: null
+            backgroundColor: null,
+            imageTimeout: 0
           });
           
           const tableImgData = tableCanvas.toDataURL('image/png');
@@ -525,7 +592,7 @@ const HomePage: React.FC = () => {
         const covImgWidth = pageWidth - (margin * 2);
         const covImgHeight = covImgWidth * 0.8; // Approximate aspect ratio
         
-        // Use the base64 data that's already available instead of fetching again
+        // Use the base64 data directly without any network requests
         pdfDoc.addImage(
           `data:image/png;base64,${optimizationResult.covariance_heatmap}`, 
           'PNG', 
@@ -561,6 +628,107 @@ const HomePage: React.FC = () => {
         loadingOverlay.remove();
       }
     }
+  };
+
+  // Helper to preload all base64 images to avoid network requests
+  const preloadImages = async () => {
+    if (!optimizationResult) return;
+    
+    const imagesToPreload: string[] = [];
+    
+    // Collect all base64 images from optimization results
+    if (optimizationResult.covariance_heatmap) {
+      imagesToPreload.push(`data:image/png;base64,${optimizationResult.covariance_heatmap}`);
+    }
+    
+    // Add method-specific images
+    if (optimizationResult.results) {
+      Object.values(optimizationResult.results).forEach(methodData => {
+        if (methodData && methodData.returns_dist) {
+          imagesToPreload.push(`data:image/png;base64,${methodData.returns_dist}`);
+        }
+        if (methodData && methodData.max_drawdown_plot) {
+          imagesToPreload.push(`data:image/png;base64,${methodData.max_drawdown_plot}`);
+        }
+      });
+    }
+    
+    // Preload all images
+    await Promise.all(imagesToPreload.map(src => {
+      return new Promise<void>((resolve) => {
+        if (imageCache.current[src]) {
+          resolve();
+          return;
+        }
+        
+        const img = new Image();
+        img.onload = () => {
+          imageCache.current[src] = img;
+          resolve();
+        };
+        img.onerror = () => {
+          console.error('Failed to preload image:', src.substring(0, 30) + '...');
+          resolve();
+        };
+        img.src = src;
+      });
+    }));
+  };
+
+  // Helper to extract method key from display name
+  const getMethodKeyFromName = (displayName: string): string | null => {
+    // Find the key by matching display name to algorithm display names
+    for (const [key, name] of Object.entries(algoDisplayNames)) {
+      if (displayName.includes(name)) {
+        return key;
+      }
+    }
+    return null;
+  };
+  
+  // Helper to add weights and performance table to PDF
+  const addWeightsAndPerformanceTable = (pdfDoc: any, methodData: OptimizationResult, pageWidth: number, margin: number, startY: number): number => {
+    let yOffset = startY;
+    
+    // Add weights section
+    pdfDoc.setFontSize(12);
+    pdfDoc.text('Portfolio Weights:', margin, yOffset);
+    yOffset += 6;
+    
+    // Add weights as a table
+    const weights = methodData.weights;
+    Object.entries(weights).forEach(([ticker, weight]) => {
+      pdfDoc.setFontSize(10);
+      pdfDoc.text(`${ticker}: ${(weight * 100).toFixed(2)}%`, margin + 5, yOffset);
+      yOffset += 5;
+    });
+    
+    yOffset += 8;
+    
+    // Add performance metrics
+    pdfDoc.setFontSize(12);
+    pdfDoc.text('Performance Metrics:', margin, yOffset);
+    yOffset += 6;
+    
+    const perf = methodData.performance;
+    const metrics = [
+      { label: 'Expected Return', value: `${(perf.expected_return * 100).toFixed(2)}%` },
+      { label: 'Volatility', value: `${(perf.volatility * 100).toFixed(2)}%` },
+      { label: 'Sharpe Ratio', value: perf.sharpe.toFixed(4) },
+      { label: 'Sortino Ratio', value: perf.sortino.toFixed(4) },
+      { label: 'Max Drawdown', value: `${(perf.max_drawdown * 100).toFixed(2)}%` },
+      { label: 'RoMaD', value: perf.romad.toFixed(4) },
+      { label: 'CAGR', value: `${(perf.cagr * 100).toFixed(2)}%` },
+      { label: 'Portfolio Beta', value: perf.portfolio_beta.toFixed(4) }
+    ];
+    
+    metrics.forEach(({ label, value }) => {
+      pdfDoc.setFontSize(10);
+      pdfDoc.text(`${label}: ${value}`, margin + 5, yOffset);
+      yOffset += 5;
+    });
+    
+    return yOffset + 10; // Return the new Y position with some padding
   };
 
   return (
