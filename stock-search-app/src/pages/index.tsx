@@ -347,12 +347,27 @@ const HomePage: React.FC = () => {
       loadingElement.innerHTML = '<div style="text-align: center;"><div style="font-size: 24px; margin-bottom: 10px;">Generating PDF...</div><div style="font-size: 14px;">This may take a few seconds</div></div>';
       document.body.appendChild(loadingElement);
 
+      // Create a temporary clone of the results, with the download button removed to avoid capturing it
       const resultsContainer = document.getElementById('optimization-results');
       if (!resultsContainer) {
         console.error('Results container not found');
         document.body.removeChild(loadingElement);
         return;
       }
+
+      // Clone the results container so we don't affect the displayed UI
+      const tempContainer = resultsContainer.cloneNode(true) as HTMLElement;
+      
+      // Hide the download button in the clone
+      const downloadButton = tempContainer.querySelector('[data-pdf-exclude="true"]');
+      if (downloadButton) {
+        downloadButton.parentNode?.removeChild(downloadButton);
+      }
+      
+      // Add the temporary container to document but keep it hidden
+      tempContainer.style.position = 'absolute';
+      tempContainer.style.left = '-9999px';
+      document.body.appendChild(tempContainer);
 
       // Calculate when the PDF was generated
       const now = new Date();
@@ -366,54 +381,195 @@ const HomePage: React.FC = () => {
         format: 'a4'
       });
 
-      // Add metadata
+      // Get page dimensions
       const pageWidth = pdfDoc.internal.pageSize.getWidth();
-      pdfDoc.setFontSize(16);
-      pdfDoc.text('Indian Stock Portfolio Optimization Results', pageWidth / 2, 15, { align: 'center' });
-      
-      pdfDoc.setFontSize(10);
-      pdfDoc.text(`Generated on: ${dateStr} at ${timeStr}`, pageWidth / 2, 22, { align: 'center' });
+      const pageHeight = pdfDoc.internal.pageSize.getHeight();
+      const margin = 10; // 10mm margin
+
+      // Add title page
+      pdfDoc.setFontSize(24);
+      pdfDoc.text('Portfolio Optimization Report', pageWidth / 2, 40, { align: 'center' });
       
       pdfDoc.setFontSize(12);
-      pdfDoc.text(`Stocks: ${selectedStocks.map(s => s.ticker).join(', ')}`, 10, 30);
-      pdfDoc.text(`Time Period: ${formatDate(optimizationResult.start_date)} to ${formatDate(optimizationResult.end_date)}`, 10, 37);
-      pdfDoc.text(`Risk-free Rate: ${(optimizationResult.risk_free_rate! * 100).toFixed(4)}%`, 10, 44);
+      pdfDoc.text(`Generated on: ${dateStr} at ${timeStr}`, pageWidth / 2, 50, { align: 'center' });
+      
+      pdfDoc.setFontSize(14);
+      pdfDoc.text('Selected Stocks:', pageWidth / 2, 70, { align: 'center' });
+      
+      // Add selected stocks in a formatted way
+      const stockList = selectedStocks.map(s => `${s.ticker} (${s.exchange})`).join(', ');
+      pdfDoc.setFontSize(12);
+      
+      // Handle long stock lists by wrapping text
+      const splitStocks = pdfDoc.splitTextToSize(stockList, pageWidth - (margin * 2));
+      pdfDoc.text(splitStocks, pageWidth / 2, 80, { align: 'center' });
+      
+      // Add period and risk-free rate
+      pdfDoc.setFontSize(12);
+      pdfDoc.text(`Time Period: ${formatDate(optimizationResult.start_date)} to ${formatDate(optimizationResult.end_date)}`, pageWidth / 2, 100, { align: 'center' });
+      pdfDoc.text(`Risk-free Rate: ${(optimizationResult.risk_free_rate! * 100).toFixed(4)}%`, pageWidth / 2, 110, { align: 'center' });
 
-      // Add the captured content
-      const canvas = await html2canvas(resultsContainer, {
-        scale: 1,
-        useCORS: true,
-        logging: false,
-        allowTaint: true
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      const imgWidth = pageWidth - 20; // 10mm margins on each side
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      // Add cumulative returns chart
+      pdfDoc.addPage();
+      pdfDoc.setFontSize(16);
+      pdfDoc.text('Cumulative Returns Over Time', pageWidth / 2, 20, { align: 'center' });
       
-      // Split across multiple pages if needed
-      const pageHeight = pdfDoc.internal.pageSize.getHeight();
-      let heightLeft = imgHeight;
-      let position = 55; // Start position after metadata
-      
-      // Add first page
-      pdfDoc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-      heightLeft -= (pageHeight - position);
-      
-      // Add additional pages if needed
-      while (heightLeft > 0) {
-        position = 0;
-        pdfDoc.addPage();
-        pdfDoc.addImage(
-          imgData, 
-          'PNG', 
-          10, 
-          position - (pageHeight - 55), 
-          imgWidth, 
-          imgHeight
-        );
-        heightLeft -= pageHeight;
+      const chartElement = document.querySelector('#cumulative-returns-chart canvas');
+      if (chartElement) {
+        const chartCanvas = await html2canvas(chartElement as HTMLElement, {
+          scale: 2,
+          useCORS: true,
+          logging: false
+        });
+        
+        const chartImgData = chartCanvas.toDataURL('image/png');
+        const chartImgWidth = pageWidth - (margin * 2);
+        const chartImgHeight = (chartCanvas.height * chartImgWidth) / chartCanvas.width;
+        
+        pdfDoc.addImage(chartImgData, 'PNG', margin, 30, chartImgWidth, chartImgHeight);
       }
+
+      // If there's a covariance heatmap, add it on its own page
+      if (optimizationResult.covariance_heatmap) {
+        pdfDoc.addPage();
+        pdfDoc.setFontSize(16);
+        pdfDoc.text('Variance-Covariance Matrix', pageWidth / 2, 20, { align: 'center' });
+        
+        // Create a temporary image element to get dimensions
+        const img = new Image();
+        img.src = `data:image/png;base64,${optimizationResult.covariance_heatmap}`;
+        
+        await new Promise((resolve) => {
+          img.onload = resolve;
+        });
+        
+        const covImgWidth = pageWidth - (margin * 2);
+        const covImgHeight = (img.height * covImgWidth) / img.width;
+        
+        pdfDoc.addImage(
+          `data:image/png;base64,${optimizationResult.covariance_heatmap}`, 
+          'PNG', 
+          margin, 
+          30, 
+          covImgWidth, 
+          covImgHeight
+        );
+      }
+
+      // Add each optimization method on its own page
+      const methodCards = tempContainer.querySelectorAll('.method-card');
+      
+      for (const card of Array.from(methodCards)) {
+        pdfDoc.addPage();
+        
+        // Get the method name from the card
+        const methodNameElement = card.querySelector('h5');
+        const methodName = methodNameElement ? methodNameElement.textContent || 'Optimization Method' : 'Optimization Method';
+        
+        pdfDoc.setFontSize(16);
+        pdfDoc.text(methodName, pageWidth / 2, 20, { align: 'center' });
+        
+        // Capture and add the card
+        const cardCanvas = await html2canvas(card as HTMLElement, {
+          scale: 2,
+          useCORS: true,
+          logging: false
+        });
+        
+        const cardImgData = cardCanvas.toDataURL('image/png');
+        const cardImgWidth = pageWidth - (margin * 2);
+        const cardImgHeight = (cardCanvas.height * cardImgWidth) / cardCanvas.width;
+        
+        // If the card is too tall for one page, add it to a separate page
+        if (cardImgHeight > pageHeight - 30) {
+          // Create a separate canvas that's shorter
+          const maxHeight = pageHeight - 30;
+          const topHalf = document.createElement('canvas');
+          topHalf.width = cardCanvas.width;
+          topHalf.height = cardCanvas.height / 2;
+          const topCtx = topHalf.getContext('2d');
+          if (topCtx) {
+            topCtx.drawImage(cardCanvas, 0, 0);
+            const topImgData = topHalf.toDataURL('image/png');
+            pdfDoc.addImage(topImgData, 'PNG', margin, 30, cardImgWidth, cardImgHeight / 2);
+          }
+          
+          // Add bottom half on next page
+          pdfDoc.addPage();
+          pdfDoc.setFontSize(12);
+          pdfDoc.text(`${methodName} (continued)`, pageWidth / 2, 15, { align: 'center' });
+          
+          const bottomHalf = document.createElement('canvas');
+          bottomHalf.width = cardCanvas.width;
+          bottomHalf.height = cardCanvas.height / 2;
+          const bottomCtx = bottomHalf.getContext('2d');
+          if (bottomCtx) {
+            bottomCtx.drawImage(cardCanvas, 0, -cardCanvas.height / 2);
+            const bottomImgData = bottomHalf.toDataURL('image/png');
+            pdfDoc.addImage(bottomImgData, 'PNG', margin, 20, cardImgWidth, cardImgHeight / 2);
+          }
+        } else {
+          // The card fits on a single page
+          pdfDoc.addImage(cardImgData, 'PNG', margin, 30, cardImgWidth, cardImgHeight);
+        }
+      }
+
+      // Add yearly returns table on its own page(s)
+      const yearlyReturnsTable = tempContainer.querySelector('.yearly-returns-table');
+      if (yearlyReturnsTable) {
+        pdfDoc.addPage();
+        pdfDoc.setFontSize(16);
+        pdfDoc.text('Yearly Stock Returns', pageWidth / 2, 20, { align: 'center' });
+        
+        const tableCanvas = await html2canvas(yearlyReturnsTable as HTMLElement, {
+          scale: 2,
+          useCORS: true,
+          logging: false
+        });
+        
+        const tableImgData = tableCanvas.toDataURL('image/png');
+        const tableImgWidth = pageWidth - (margin * 2);
+        const tableImgHeight = (tableCanvas.height * tableImgWidth) / tableCanvas.width;
+        
+        // If the table is too tall for one page, split it into parts
+        if (tableImgHeight > pageHeight - 30) {
+          // Create a separate canvas for each part
+          const numParts = Math.ceil(tableImgHeight / (pageHeight - 30));
+          const partHeight = tableCanvas.height / numParts;
+          
+          for (let i = 0; i < numParts; i++) {
+            if (i > 0) pdfDoc.addPage();
+            
+            // Add a header on continuation pages
+            if (i > 0) {
+              pdfDoc.setFontSize(12);
+              pdfDoc.text('Yearly Stock Returns (continued)', pageWidth / 2, 15, { align: 'center' });
+            }
+            
+            // Create a canvas for this part
+            const partCanvas = document.createElement('canvas');
+            partCanvas.width = tableCanvas.width;
+            partCanvas.height = partHeight;
+            const ctx = partCanvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(
+                tableCanvas, 
+                0, i * partHeight, tableCanvas.width, partHeight, 
+                0, 0, partCanvas.width, partCanvas.height
+              );
+              const partImgData = partCanvas.toDataURL('image/png');
+              const destY = i === 0 ? 30 : 20;
+              pdfDoc.addImage(partImgData, 'PNG', margin, destY, tableImgWidth, tableImgHeight / numParts);
+            }
+          }
+        } else {
+          // The table fits on a single page
+          pdfDoc.addImage(tableImgData, 'PNG', margin, 30, tableImgWidth, tableImgHeight);
+        }
+      }
+
+      // Remove the temporary element
+      document.body.removeChild(tempContainer);
 
       // Save the PDF
       pdfDoc.save(`portfolio_optimization_${dateStr.replace(/\//g, '-')}.pdf`);
@@ -424,7 +580,13 @@ const HomePage: React.FC = () => {
       console.error('Error generating PDF:', error);
       alert('Failed to generate PDF. Please try again.');
       
-      // Make sure to remove loading overlay in case of error
+      // Clean up any temporary elements
+      const tempContainer = document.querySelector('div[style*="position: absolute"][style*="left: -9999px"]');
+      if (tempContainer && tempContainer.parentNode) {
+        tempContainer.parentNode.removeChild(tempContainer);
+      }
+      
+      // Remove loading overlay
       const loadingElement = document.querySelector('div[style*="position: fixed"]');
       if (loadingElement && loadingElement.parentNode) {
         loadingElement.parentNode.removeChild(loadingElement);
@@ -597,7 +759,7 @@ const HomePage: React.FC = () => {
             </Typography>
             
             {/* Download Results Button - Moved here for better visibility */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }} data-pdf-exclude="true">
               <Button
                 variant="contained"
                 color="primary"
@@ -661,7 +823,7 @@ const HomePage: React.FC = () => {
               if (!methodData) return null;
               const perf = methodData.performance;
               return (
-                <Card key={methodKey} style={{ marginBottom: '1.5rem' }}>
+                <Card key={methodKey} style={{ marginBottom: '1.5rem' }} className="method-card">
                   <CardContent>
                     <Typography variant="h5" gutterBottom>
                       {algoDisplayNames[methodKey] || methodKey} Results
@@ -758,7 +920,7 @@ const HomePage: React.FC = () => {
               );
             })}
 
-            <div style={{ marginTop: '2rem' }}>
+            <div style={{ marginTop: '2rem' }} id="cumulative-returns-chart">
               <Typography variant="h5" align="center" gutterBottom>
                 Cumulative Returns Over Time
               </Typography>
@@ -766,11 +928,12 @@ const HomePage: React.FC = () => {
             </div>
 
             {optimizationResult!.stock_yearly_returns && (
-              <div style={{ marginTop: '2rem' }}>
+              <div style={{ marginTop: '2rem' }} className="yearly-returns-section">
                 <Typography variant="h5" align="center" gutterBottom>
                   Yearly Stock Returns
                 </Typography>
                 <Table
+                  className="yearly-returns-table"
                   sx={{
                     border: '1px solid black',
                     borderCollapse: 'collapse',
