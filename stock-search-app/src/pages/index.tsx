@@ -331,26 +331,60 @@ const HomePage: React.FC = () => {
   // Cache for storing generated PDFs to avoid regeneration
   const [pdfCache, setPdfCache] = useState<{[key: string]: string}>({});
 
+  // Canvas cache to eliminate redundant html2canvas calls for the same elements across regenerations
+  const canvasCache = useRef<Record<string, HTMLCanvasElement>>({});
+
+  // Define common html2canvas options to be used consistently
+  const commonCanvasOptions = {
+    scale: 1.5,
+    useCORS: true,
+    logging: false,
+    allowTaint: true,
+    backgroundColor: null,
+    imageTimeout: 0
+  };
+
+  // Helper function to render an element to canvas once and cache the result
+  const renderOnce = async (
+    el: HTMLElement,
+    key: string,
+    options: typeof commonCanvasOptions // Ensure consistent options are passed
+  ): Promise<HTMLCanvasElement> => {
+    if (!canvasCache.current[key]) {
+      console.log(`Rendering ${key} to canvas for the first time with options:`, options);
+      canvasCache.current[key] = await html2canvas(el, options);
+    } else {
+      console.log(`Using cached canvas for ${key}`);
+    }
+    return canvasCache.current[key];
+  };
+
+  // Clear canvas cache when optimization results change, so stale canvases aren't used
+  useEffect(() => {
+    if (optimizationResult) {
+      canvasCache.current = {};
+      console.log('Canvas cache cleared due to new optimization results or component mount');
+    }
+  }, [optimizationResult]);
+
   const generatePDF = async () => {
     if (!optimizationResult) return;
 
-    // Create a cache key based on selected stocks and optimization result
     const pdfCacheKey = selectedStocks.map(s => s.ticker).join('-') + '-' +
                      (optimizationResult.start_date || '') + '-' +
                      (optimizationResult.end_date || '');
 
-    // Check if we already have this PDF cached
     if (pdfCache[pdfCacheKey]) {
       const link = document.createElement('a');
       link.href = pdfCache[pdfCacheKey];
       link.download = `portfolio_optimization_${new Date().toISOString().split('T')[0]}.pdf`;
       link.click();
-      console.log('Using cached PDF');
+      console.log('Using cached PDF (full report)');
       return;
     }
 
     const startTime = performance.now();
-    console.log('Starting PDF generation...');
+    console.log('Starting PDF generation (full process)...');
 
     try {
       const loadingElement = document.createElement('div');
@@ -386,16 +420,6 @@ const HomePage: React.FC = () => {
       const pageHeight = pdfDoc.internal.pageSize.getHeight();
       const margin = 10;
 
-      // Common html2canvas options
-      const commonCanvasOptions = {
-        scale: 1.5,
-        useCORS: true,
-        logging: false,
-        allowTaint: true,
-        backgroundColor: null,
-        imageTimeout: 0
-      };
-
       // ----------- 1. TITLE PAGE -----------
       pdfDoc.setFontSize(24);
       pdfDoc.text('Portfolio Optimization Report', pageWidth / 2, 40, { align: 'center' });
@@ -410,21 +434,29 @@ const HomePage: React.FC = () => {
       pdfDoc.text(`Time Period: ${formatDate(optimizationResult.start_date)} to ${formatDate(optimizationResult.end_date)}`, pageWidth / 2, 100, { align: 'center' });
       pdfDoc.text(`Risk-free Rate: ${(optimizationResult.risk_free_rate! * 100).toFixed(4)}%`, pageWidth / 2, 110, { align: 'center' });
 
+
       // ----------- 2. OPTIMIZATION METHOD RESULTS -----------
       const resultsContainer = document.getElementById('optimization-results');
       if (resultsContainer) {
-        const methodCards = resultsContainer.querySelectorAll('.method-card');
+        const methodCards = Array.from(resultsContainer.querySelectorAll('.method-card'));
+        
         for (let i = 0; i < methodCards.length; i++) {
           const card = methodCards[i] as HTMLElement;
-          pdfDoc.addPage();
           const methodNameElement = card.querySelector('h5');
-          const methodName = methodNameElement ? methodNameElement.textContent || 'Optimization Method' : 'Optimization Method';
+          const methodName = methodNameElement ? methodNameElement.textContent || 'Optimization Method' : `Method ${i + 1}`;
+          
+          // Generate a unique key for the card for caching purposes
+          let cardCacheKey = `card-${methodName.replace(/\s+/g, '-')}`;
+          const cardIdAttr = card.getAttribute('id') || card.getAttribute('data-method-key');
+          if (cardIdAttr) cardCacheKey = `card-${cardIdAttr}`;
+          else cardCacheKey = `card-idx-${i}` // Fallback key if no specific identifier found
+
+          pdfDoc.addPage();
           pdfDoc.setFontSize(16);
           pdfDoc.text(methodName, pageWidth / 2, 20, { align: 'center' });
 
           try {
-            console.log(`Rendering card for ${methodName} directly with html2canvas`);
-            const cardCanvas = await html2canvas(card, commonCanvasOptions);
+            const cardCanvas = await renderOnce(card, cardCacheKey, commonCanvasOptions);
             const cardImgData = cardCanvas.toDataURL('image/png');
             const cardImgWidth = pageWidth - (margin * 2);
             const cardImgHeight = (cardCanvas.height * cardImgWidth) / cardCanvas.width;
@@ -436,7 +468,7 @@ const HomePage: React.FC = () => {
               pdfDoc.addImage(cardImgData, 'PNG', margin, 30, cardImgWidth, cardImgHeight);
             }
           } catch (err) {
-            console.error(`Failed to render card for ${methodName}:`, err);
+            console.error(`Failed to render card for ${methodName} (key: ${cardCacheKey}):`, err);
             pdfDoc.setFontSize(12);
             pdfDoc.text(`Unable to render optimization result for ${methodName}.`, margin, 40);
           }
@@ -444,14 +476,13 @@ const HomePage: React.FC = () => {
       }
 
       // ----------- 3. CUMULATIVE RETURNS CHART -----------
-      pdfDoc.addPage();
-      pdfDoc.setFontSize(16);
-      pdfDoc.text('Cumulative Returns Over Time', pageWidth / 2, 20, { align: 'center' });
       const chartElement = document.querySelector('#cumulative-returns-chart canvas');
       if (chartElement) {
+        pdfDoc.addPage();
+        pdfDoc.setFontSize(16);
+        pdfDoc.text('Cumulative Returns Over Time', pageWidth / 2, 20, { align: 'center' });
         try {
-          console.log('Rendering cumulative returns chart directly with html2canvas');
-          const chartCanvas = await html2canvas(chartElement as HTMLElement, commonCanvasOptions);
+          const chartCanvas = await renderOnce(chartElement as HTMLElement, 'cumulative-returns-chart', commonCanvasOptions);
           const chartImgData = chartCanvas.toDataURL('image/png');
           const chartImgWidth = pageWidth - (margin * 2);
           const chartImgHeight = (chartCanvas.height * chartImgWidth) / chartCanvas.width;
@@ -470,8 +501,7 @@ const HomePage: React.FC = () => {
         pdfDoc.setFontSize(16);
         pdfDoc.text('Yearly Stock Returns', pageWidth / 2, 20, { align: 'center' });
         try {
-          console.log('Rendering yearly returns table directly with html2canvas');
-          const tableCanvas = await html2canvas(yearlyReturnsSection as HTMLElement, commonCanvasOptions);
+          const tableCanvas = await renderOnce(yearlyReturnsSection as HTMLElement, 'yearly-returns-table', commonCanvasOptions);
           const tableImgData = tableCanvas.toDataURL('image/png');
           const tableImgWidth = pageWidth - (margin * 2);
           const tableImgHeight = (tableCanvas.height * tableImgWidth) / tableCanvas.width;
@@ -528,7 +558,7 @@ const HomePage: React.FC = () => {
       console.log(`PDF generation completed in ${(endTime - startTime).toFixed(0)}ms`);
 
     } catch (error) {
-      console.error('Error generating PDF:', error);
+      console.error('Error generating PDF (outer try/catch):', error);
       alert('Failed to generate PDF. Please try again.');
     } finally {
       const loadingOverlay = document.getElementById('pdf-loading-overlay');
