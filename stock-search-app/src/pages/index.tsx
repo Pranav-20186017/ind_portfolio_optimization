@@ -595,6 +595,20 @@ const HomePage: React.FC = () => {
             <Typography variant="h4" align="center" gutterBottom>
               Optimization Results
             </Typography>
+            
+            {/* Download Results Button - Moved here for better visibility */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={generatePDF}
+                startIcon={<GetApp />}
+                size="large"
+              >
+                Download Results as PDF
+              </Button>
+            </div>
+            
             <Typography variant="body1" align="center">
               Data Time Period: {formatDate(optimizationResult!.start_date)} to {formatDate(optimizationResult!.end_date)} <br></br>
               <div>
@@ -603,19 +617,6 @@ const HomePage: React.FC = () => {
                 </strong>
               </div>
             </Typography>
-
-            {/* Download Results Button */}
-            <div style={{ display: 'flex', justifyContent: 'center', margin: '1rem 0' }}>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={generatePDF}
-                startIcon={<GetApp />}
-                style={{ borderRadius: '20px' }}
-              >
-                Download Results as PDF
-              </Button>
-            </div>
 
             {/* Display warnings about failed methods if present */}
             {error !== null && (
