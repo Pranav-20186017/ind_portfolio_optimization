@@ -331,8 +331,38 @@ const HomePage: React.FC = () => {
   // Cache for storing generated PDFs to avoid regeneration
   const [pdfCache, setPdfCache] = useState<{[key: string]: string}>({});
   
-  // Image cache to avoid refetching base64 images
-  const imageCache = useRef<{[key: string]: HTMLImageElement}>({});
+  // Canvas cache to eliminate redundant html2canvas calls
+  const canvasCache = useRef<Record<string, HTMLCanvasElement>>({});
+
+  // Helper function to render an element to canvas once and cache the result
+  const renderOnce = async (
+    el: HTMLElement,
+    key: string,
+    options: any = {
+      scale: 1.5,
+      useCORS: true,
+      logging: false,
+      allowTaint: true,
+      backgroundColor: null,
+      imageTimeout: 0
+    }
+  ): Promise<HTMLCanvasElement> => {
+    if (!canvasCache.current[key]) {
+      console.log(`Rendering ${key} to canvas for the first time`);
+      canvasCache.current[key] = await html2canvas(el, options);
+    } else {
+      console.log(`Using cached canvas for ${key}`);
+    }
+    return canvasCache.current[key];
+  };
+
+  // Clear canvas cache when optimization results change
+  useEffect(() => {
+    if (optimizationResult) {
+      canvasCache.current = {};
+      console.log('Canvas cache cleared due to new optimization results');
+    }
+  }, [optimizationResult]);
 
   const generatePDF = async () => {
     if (!optimizationResult) return;
@@ -352,6 +382,10 @@ const HomePage: React.FC = () => {
       return;
     }
 
+    // Start timing PDF generation
+    const startTime = performance.now();
+    console.log('Starting PDF generation...');
+
     try {
       // Create loading overlay
       const loadingElement = document.createElement('div');
@@ -368,9 +402,6 @@ const HomePage: React.FC = () => {
       loadingElement.style.zIndex = '1000';
       loadingElement.innerHTML = '<div style="text-align: center;"><div style="font-size: 24px; margin-bottom: 10px;">Generating PDF...</div><div style="font-size: 14px;">This may take a few seconds</div></div>';
       document.body.appendChild(loadingElement);
-
-      // Pre-load some important images
-      await preloadImages();
       
       // Calculate when the PDF was generated with proper formatting
       const now = new Date();
@@ -421,8 +452,28 @@ const HomePage: React.FC = () => {
       if (resultsContainer) {
         const methodCards = resultsContainer.querySelectorAll('.method-card');
         
+        // Extract method keys for proper caching
+        const methodKeys: string[] = [];
+        methodCards.forEach(card => {
+          const nameElement = card.querySelector('h5');
+          const displayName = nameElement ? nameElement.textContent || '' : '';
+          let methodKey = '';
+          
+          // Find the matching method key in algoDisplayNames
+          for (const [key, name] of Object.entries(algoDisplayNames)) {
+            if (displayName.includes(name)) {
+              methodKey = key;
+              break;
+            }
+          }
+          
+          methodKeys.push(methodKey || `unknown-${Math.random().toString(36).substring(2, 7)}`);
+        });
+        
+        // Process each method card
         for (let i = 0; i < methodCards.length; i++) {
-          const card = methodCards[i];
+          const card = methodCards[i] as HTMLElement;
+          const methodKey = methodKeys[i];
           pdfDoc.addPage();
           
           // Get the method name
@@ -432,29 +483,29 @@ const HomePage: React.FC = () => {
           pdfDoc.setFontSize(16);
           pdfDoc.text(methodName, pageWidth / 2, 20, { align: 'center' });
           
-          // Capture each card - use existing rendered content
-          const cardCanvas = await html2canvas(card as HTMLElement, {
-            scale: 1.5, // Lower scale to reduce memory usage
-            useCORS: true,
-            logging: false,
-            allowTaint: true,
-            backgroundColor: null,
-            imageTimeout: 0 // Prevent timeouts
-          });
-          
-          // Add image to PDF
-          const cardImgData = cardCanvas.toDataURL('image/png');
-          const cardImgWidth = pageWidth - (margin * 2);
-          const cardImgHeight = (cardCanvas.height * cardImgWidth) / cardCanvas.width;
-          
-          // Scale image if too large
-          if (cardImgHeight > pageHeight - 30) {
-            const scaleFactor = (pageHeight - 30) / cardImgHeight;
-            const adjustedWidth = cardImgWidth * scaleFactor;
-            const adjustedHeight = cardImgHeight * scaleFactor;
-            pdfDoc.addImage(cardImgData, 'PNG', margin, 30, adjustedWidth, adjustedHeight);
-          } else {
-            pdfDoc.addImage(cardImgData, 'PNG', margin, 30, cardImgWidth, cardImgHeight);
+          try {
+            // Use the cached canvas or generate a new one
+            const cacheKey = `card-${methodKey}`;
+            const cardCanvas = await renderOnce(card, cacheKey);
+            
+            // Add image to PDF
+            const cardImgData = cardCanvas.toDataURL('image/png');
+            const cardImgWidth = pageWidth - (margin * 2);
+            const cardImgHeight = (cardCanvas.height * cardImgWidth) / cardCanvas.width;
+            
+            // Scale image if too large
+            if (cardImgHeight > pageHeight - 30) {
+              const scaleFactor = (pageHeight - 30) / cardImgHeight;
+              const adjustedWidth = cardImgWidth * scaleFactor;
+              const adjustedHeight = cardImgHeight * scaleFactor;
+              pdfDoc.addImage(cardImgData, 'PNG', margin, 30, adjustedWidth, adjustedHeight);
+            } else {
+              pdfDoc.addImage(cardImgData, 'PNG', margin, 30, cardImgWidth, cardImgHeight);
+            }
+          } catch (err) {
+            console.error(`Failed to render card for ${methodName}:`, err);
+            pdfDoc.setFontSize(12);
+            pdfDoc.text(`Unable to render optimization result for ${methodName}.`, margin, 40);
           }
         }
       }
@@ -464,23 +515,23 @@ const HomePage: React.FC = () => {
       pdfDoc.setFontSize(16);
       pdfDoc.text('Cumulative Returns Over Time', pageWidth / 2, 20, { align: 'center' });
       
-      // Use existing chart element without reloading
+      // Use existing chart element with caching
       const chartElement = document.querySelector('#cumulative-returns-chart canvas');
       if (chartElement) {
-        const chartCanvas = await html2canvas(chartElement as HTMLElement, {
-          scale: 1.5, // Reduced scale to improve performance
-          useCORS: true,
-          logging: false,
-          allowTaint: true, // Allow using images from the same origin
-          backgroundColor: null, // Preserve transparency
-          imageTimeout: 0 // Prevent timeouts
-        });
-        
-        const chartImgData = chartCanvas.toDataURL('image/png');
-        const chartImgWidth = pageWidth - (margin * 2);
-        const chartImgHeight = (chartCanvas.height * chartImgWidth) / chartCanvas.width;
-        
-        pdfDoc.addImage(chartImgData, 'PNG', margin, 30, chartImgWidth, chartImgHeight);
+        try {
+          // Use the cached canvas or generate a new one
+          const chartCanvas = await renderOnce(chartElement as HTMLElement, 'cumulative-returns-chart');
+          
+          const chartImgData = chartCanvas.toDataURL('image/png');
+          const chartImgWidth = pageWidth - (margin * 2);
+          const chartImgHeight = (chartCanvas.height * chartImgWidth) / chartCanvas.width;
+          
+          pdfDoc.addImage(chartImgData, 'PNG', margin, 30, chartImgWidth, chartImgHeight);
+        } catch (err) {
+          console.error('Failed to render cumulative returns chart:', err);
+          pdfDoc.setFontSize(12);
+          pdfDoc.text('Unable to render cumulative returns chart.', margin, 40);
+        }
       }
 
       // ----------- 4. YEARLY RETURNS TABLE -----------
@@ -491,14 +542,8 @@ const HomePage: React.FC = () => {
         pdfDoc.text('Yearly Stock Returns', pageWidth / 2, 20, { align: 'center' });
         
         try {
-          const tableCanvas = await html2canvas(yearlyReturnsSection as HTMLElement, {
-            scale: 1.5, // Lower scale for better performance
-            useCORS: true,
-            logging: false,
-            allowTaint: true,
-            backgroundColor: null,
-            imageTimeout: 0 // Prevent timeouts
-          });
+          // Use the cached canvas or generate a new one
+          const tableCanvas = await renderOnce(yearlyReturnsSection as HTMLElement, 'yearly-returns-table');
           
           const tableImgData = tableCanvas.toDataURL('image/png');
           const tableImgWidth = pageWidth - (margin * 2);
@@ -531,18 +576,24 @@ const HomePage: React.FC = () => {
         pdfDoc.setFontSize(16);
         pdfDoc.text('Variance-Covariance Matrix', pageWidth / 2, 20, { align: 'center' });
         
+        // Use the base64 data directly (no need for html2canvas)
         const covImgWidth = pageWidth - (margin * 2);
         const covImgHeight = covImgWidth * 0.8; // Approximate aspect ratio
         
-        // Use the base64 data directly without any network requests
-        pdfDoc.addImage(
-          `data:image/png;base64,${optimizationResult.covariance_heatmap}`, 
-          'PNG', 
-          margin, 
-          30, 
-          covImgWidth, 
-          covImgHeight
-        );
+        try {
+          pdfDoc.addImage(
+            `data:image/png;base64,${optimizationResult.covariance_heatmap}`, 
+            'PNG', 
+            margin, 
+            30, 
+            covImgWidth, 
+            covImgHeight
+          );
+        } catch (err) {
+          console.error('Failed to add covariance heatmap to PDF:', err);
+          pdfDoc.setFontSize(12);
+          pdfDoc.text('Unable to render variance-covariance matrix.', margin, 40);
+        }
       }
       
       // Generate PDF as data URL
@@ -560,6 +611,10 @@ const HomePage: React.FC = () => {
       downloadLink.download = `portfolio_optimization_${now.toISOString().split('T')[0]}.pdf`;
       downloadLink.click();
       
+      // Log generation time
+      const endTime = performance.now();
+      console.log(`PDF generation completed in ${(endTime - startTime).toFixed(0)}ms`);
+      
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Failed to generate PDF. Please try again.');
@@ -570,39 +625,6 @@ const HomePage: React.FC = () => {
         loadingOverlay.remove();
       }
     }
-  };
-
-  // Simple helper to preload important images
-  const preloadImages = async () => {
-    if (!optimizationResult) return;
-    
-    const imagesToPreload: string[] = [];
-    
-    // Preload covariance heatmap
-    if (optimizationResult.covariance_heatmap) {
-      imagesToPreload.push(`data:image/png;base64,${optimizationResult.covariance_heatmap}`);
-    }
-    
-    // Preload all images
-    await Promise.all(imagesToPreload.map(src => {
-      return new Promise<void>((resolve) => {
-        if (imageCache.current[src]) {
-          resolve();
-          return;
-        }
-        
-        const img = new Image();
-        img.onload = () => {
-          imageCache.current[src] = img;
-          resolve();
-        };
-        img.onerror = () => {
-          console.error('Failed to preload image');
-          resolve();
-        };
-        img.src = src;
-      });
-    }));
   };
 
   return (
