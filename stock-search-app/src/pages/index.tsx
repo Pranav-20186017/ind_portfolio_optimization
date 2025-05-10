@@ -374,6 +374,7 @@ const HomePage: React.FC = () => {
                      (optimizationResult.start_date || '') + '-' +
                      (optimizationResult.end_date || '');
 
+    // If we have a cached PDF, use it immediately without showing loading overlay
     if (pdfCache[pdfCacheKey]) {
       const link = document.createElement('a');
       link.href = pdfCache[pdfCacheKey];
@@ -386,22 +387,23 @@ const HomePage: React.FC = () => {
     const startTime = performance.now();
     console.log('Starting PDF generation (full process)...');
 
-    try {
-      const loadingElement = document.createElement('div');
-      loadingElement.setAttribute('id', 'pdf-loading-overlay');
-      loadingElement.style.position = 'fixed';
-      loadingElement.style.top = '0';
-      loadingElement.style.left = '0';
-      loadingElement.style.width = '100%';
-      loadingElement.style.height = '100%';
-      loadingElement.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
-      loadingElement.style.display = 'flex';
-      loadingElement.style.justifyContent = 'center';
-      loadingElement.style.alignItems = 'center';
-      loadingElement.style.zIndex = '1000';
-      loadingElement.innerHTML = '<div style="text-align: center;"><div style="font-size: 24px; margin-bottom: 10px;">Generating PDF...</div><div style="font-size: 14px;">This may take a few seconds</div></div>';
-      document.body.appendChild(loadingElement);
+    // Only show loading overlay for new report generation
+    const loadingElement = document.createElement('div');
+    loadingElement.setAttribute('id', 'pdf-loading-overlay');
+    loadingElement.style.position = 'fixed';
+    loadingElement.style.top = '0';
+    loadingElement.style.left = '0';
+    loadingElement.style.width = '100%';
+    loadingElement.style.height = '100%';
+    loadingElement.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+    loadingElement.style.display = 'flex';
+    loadingElement.style.justifyContent = 'center';
+    loadingElement.style.alignItems = 'center';
+    loadingElement.style.zIndex = '1000';
+    loadingElement.innerHTML = '<div style="text-align: center;"><div style="font-size: 24px; margin-bottom: 10px;">Generating PDF...</div><div style="font-size: 14px;">This may take a few seconds</div></div>';
+    document.body.appendChild(loadingElement);
 
+    try {
       const now = new Date();
       const dateOptions: Intl.DateTimeFormatOptions = {
         year: 'numeric', month: 'long', day: 'numeric',
