@@ -117,9 +117,10 @@ const HomePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<APIError | null>(null);
   const [selectedBenchmark, setSelectedBenchmark] = useState<BenchmarkName>(BenchmarkName.nifty);
+  const [selectedExchange, setSelectedExchange] = useState<ExchangeEnum | null>(null);
 
-  // Default stocks to show initially
-  const defaultStocks: StockOption[] = [
+  // Default stocks to show initially - NSE
+  const defaultNSEStocks: StockOption[] = [
     { ticker: 'TCS', name: 'Tata Consultancy Services Ltd', exchange: 'NSE' },
     { ticker: 'INFY', name: 'Infosys Ltd', exchange: 'NSE' },
     { ticker: 'RELIANCE', name: 'Reliance Industries Ltd', exchange: 'NSE' },
@@ -127,7 +128,30 @@ const HomePage: React.FC = () => {
     { ticker: 'WEALTH', name: 'Wealth First Portfolio Managers Ltd', exchange: 'NSE' }
   ];
 
-  const canSubmit = selectedStocks.length >= 2 && selectedAlgorithms.length >= 1;
+  // Default stocks to show initially - BSE
+  const defaultBSEStocks: StockOption[] = [
+    { ticker: 'TCS', name: 'Tata Consultancy Services Ltd', exchange: 'BSE' },
+    { ticker: 'INFY', name: 'Infosys Ltd', exchange: 'BSE' },
+    { ticker: 'RELIANCE', name: 'Reliance Industries Ltd', exchange: 'BSE' },
+    { ticker: 'ABB', name: 'ABB India Ltd', exchange: 'BSE' },
+    { ticker: 'PAUSHAK', name: 'Paushak Ltd', exchange: 'BSE' }
+  ];
+
+  // Get default stocks based on selected exchange
+  const getDefaultStocks = () => {
+    if (!selectedExchange) return [];
+    return selectedExchange === ExchangeEnum.NSE ? defaultNSEStocks : defaultBSEStocks;
+  };
+
+  // Get available benchmarks based on selected exchange
+  const getAvailableBenchmarks = () => {
+    if (!selectedExchange) return [];
+    return selectedExchange === ExchangeEnum.NSE 
+      ? [BenchmarkName.nifty, BenchmarkName.bank_nifty]
+      : [BenchmarkName.sensex];
+  };
+
+  const canSubmit = selectedStocks.length >= 2 && selectedAlgorithms.length >= 1 && selectedExchange !== null;
   let submitError = '';
   if (selectedStocks.length < 2 && selectedAlgorithms.length < 1) {
     submitError = 'Please select at least 2 stocks and 1 optimization method.';
@@ -170,22 +194,27 @@ const HomePage: React.FC = () => {
   const debouncedFilter = useCallback(
     debounce((input: string) => {
       if (!input) {
-        setFilteredOptions(defaultStocks);
+        setFilteredOptions(getDefaultStocks());
         return;
       }
       const results = fuse.search(input);
-      setFilteredOptions(results.slice(0, 50).map((res) => res.item));
+      // Filter results based on selected exchange
+      const filteredResults = results
+        .map((res) => res.item)
+        .filter((item) => !selectedExchange || item.exchange === selectedExchange)
+        .slice(0, 50);
+      setFilteredOptions(filteredResults);
     }, 300),
-    [fuse]
+    [fuse, selectedExchange]
   );
 
   useEffect(() => {
     if (!inputValue) {
-      setFilteredOptions(defaultStocks);
+      setFilteredOptions(getDefaultStocks());
     } else {
       debouncedFilter(inputValue);
     }
-  }, [inputValue, debouncedFilter]);
+  }, [inputValue, debouncedFilter, selectedExchange]);
 
   const handleAddStock = (event: any, newValue: StockOption | null) => {
     if (newValue) {
@@ -612,14 +641,50 @@ const HomePage: React.FC = () => {
     }
   };
 
+  // Reset selections when exchange changes
+  useEffect(() => {
+    setSelectedStocks([]);
+    setInputValue('');
+    setSelectedAlgorithms([]);
+    setSelectedCLA(claSubOptions[2]);
+    setOptimizationResult(null);
+    setError(null);
+    
+    // Set default benchmark based on exchange
+    if (selectedExchange === ExchangeEnum.NSE) {
+      setSelectedBenchmark(BenchmarkName.nifty);
+    } else if (selectedExchange === ExchangeEnum.BSE) {
+      setSelectedBenchmark(BenchmarkName.sensex);
+    }
+  }, [selectedExchange]);
+
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <Typography variant="h3" align="center" gutterBottom>
         Indian Stock Portfolio Optimization
       </Typography>
 
-      {/* Stock Search Section */}
+      {/* Exchange Selection Section */}
       <div className="mb-6">
+        <Typography variant="h5" gutterBottom>
+          Select Exchange
+        </Typography>
+        <FormControl fullWidth variant="outlined" style={{ maxWidth: 600 }}>
+          <InputLabel id="exchange-select-label">Choose Exchange</InputLabel>
+          <Select
+            labelId="exchange-select-label"
+            value={selectedExchange || ''}
+            onChange={(e) => setSelectedExchange(e.target.value as ExchangeEnum)}
+            label="Choose Exchange"
+          >
+            <MenuItem value={ExchangeEnum.NSE}>NSE</MenuItem>
+            <MenuItem value={ExchangeEnum.BSE}>BSE</MenuItem>
+          </Select>
+        </FormControl>
+      </div>
+
+      {/* Stock Search Section */}
+      <div className="mb-6" style={{ opacity: selectedExchange ? 1 : 0.5, pointerEvents: selectedExchange ? 'auto' : 'none' }}>
         <Typography variant="h5" gutterBottom>
           Search and Select Stocks
         </Typography>
@@ -629,7 +694,30 @@ const HomePage: React.FC = () => {
           onChange={handleAddStock}
           inputValue={inputValue}
           onInputChange={(e, v) => setInputValue(v)}
-          renderInput={(params) => <TextField {...params} label="Search Stock" variant="outlined" />}
+          renderInput={(params) => (
+            <TextField 
+              {...params} 
+              label="Search Stock" 
+              variant="outlined"
+              placeholder="Type to search stocks..."
+              helperText="Start typing to search for stocks"
+              InputProps={{
+                ...params.InputProps,
+                sx: {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: inputValue ? 'inherit' : 'primary.main',
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'primary.main',
+                  },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'primary.main',
+                    borderWidth: 2,
+                  },
+                },
+              }}
+            />
+          )}
           style={{ width: '100%', maxWidth: 600 }}
           openOnFocus={true}
           filterOptions={(x) => x}
@@ -652,7 +740,7 @@ const HomePage: React.FC = () => {
       </div>
 
       {/* Algorithm Selection Section */}
-      <div className="mb-6">
+      <div className="mb-6" style={{ opacity: selectedExchange ? 1 : 0.5, pointerEvents: selectedExchange ? 'auto' : 'none' }}>
         <Typography variant="h5" gutterBottom>
           Select Optimization Algorithms
         </Typography>
@@ -702,7 +790,7 @@ const HomePage: React.FC = () => {
       </div>
 
       {/* Benchmark Selection Section */}
-      <div className="mb-6">
+      <div className="mb-6" style={{ opacity: selectedExchange ? 1 : 0.5, pointerEvents: selectedExchange ? 'auto' : 'none' }}>
         <Typography variant="h5" gutterBottom>
           Select Benchmark Index
         </Typography>
@@ -714,7 +802,7 @@ const HomePage: React.FC = () => {
             onChange={(e) => setSelectedBenchmark(e.target.value as BenchmarkName)}
             label="Choose Benchmark"
           >
-            {Object.values(BenchmarkName).map((benchmark) => (
+            {getAvailableBenchmarks().map((benchmark) => (
               <MenuItem key={benchmark} value={benchmark}>
                 {benchmark === BenchmarkName.bank_nifty 
                   ? 'Bank Nifty'
