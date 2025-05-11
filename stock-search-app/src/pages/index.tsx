@@ -415,31 +415,31 @@ const HomePage: React.FC = () => {
     const labels = res.dates.map((d) => new Date(d).toLocaleDateString());
     const datasets = [];
     if (res.cumulative_returns.MVO?.length) {
-      datasets.push({ label: 'Mean-Variance Optimization', data: res.cumulative_returns.MVO, borderColor: 'blue', fill: false, pointRadius: 0 });
+      datasets.push({ label: 'Mean-Variance Optimization', data: res.cumulative_returns.MVO, borderColor: 'blue', fill: false, pointRadius: 0, borderWidth: 1.5 });
     }
     if (res.cumulative_returns.MinVol?.length) {
-      datasets.push({ label: 'Minimum Volatility', data: res.cumulative_returns.MinVol, borderColor: 'green', fill: false, pointRadius: 0 });
+      datasets.push({ label: 'Minimum Volatility', data: res.cumulative_returns.MinVol, borderColor: 'green', fill: false, pointRadius: 0, borderWidth: 1.5 });
     }
     if (res.cumulative_returns.MaxQuadraticUtility?.length) {
-      datasets.push({ label: 'Max Quadratic Utility', data: res.cumulative_returns.MaxQuadraticUtility, borderColor: 'purple', fill: false, pointRadius: 0 });
+      datasets.push({ label: 'Max Quadratic Utility', data: res.cumulative_returns.MaxQuadraticUtility, borderColor: 'purple', fill: false, pointRadius: 0, borderWidth: 1.5 });
     }
     if (res.cumulative_returns.EquiWeighted?.length) {
-      datasets.push({ label: 'Equally Weighted', data: res.cumulative_returns.EquiWeighted, borderColor: 'orange', fill: false, pointRadius: 0 });
+      datasets.push({ label: 'Equally Weighted', data: res.cumulative_returns.EquiWeighted, borderColor: 'orange', fill: false, pointRadius: 0, borderWidth: 1.5 });
     }
     if (res.cumulative_returns.CriticalLineAlgorithm_MVO?.length) {
-      datasets.push({ label: 'CLA (MVO)', data: res.cumulative_returns.CriticalLineAlgorithm_MVO, borderColor: 'magenta', fill: false, pointRadius: 0 });
+      datasets.push({ label: 'CLA (MVO)', data: res.cumulative_returns.CriticalLineAlgorithm_MVO, borderColor: 'magenta', fill: false, pointRadius: 0, borderWidth: 1.5 });
     }
     if (res.cumulative_returns.CriticalLineAlgorithm_MinVol?.length) {
-      datasets.push({ label: 'CLA (MinVol)', data: res.cumulative_returns.CriticalLineAlgorithm_MinVol, borderColor: 'teal', fill: false, pointRadius: 0 });
+      datasets.push({ label: 'CLA (MinVol)', data: res.cumulative_returns.CriticalLineAlgorithm_MinVol, borderColor: 'teal', fill: false, pointRadius: 0, borderWidth: 1.5 });
     }
     if (res.cumulative_returns.HRP?.length) {
-      datasets.push({ label: 'Hierarchical Risk Parity (HRP)', data: res.cumulative_returns.HRP, borderColor: 'brown', fill: false, pointRadius: 0 });
+      datasets.push({ label: 'Hierarchical Risk Parity (HRP)', data: res.cumulative_returns.HRP, borderColor: 'brown', fill: false, pointRadius: 0, borderWidth: 1.5 });
     }
     if (res.cumulative_returns.MinCVaR?.length) {
-      datasets.push({ label: 'Minimum Conditional VaR (MCVar)', data: res.cumulative_returns.MinCVaR, borderColor: 'cyan', fill: false, pointRadius: 0 });
+      datasets.push({ label: 'Minimum Conditional VaR (MCVar)', data: res.cumulative_returns.MinCVaR, borderColor: 'cyan', fill: false, pointRadius: 0, borderWidth: 1.5 });
     }
     if (res.cumulative_returns.MinCDaR?.length) {
-      datasets.push({ label: 'Minimum Conditional Drawdown at Risk (CDaR)', data: res.cumulative_returns.MinCDaR, borderColor: '#800080', fill: false, pointRadius: 0 }); // Dark purple
+      datasets.push({ label: 'Minimum Conditional Drawdown at Risk (CDaR)', data: res.cumulative_returns.MinCDaR, borderColor: '#800080', fill: false, pointRadius: 0, borderWidth: 1.5 }); // Dark purple
     }
     
     // Add benchmark returns with dashed line and distinct colors
@@ -469,7 +469,8 @@ const HomePage: React.FC = () => {
         borderColor: benchmarkColor,
         borderDash: [5, 5],
         fill: false,
-        pointRadius: 0
+        pointRadius: 0,
+        borderWidth: 1.5
       });
     }
     
