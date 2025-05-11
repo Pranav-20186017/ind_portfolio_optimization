@@ -308,6 +308,11 @@ const HomePage: React.FC = () => {
     }
   }, [inputValue, debouncedFilter, selectedExchange]);
 
+  // Add new useEffect to handle exchange changes
+  useEffect(() => {
+    setFilteredOptions(getDefaultStocks());
+  }, [selectedExchange]);
+
   const handleAddStock = (event: any, newValue: StockOption | null) => {
     if (newValue) {
       const duplicate = selectedStocks.some(
