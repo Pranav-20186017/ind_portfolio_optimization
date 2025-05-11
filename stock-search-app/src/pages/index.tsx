@@ -703,7 +703,9 @@ const HomePage: React.FC = () => {
           >
             {Object.values(BenchmarkName).map((benchmark) => (
               <MenuItem key={benchmark} value={benchmark}>
-                {benchmark.charAt(0).toUpperCase() + benchmark.slice(1).replace('_', ' ')}
+                {benchmark === BenchmarkName.bank_nifty 
+                  ? 'Bank Nifty'
+                  : benchmark.charAt(0).toUpperCase() + benchmark.slice(1).replace('_', ' ')}
               </MenuItem>
             ))}
           </Select>
