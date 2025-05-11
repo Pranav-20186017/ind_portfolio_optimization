@@ -118,6 +118,15 @@ const HomePage: React.FC = () => {
   const [error, setError] = useState<APIError | null>(null);
   const [selectedBenchmark, setSelectedBenchmark] = useState<BenchmarkName>(BenchmarkName.nifty);
 
+  // Default stocks to show initially
+  const defaultStocks: StockOption[] = [
+    { ticker: 'TCS', name: 'Tata Consultancy Services Ltd', exchange: 'NSE' },
+    { ticker: 'INFY', name: 'Infosys Ltd', exchange: 'NSE' },
+    { ticker: 'RELIANCE', name: 'Reliance Industries Ltd', exchange: 'NSE' },
+    { ticker: 'ABB', name: 'ABB India Ltd', exchange: 'NSE' },
+    { ticker: 'WEALTH', name: 'Wealth First Portfolio Managers Ltd', exchange: 'NSE' }
+  ];
+
   const canSubmit = selectedStocks.length >= 2 && selectedAlgorithms.length >= 1;
   let submitError = '';
   if (selectedStocks.length < 2 && selectedAlgorithms.length < 1) {
@@ -161,7 +170,7 @@ const HomePage: React.FC = () => {
   const debouncedFilter = useCallback(
     debounce((input: string) => {
       if (!input) {
-        setFilteredOptions([]);
+        setFilteredOptions(defaultStocks);
         return;
       }
       const results = fuse.search(input);
@@ -171,7 +180,11 @@ const HomePage: React.FC = () => {
   );
 
   useEffect(() => {
-    debouncedFilter(inputValue);
+    if (!inputValue) {
+      setFilteredOptions(defaultStocks);
+    } else {
+      debouncedFilter(inputValue);
+    }
   }, [inputValue, debouncedFilter]);
 
   const handleAddStock = (event: any, newValue: StockOption | null) => {
@@ -618,7 +631,7 @@ const HomePage: React.FC = () => {
           onInputChange={(e, v) => setInputValue(v)}
           renderInput={(params) => <TextField {...params} label="Search Stock" variant="outlined" />}
           style={{ width: '100%', maxWidth: 600 }}
-          openOnFocus={false}
+          openOnFocus={true}
           filterOptions={(x) => x}
           clearOnBlur={false}
           value={null}
