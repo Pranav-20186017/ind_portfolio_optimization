@@ -315,6 +315,21 @@ class CLAOptimizationMethod(str, Enum):
     MIN_VOL = "MinVol"
     BOTH = "Both"
 
+class BenchmarkName(str, Enum):
+    nifty      = "nifty"
+    sensex     = "sensex"
+    bank_nifty = "bank_nifty"
+
+# Add this after the BenchmarkName enum definition
+BENCHMARK_TICKERS = {
+    BenchmarkName.nifty: "^NSEI",
+    BenchmarkName.sensex: "^BSESN",
+    BenchmarkName.bank_nifty: "^NSEBANK"
+}
+
+class BenchmarkReturn(BaseModel):
+    name: BenchmarkName
+    returns: List[float]   
 class PortfolioPerformance(BaseModel):
     # From PyPortfolioOpt
     expected_return: float
@@ -346,7 +361,7 @@ class PortfolioOptimizationResponse(BaseModel):
     end_date: datetime
     cumulative_returns: Dict[str, List[Optional[float]]]
     dates: List[datetime]
-    nifty_returns: List[float]
+    benchmark_returns: List[BenchmarkReturn]
     stock_yearly_returns: Optional[Dict[str, Dict[str, float]]]
     covariance_heatmap: Optional[str] = None
     risk_free_rate : float
@@ -360,6 +375,7 @@ class TickerRequest(BaseModel):
     stocks: List[StockItem]
     methods: List[OptimizationMethod] = [OptimizationMethod.MVO]
     cla_method: Optional[CLAOptimizationMethod] = CLAOptimizationMethod.BOTH
+    benchmark: BenchmarkName = BenchmarkName.nifty  # Default to Nifty
 
 ########################################
 # Custom EquiWeighted Optimizer
@@ -419,10 +435,10 @@ def format_tickers(stocks: List[StockItem]) -> List[str]:
             raise ValueError(f"Invalid exchange: {stock.exchange}")
     return formatted_tickers
 
-def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
+def fetch_and_align_data(tickers: List[str], benchmark_ticker: str) -> Tuple[pd.DataFrame, pd.Series]:
     """
-    Download & align data for each ticker, plus Nifty index.
-    Returns (combined_df, nifty_close).
+    Download & align data for each ticker, plus benchmark index.
+    Returns (combined_df, benchmark_close).
     """
     data = {}
     failed_tickers = []
@@ -459,27 +475,27 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
     combined_df = pd.concat(filtered_data.values(), axis=1, keys=filtered_data.keys())
     combined_df.dropna(inplace=True)
 
-    # Fetch Nifty data
+    # Fetch benchmark data
     try:
-        nifty_df = yf.download('^NSEI', start=min_date, multi_level_index=False, progress=False, auto_adjust=True)['Close'].dropna()
+        benchmark_df = yf.download(benchmark_ticker, start=min_date, multi_level_index=False, progress=False, auto_adjust=True)['Close'].dropna()
     except Exception as e:
-        logger.exception("Error fetching Nifty index: %s", str(e))
+        logger.exception("Error fetching benchmark index: %s", str(e))
         raise APIError(
             code=ErrorCode.DATA_FETCH_ERROR,
-            message="Error fetching market index data (Nifty)",
+            message="Error fetching market index data",
             status_code=500,
             details={"error": str(e)}
         )
     
-    if nifty_df.empty:
+    if benchmark_df.empty:
         raise APIError(
             code=ErrorCode.NO_DATA_FOUND,
-            message="No data available for Nifty index",
+            message="No data available for benchmark index",
             status_code=500
         )
     
     # Align with market index
-    common_dates = combined_df.index.intersection(nifty_df.index)
+    common_dates = combined_df.index.intersection(benchmark_df.index)
     if len(common_dates) == 0:
         raise APIError(
             code=ErrorCode.INVALID_DATE_RANGE,
@@ -487,18 +503,18 @@ def fetch_and_align_data(tickers: List[str]) -> Tuple[pd.DataFrame, pd.Series]:
             status_code=400,
             details={
                 "stock_date_range": [str(combined_df.index.min().date()), str(combined_df.index.max().date())],
-                "index_date_range": [str(nifty_df.index.min().date()), str(nifty_df.index.max().date())]
+                "index_date_range": [str(benchmark_df.index.min().date()), str(benchmark_df.index.max().date())]
             }
         )
         
     combined_df = combined_df.loc[common_dates]
-    nifty_df = nifty_df.loc[common_dates]
+    benchmark_df = benchmark_df.loc[common_dates]
     
     # Add warning if some tickers failed
     if failed_tickers:
         logger.warning("Some tickers failed to fetch data: %s", failed_tickers)
     
-    return combined_df, nifty_df
+    return combined_df, benchmark_df
 
 def freedman_diaconis_bins(port_returns: pd.Series) -> int:
     n = len(port_returns)
@@ -524,7 +540,7 @@ def freedman_diaconis_bins(port_returns: pd.Series) -> int:
     logger.info("No. of bins computed based on Freedman-Diaconis rule: %d", bins)
     return bins if bins > 0 else 50
 
-def compute_custom_metrics(port_returns: pd.Series, nifty_df: pd.Series, risk_free_rate: float = 0.05) -> Dict[str, float]:
+def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, risk_free_rate: float = 0.05) -> Dict[str, float]:
     """
     Compute custom daily-return metrics:
       - sortino
@@ -573,10 +589,10 @@ def compute_custom_metrics(port_returns: pd.Series, nifty_df: pd.Series, risk_fr
         cagr = 0.0
 
     # Portfolio Beta
-    nifty_ret = nifty_df.pct_change().dropna()
+    benchmark_ret = benchmark_df.pct_change().dropna()
     merged_returns = pd.DataFrame({
         'Portfolio': port_returns,
-        'Nifty': nifty_ret
+        'Benchmark': benchmark_ret
     }).dropna()
     
     # Initialize portfolio_beta with a default value
@@ -587,7 +603,7 @@ def compute_custom_metrics(port_returns: pd.Series, nifty_df: pd.Series, risk_fr
         risk_free_daily = risk_free_rate / ann_factor
         # Calculate excess returns
         excess_portfolio = merged_returns['Portfolio'] - risk_free_daily
-        excess_market = merged_returns['Nifty'] - risk_free_daily
+        excess_market = merged_returns['Benchmark'] - risk_free_daily
         
         # Check if we have enough variation to calculate beta
         if excess_market.var() > 1e-9:
@@ -596,7 +612,7 @@ def compute_custom_metrics(port_returns: pd.Series, nifty_df: pd.Series, risk_fr
             
             try:
                 model = sm.OLS(excess_portfolio, X).fit()
-                portfolio_beta = model.params['Nifty']
+                portfolio_beta = model.params['Benchmark']
             except Exception as e:
                 logger.warning(f"Error calculating beta: {e}")
                 # Keep default beta of 0.0
@@ -678,7 +694,7 @@ def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
     
     return dist_b64, dd_b64
 
-def run_optimization(method: OptimizationMethod, mu, S, returns, nifty_df, risk_free_rate=0.05):
+def run_optimization(method: OptimizationMethod, mu, S, returns, benchmark_df, risk_free_rate=0.05):
     """Run a specific optimization method (non-CLA, non-HRP) and return the results"""
     try:
         if method == OptimizationMethod.MVO:
@@ -724,7 +740,7 @@ def run_optimization(method: OptimizationMethod, mu, S, returns, nifty_df, risk_
         port_returns = returns.dot(w_series)
         
         # Compute custom metrics
-        custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
+        custom = compute_custom_metrics(port_returns, benchmark_df, risk_free_rate)
         
         # Generate plots
         dist_b64, dd_b64 = generate_plots(port_returns, method.value)
@@ -765,7 +781,7 @@ def run_optimization(method: OptimizationMethod, mu, S, returns, nifty_df, risk_
         logger.exception("Error in %s optimization", method.value)
         return None, None
     
-def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
+def run_optimization_MIN_CVAR(mu, returns, benchmark_df, risk_free_rate=0.05):
     try:
         # Check if the MOSEK license is configured
         mosek_env_var = os.environ.get('MOSEKLM_LICENSE_FILE', None)
@@ -813,7 +829,7 @@ def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
         port_returns = returns.dot(w_series)
         
         # Compute custom metrics
-        custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
+        custom = compute_custom_metrics(port_returns, benchmark_df, risk_free_rate)
         
         # Generate plots
         dist_b64, dd_b64 = generate_plots(port_returns, OptimizationMethod.MIN_CVAR.value)
@@ -865,7 +881,7 @@ def run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate=0.05):
         logger.exception("Error in MIN_CVAR optimization")
         return None, None
 
-def run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate=0.05):
+def run_optimization_MIN_CDAR(mu, returns, benchmark_df, risk_free_rate=0.05):
     try:
         # Check if the MOSEK license is configured
         mosek_env_var = os.environ.get('MOSEKLM_LICENSE_FILE', None)
@@ -913,7 +929,7 @@ def run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate=0.05):
         port_returns = returns.dot(w_series)
         
         # Compute custom metrics
-        custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
+        custom = compute_custom_metrics(port_returns, benchmark_df, risk_free_rate)
         
         # Generate plots
         dist_b64, dd_b64 = generate_plots(port_returns, OptimizationMethod.MIN_CDAR.value)
@@ -966,7 +982,7 @@ def run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate=0.05):
         return None, None
 
 
-def run_optimization_CLA(sub_method: str, mu, S, returns, nifty_df, risk_free_rate=0.05):
+def run_optimization_CLA(sub_method: str, mu, S, returns, benchmark_df, risk_free_rate=0.05):
     """Run a CLA optimization using either max_sharpe (MVO) or min_volatility (MinVol)"""
     try:
         cla = CLA(mu, S)
@@ -985,7 +1001,7 @@ def run_optimization_CLA(sub_method: str, mu, S, returns, nifty_df, risk_free_ra
         port_returns = returns.dot(w_series)
         
         # Compute custom metrics
-        custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
+        custom = compute_custom_metrics(port_returns, benchmark_df, risk_free_rate)
         
         # Generate plots with a method name including the sub-method
         method_label = f"CriticalLineAlgorithm_{sub_method.upper()}"
@@ -1027,7 +1043,7 @@ def run_optimization_CLA(sub_method: str, mu, S, returns, nifty_df, risk_free_ra
         logger.exception("Error in CLA %s optimization", sub_method)
         return None, None
 
-def run_optimization_HRP(returns: pd.DataFrame, cov_matrix: pd.DataFrame, nifty_df: pd.Series, risk_free_rate=0.05, linkage_method="single"):
+def run_optimization_HRP(returns: pd.DataFrame, cov_matrix: pd.DataFrame, benchmark_df: pd.Series, risk_free_rate=0.05, linkage_method="single"):
     """Run HRP optimization using HRPOpt"""
     try:
         hrp = HRPOpt(returns=returns, cov_matrix=cov_matrix)
@@ -1039,7 +1055,7 @@ def run_optimization_HRP(returns: pd.DataFrame, cov_matrix: pd.DataFrame, nifty_
         port_returns = returns.dot(w_series)
         
         # Compute custom metrics
-        custom = compute_custom_metrics(port_returns, nifty_df, risk_free_rate)
+        custom = compute_custom_metrics(port_returns, benchmark_df, risk_free_rate)
         
         # Generate plots using "HRP" as the method label
         method_label = "HRP"
@@ -1258,9 +1274,13 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
                 details={"provided_count": len(formatted_tickers)}
             )
         
+        # Get benchmark ticker
+        benchmark_ticker = BENCHMARK_TICKERS[request.benchmark]
+        logger.info("Using benchmark: %s (ticker: %s)", request.benchmark.value, benchmark_ticker)
+        
         # Fetch & align data
         try:
-            df, nifty_df = fetch_and_align_data(formatted_tickers)
+            df, benchmark_df = fetch_and_align_data(formatted_tickers, benchmark_ticker)
         except ValueError as e:
             if "No valid data available" in str(e):
                 raise APIError(
@@ -1317,18 +1337,18 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
                 if method == OptimizationMethod.HRP:
                     # For HRP, use sample covariance matrix (returns.cov())
                     sample_cov = returns.cov()
-                    optimization_result, cum_returns = run_optimization_HRP(returns, sample_cov, nifty_df, risk_free_rate)
+                    optimization_result, cum_returns = run_optimization_HRP(returns, sample_cov, benchmark_df, risk_free_rate)
                 elif method == OptimizationMethod.MIN_CVAR:
-                    optimization_result, cum_returns = run_optimization_MIN_CVAR(mu, returns, nifty_df, risk_free_rate)
+                    optimization_result, cum_returns = run_optimization_MIN_CVAR(mu, returns, benchmark_df, risk_free_rate)
                 elif method == OptimizationMethod.MIN_CDAR:
-                    optimization_result, cum_returns = run_optimization_MIN_CDAR(mu, returns, nifty_df, risk_free_rate)
+                    optimization_result, cum_returns = run_optimization_MIN_CDAR(mu, returns, benchmark_df, risk_free_rate)
                 elif method != OptimizationMethod.CRITICAL_LINE_ALGORITHM:
-                    optimization_result, cum_returns = run_optimization(method, mu, S, returns, nifty_df, risk_free_rate)
+                    optimization_result, cum_returns = run_optimization(method, mu, S, returns, benchmark_df, risk_free_rate)
                 else:
                     # Handle CLA separately
                     if request.cla_method == CLAOptimizationMethod.BOTH:
-                        result_mvo, cum_returns_mvo = run_optimization_CLA("MVO", mu, S, returns, nifty_df, risk_free_rate)
-                        result_min_vol, cum_returns_min_vol = run_optimization_CLA("MinVol", mu, S, returns, nifty_df, risk_free_rate)
+                        result_mvo, cum_returns_mvo = run_optimization_CLA("MVO", mu, S, returns, benchmark_df, risk_free_rate)
+                        result_min_vol, cum_returns_min_vol = run_optimization_CLA("MinVol", mu, S, returns, benchmark_df, risk_free_rate)
                         
                         if result_mvo:
                             results["CriticalLineAlgorithm_MVO"] = result_mvo
@@ -1346,7 +1366,7 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
                         continue
                     else:
                         sub_method = request.cla_method.value
-                        optimization_result, cum_returns = run_optimization_CLA(sub_method, mu, S, returns, nifty_df, risk_free_rate)
+                        optimization_result, cum_returns = run_optimization_CLA(sub_method, mu, S, returns, benchmark_df, risk_free_rate)
                         if optimization_result:
                             results[f"CriticalLineAlgorithm_{sub_method}"] = optimization_result
                             cum_returns_df[f"CriticalLineAlgorithm_{sub_method}"] = cum_returns
@@ -1374,14 +1394,14 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
                 details={"failed_methods": failed_methods}
             )
         
-        # Calculate Nifty returns
-        nifty_ret = nifty_df.pct_change().dropna()
-        cum_nifty = (1 + nifty_ret).cumprod()
+        # Calculate benchmark returns
+        benchmark_ret = benchmark_df.pct_change().dropna()
+        cum_benchmark = (1 + benchmark_ret).cumprod()
         
-        # Align with Nifty
-        common_dates = cum_returns_df.index.intersection(cum_nifty.index)
+        # Align with benchmark
+        common_dates = cum_returns_df.index.intersection(cum_benchmark.index)
         cum_returns_df = cum_returns_df.loc[common_dates]
-        cum_nifty = cum_nifty.loc[common_dates]
+        cum_benchmark = cum_benchmark.loc[common_dates]
         
         # Build response
         cumulative_returns = {key: cum_returns_df[key].tolist() for key in cum_returns_df.columns}
@@ -1391,7 +1411,7 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
             end_date=end_date,
             cumulative_returns=cumulative_returns,
             dates=cum_returns_df.index.tolist(),
-            nifty_returns=cum_nifty.tolist(),
+            benchmark_returns=[BenchmarkReturn(name=request.benchmark, returns=cum_benchmark.tolist())],
             stock_yearly_returns=stock_yearly_returns,
             covariance_heatmap=cov_heatmap_b64,
             risk_free_rate=risk_free_rate

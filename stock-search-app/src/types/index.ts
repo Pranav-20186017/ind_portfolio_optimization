@@ -68,7 +68,9 @@ export interface PortfolioOptimizationResponse {
     cumulative_returns: { [methodKey: string]: (number | null)[] };
 
     dates: string[];       // e.g. ["2020-01-02", "2020-01-03", ...]
-    nifty_returns: number[];
+    
+    // Benchmark returns data
+    benchmark_returns: BenchmarkReturn[];
 
     // New field: yearly returns for each stock in the portfolio.
     // Each stock maps to a dictionary where the keys are years (as string) and the values are the returns.
@@ -78,4 +80,49 @@ export interface PortfolioOptimizationResponse {
     covariance_heatmap?: string;
 
     risk_free_rate?: number;
+}
+
+export enum ExchangeEnum {
+  NSE = "NSE",
+  BSE = "BSE"
+}
+
+export enum OptimizationMethod {
+  MVO = "MVO",
+  MinVol = "MinVol",
+  MaxQuadraticUtility = "MaxQuadraticUtility",
+  EquiWeighted = "EquiWeighted",
+  CriticalLineAlgorithm = "CriticalLineAlgorithm",
+  HRP = "HRP",
+  MinCVaR = "MinCVaR",
+  MinCDaR = "MinCDaR"
+}
+
+export enum CLAOptimizationMethod {
+  MVO = "MVO",
+  MinVol = "MinVol",
+  Both = "Both"
+}
+
+export enum BenchmarkName {
+  nifty = "nifty",
+  sensex = "sensex",
+  bank_nifty = "bank_nifty"
+}
+
+export interface StockItem {
+  ticker: string;
+  exchange: ExchangeEnum;
+}
+
+export interface TickerRequest {
+  stocks: StockItem[];
+  methods: OptimizationMethod[];
+  cla_method?: CLAOptimizationMethod;
+  benchmark: BenchmarkName;
+}
+
+export interface BenchmarkReturn {
+  name: BenchmarkName;
+  returns: number[];
 }

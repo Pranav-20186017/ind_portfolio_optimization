@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { StockData, StockOption, PortfolioOptimizationResponse, OptimizationResult, APIError } from '../types';
+import { StockData, StockOption, PortfolioOptimizationResponse, OptimizationResult, APIError, ExchangeEnum, OptimizationMethod, CLAOptimizationMethod, BenchmarkName } from '../types';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import Chip from '@mui/material/Chip';
@@ -116,6 +116,7 @@ const HomePage: React.FC = () => {
   const [selectedCLA, setSelectedCLA] = useState<{ label: string; value: string }>(claSubOptions[2]); // Default "Both"
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<APIError | null>(null);
+  const [selectedBenchmark, setSelectedBenchmark] = useState<BenchmarkName>(BenchmarkName.nifty);
 
   const canSubmit = selectedStocks.length >= 2 && selectedAlgorithms.length >= 1;
   let submitError = '';
@@ -212,8 +213,9 @@ const HomePage: React.FC = () => {
       ...(selectedAlgorithms.some((a) => a.value === 'CriticalLineAlgorithm')
         ? { cla_method: selectedCLA.value }
         : {}),
+      benchmark: selectedBenchmark
     };
-    //
+    //TODO: change to backend url
     try {
       const response = await axios.post('https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/optimize', dataToSend);
       console.log('Backend response:', response.data);
@@ -294,16 +296,43 @@ const HomePage: React.FC = () => {
     if (res.cumulative_returns.HRP?.length) {
       datasets.push({ label: 'Hierarchical Risk Parity (HRP)', data: res.cumulative_returns.HRP, borderColor: 'brown', fill: false });
     }
-    // New: Include Minimum CVaR (MinCVaR) with cyan color
     if (res.cumulative_returns.MinCVaR?.length) {
       datasets.push({ label: 'Minimum Conditional VaR (MCVar)', data: res.cumulative_returns.MinCVaR, borderColor: 'cyan', fill: false });
     }
     if (res.cumulative_returns.MinCDaR?.length) {
-      datasets.push({ label: 'Minimum Conditional Drawdown at Risk (CDaR)', data: res.cumulative_returns.MinCDaR, borderColor: 'purple', fill: false });
+      datasets.push({ label: 'Minimum Conditional Drawdown at Risk (CDaR)', data: res.cumulative_returns.MinCDaR, borderColor: '#800080', fill: false }); // Dark purple
     }
-    if (res.nifty_returns?.length) {
-      datasets.push({ label: 'Nifty Index', data: res.cumulative_returns.nifty_returns || res.nifty_returns, borderColor: 'red', fill: false });
+    
+    // Add benchmark returns with dashed line and distinct colors
+    if (res.benchmark_returns?.length > 0) {
+      const benchmark = res.benchmark_returns[0];
+      const benchmarkName = benchmark.name.charAt(0).toUpperCase() + benchmark.name.slice(1).replace('_', ' ');
+      
+      // Assign different colors based on benchmark type
+      let benchmarkColor;
+      switch (benchmark.name) {
+        case BenchmarkName.nifty:
+          benchmarkColor = '#8B0000'; // Dark red
+          break;
+        case BenchmarkName.sensex:
+          benchmarkColor = '#006400'; // Dark green
+          break;
+        case BenchmarkName.bank_nifty:
+          benchmarkColor = '#4B0082'; // Indigo
+          break;
+        default:
+          benchmarkColor = 'black';
+      }
+      
+      datasets.push({ 
+        label: benchmarkName, 
+        data: benchmark.returns, 
+        borderColor: benchmarkColor,
+        borderDash: [5, 5],
+        fill: false 
+      });
     }
+    
     return { labels, datasets };
   };
 
@@ -657,6 +686,28 @@ const HomePage: React.FC = () => {
             </FormControl>
           </div>
         )}
+      </div>
+
+      {/* Benchmark Selection Section */}
+      <div className="mb-6">
+        <Typography variant="h5" gutterBottom>
+          Select Benchmark Index
+        </Typography>
+        <FormControl fullWidth variant="outlined" style={{ maxWidth: 600 }}>
+          <InputLabel id="benchmark-select-label">Choose Benchmark</InputLabel>
+          <Select
+            labelId="benchmark-select-label"
+            value={selectedBenchmark}
+            onChange={(e) => setSelectedBenchmark(e.target.value as BenchmarkName)}
+            label="Choose Benchmark"
+          >
+            {Object.values(BenchmarkName).map((benchmark) => (
+              <MenuItem key={benchmark} value={benchmark}>
+                {benchmark.charAt(0).toUpperCase() + benchmark.slice(1).replace('_', ' ')}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
       </div>
 
       {/* Action Buttons */}

@@ -17,7 +17,8 @@ from srv import (
     run_optimization_MIN_CDAR, get_risk_free_rate, compute_yearly_returns_stocks,
     generate_covariance_heatmap, file_to_base64, EquiWeightedOptimizer,
     OptimizationMethod, CLAOptimizationMethod, StockItem, ExchangeEnum,
-    APIError
+    APIError, BENCHMARK_TICKERS, BenchmarkName, BenchmarkReturn,
+    TickerRequest, PortfolioOptimizationResponse
 )
 
 # Suppress warnings for cleaner test output
@@ -72,6 +73,13 @@ class TestPortfolioOptimization(unittest.TestCase):
             cls.has_mosek_license = True
         except:
             warnings.warn("MOSEK license not available. Some tests will be skipped or modified.")
+        
+        # Add benchmark data for different indices
+        cls.benchmark_data = {}
+        for benchmark in ['^NSEI', '^BSESN', '^NSEBANK']:
+            drift = 0.0005
+            prices = 10000 * np.cumprod(1 + np.random.normal(drift, 0.015, len(cls.dates)))
+            cls.benchmark_data[benchmark] = pd.Series(prices, index=cls.dates)
 
     def test_format_tickers(self):
         """Test format_tickers function with different exchanges."""
@@ -103,17 +111,17 @@ class TestPortfolioOptimization(unittest.TestCase):
         # Mock the cached_yf_download function
         mock_cached_yf_download.side_effect = lambda ticker, start_date: self.prices_data.get(ticker, pd.Series([]))
         
-        # Mock yf.download for Nifty data
+        # Mock yf.download for benchmark data
         with patch('yfinance.download') as mock_yf_download:
             mock_yf_download.return_value = pd.DataFrame({'Close': self.nifty_df})
             
             # Test with valid tickers
             tickers = ['STOCK1.NS', 'STOCK2.NS', 'STOCK3.NS']
-            df, nifty = fetch_and_align_data(tickers)
+            df, benchmark = fetch_and_align_data(tickers, "^NSEI")  # Using NSEI as benchmark
             
             # Check that data was aligned correctly
             self.assertEqual(len(df), len(self.dates))
-            self.assertEqual(len(nifty), len(self.dates))
+            self.assertEqual(len(benchmark), len(self.dates))
             
             # Check all tickers are present
             self.assertListEqual(list(df.columns), tickers)
@@ -124,7 +132,7 @@ class TestPortfolioOptimization(unittest.TestCase):
             )
             
             tickers_with_invalid = ['STOCK1.NS', 'INVALID.NS', 'STOCK3.NS']
-            df, nifty = fetch_and_align_data(tickers_with_invalid)
+            df, benchmark = fetch_and_align_data(tickers_with_invalid, "^NSEI")
             
             # Check only valid tickers are in result
             self.assertEqual(len(df.columns), 2)
@@ -136,7 +144,7 @@ class TestPortfolioOptimization(unittest.TestCase):
             
             # Should raise APIError instead of ValueError
             with self.assertRaises(APIError):
-                fetch_and_align_data(['INVALID1.NS', 'INVALID2.NS'])
+                fetch_and_align_data(['INVALID1.NS', 'INVALID2.NS'], "^NSEI")
 
     def test_freedman_diaconis_bins(self):
         """Test freedman_diaconis_bins function for different data sizes."""
@@ -515,6 +523,93 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertTrue(np.isfinite(returns))
         self.assertTrue(np.isfinite(vol))
         self.assertTrue(np.isfinite(sharpe))
+
+    def test_benchmark_tickers_mapping(self):
+        """Test the BENCHMARK_TICKERS mapping."""
+        self.assertEqual(BENCHMARK_TICKERS[BenchmarkName.nifty], "^NSEI")
+        self.assertEqual(BENCHMARK_TICKERS[BenchmarkName.sensex], "^BSESN")
+        self.assertEqual(BENCHMARK_TICKERS[BenchmarkName.bank_nifty], "^NSEBANK")
+        
+        # Test that all enum values are mapped
+        for benchmark in BenchmarkName:
+            self.assertIn(benchmark, BENCHMARK_TICKERS)
+            self.assertIsInstance(BENCHMARK_TICKERS[benchmark], str)
+
+    def test_ticker_request_with_benchmarks(self):
+        """Test TickerRequest with different benchmarks."""
+        # Test default benchmark (should be nifty)
+        request = TickerRequest(
+            stocks=[StockItem(ticker="RELIANCE", exchange=ExchangeEnum.NSE)],
+            methods=[OptimizationMethod.MVO]
+        )
+        self.assertEqual(request.benchmark, BenchmarkName.nifty)
+        
+        # Test with explicit benchmark
+        request = TickerRequest(
+            stocks=[StockItem(ticker="RELIANCE", exchange=ExchangeEnum.NSE)],
+            methods=[OptimizationMethod.MVO],
+            benchmark=BenchmarkName.bank_nifty
+        )
+        self.assertEqual(request.benchmark, BenchmarkName.bank_nifty)
+
+    @patch('srv.cached_yf_download')
+    def test_fetch_and_align_data_with_different_benchmarks(self, mock_cached_yf_download):
+        """Test fetch_and_align_data with different benchmark tickers."""
+        # Mock the cached_yf_download function
+        mock_cached_yf_download.side_effect = lambda ticker, start_date: self.prices_data.get(ticker, pd.Series([]))
+        
+        # Test with each benchmark
+        for benchmark_ticker in BENCHMARK_TICKERS.values():
+            with patch('yfinance.download') as mock_yf_download:
+                # Create a DataFrame with Close column and set its name
+                benchmark_df = pd.DataFrame({'Close': self.benchmark_data[benchmark_ticker]})
+                mock_yf_download.return_value = benchmark_df
+                
+                # Test with valid tickers
+                tickers = ['STOCK1.NS', 'STOCK2.NS', 'STOCK3.NS']
+                df, benchmark = fetch_and_align_data(tickers, benchmark_ticker)
+                
+                # Check that data was aligned correctly
+                self.assertEqual(len(df), len(self.dates))
+                self.assertEqual(len(benchmark), len(self.dates))
+                
+                # Check all tickers are present
+                self.assertListEqual(list(df.columns), tickers)
+                
+                # Check benchmark data matches (ignoring name attribute)
+                pd.testing.assert_series_equal(
+                    benchmark, 
+                    self.benchmark_data[benchmark_ticker],
+                    check_names=False  # Ignore name attribute in comparison
+                )
+
+    def test_benchmark_returns_in_response(self):
+        """Test that benchmark returns are correctly included in the response."""
+        # Create sample data
+        dates = pd.date_range(start='2020-01-01', end='2020-12-31', freq='B')
+        returns = pd.Series(np.random.normal(0.0005, 0.01, len(dates)), index=dates)
+        benchmark_returns = pd.Series(np.random.normal(0.0003, 0.008, len(dates)), index=dates)
+        
+        # Create cumulative returns
+        cum_returns = (1 + returns).cumprod()
+        cum_benchmark = (1 + benchmark_returns).cumprod()
+        
+        # Create response
+        response = PortfolioOptimizationResponse(
+            results={},
+            start_date=dates[0],
+            end_date=dates[-1],
+            cumulative_returns={},
+            dates=dates.tolist(),
+            benchmark_returns=[BenchmarkReturn(name=BenchmarkName.nifty, returns=cum_benchmark.tolist())],
+            stock_yearly_returns={},
+            risk_free_rate=0.05
+        )
+        
+        # Check benchmark returns structure
+        self.assertEqual(len(response.benchmark_returns), 1)
+        self.assertEqual(response.benchmark_returns[0].name, BenchmarkName.nifty)
+        self.assertEqual(len(response.benchmark_returns[0].returns), len(dates))
 
 if __name__ == '__main__':
     unittest.main() 
