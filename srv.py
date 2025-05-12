@@ -544,63 +544,52 @@ def freedman_diaconis_bins(port_returns: pd.Series) -> int:
     return bins if bins > 0 else 50
 
 def compute_vasicek_adjusted_beta(
+    raw_beta: float,
     excess_portfolio: pd.Series,
     excess_market: pd.Series,
     window: int = 126,
     prior_beta: float = 1.0
 ) -> float:
     """
-    Compute Vasicek-adjusted beta for a portfolio given series of excess returns.
-
-    Parameters:
-    -----------
-    excess_portfolio : pd.Series
-        Portfolio excess returns.
-    excess_market : pd.Series
-        Market (benchmark) excess returns (aligned with excess_portfolio).
-    window : int, optional
-        Rolling window length for cross-sectional beta estimation (default 126).
-    prior_beta : float, optional
-        Shrinkage target (default 1.0).
-
-    Returns:
-    --------
-    float
-        Vasicek-adjusted beta.
+    Compute Vasicek‐adjusted beta given:
+      - raw_beta: the in‐sample OLS beta you already fitted
+      - two aligned excess‐return Series (portfolio vs. market)
+      - window: look‐back length for estimating tau^2 via rolling‐betas
+      - prior_beta: shrinkage target (usually 1.0)
     """
-    # 1) Full-sample OLS to get raw beta and its variance
-    X_full = sm.add_constant(excess_market)
-    model_full = sm.OLS(excess_portfolio, X_full).fit()
-    beta_raw = model_full.params['Benchmark']
-    sigma2 = model_full.bse['Benchmark'] ** 2
+    # 0) Fallback if not enough data to do ANY regression
+    if len(excess_portfolio) < 2 or len(excess_market) < 2:
+        return raw_beta
 
-    # 2) Rolling-window betas for tau^2 estimation
+    # 1) Full‐sample OLS (we already have raw_beta, but we need its variance)
+    X_full = sm.add_constant(excess_market)
+    full_model = sm.OLS(excess_portfolio, X_full).fit()
+    sigma2 = full_model.bse['Benchmark'] ** 2
+
+    # 2) Rolling‐window betas to estimate τ^2
+    n = len(excess_portfolio)
     raw_betas = []
     sigma2_list = []
-    n = len(excess_portfolio)
-    if n < window:
-        return beta_raw
-
     for start in range(n - window + 1):
-        sub_port = excess_portfolio.iloc[start:start + window]
-        sub_mkt  = excess_market.iloc[start:start + window]
-        if sub_mkt.var() <= 1e-9:
+        sub_p = excess_portfolio.iloc[start:start + window]
+        sub_m = excess_market.iloc[start:start + window]
+        if sub_m.var() <= 1e-9:
             continue
-        X_sub = sm.add_constant(sub_mkt)
-        m = sm.OLS(sub_port, X_sub).fit()
+        m = sm.OLS(sub_p, sm.add_constant(sub_m)).fit()
         raw_betas.append(m.params['Benchmark'])
-        sigma2_list.append(m.bse['Benchmark'] ** 2)
+        sigma2_list.append(m.bse['Benchmark']**2)
 
-    if len(raw_betas) <= 1:
-        return beta_raw
+    if len(raw_betas) < 2:
+        return raw_beta
 
-    var_raw = np.var(raw_betas, ddof=1)
-    mean_sigma2 = np.mean(sigma2_list)
-    tau2 = max(var_raw - mean_sigma2, 0.0)
+    var_raw   = np.var(raw_betas, ddof=1)
+    mean_s2   = np.mean(sigma2_list)
+    tau2      = max(var_raw - mean_s2, 0.0)
 
-    # 3) Compute shrinkage weight and adjusted beta
+    # 3) Posterior‐mean shrinkage
     w = tau2 / (tau2 + sigma2) if (tau2 + sigma2) > 0 else 0.0
-    return w * beta_raw + (1 - w) * prior_beta
+    return w * raw_beta + (1 - w) * prior_beta
+
 def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, risk_free_rate: float = 0.05) -> Dict[str, float]:
     """
     Compute custom daily-return metrics:
@@ -651,21 +640,28 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
 
     # Portfolio Beta
     benchmark_ret = benchmark_df.pct_change().dropna()
-    merged_returns = pd.DataFrame({
-        'Portfolio': port_returns,
-        'Benchmark': benchmark_ret
-    }).dropna()
+    
+    # Initialize excess returns with empty series
+    risk_free_daily = risk_free_rate / ann_factor
+    excess_portfolio = pd.Series(dtype=float)
+    excess_market = pd.Series(dtype=float)
+    
+    # Only proceed with beta calculation if we have benchmark data
+    if not benchmark_ret.empty:
+        merged_returns = pd.DataFrame({
+            'Portfolio': port_returns,
+            'Benchmark': benchmark_ret
+        }).dropna()
+        
+        if not merged_returns.empty:
+            excess_portfolio = merged_returns['Portfolio'] - risk_free_daily
+            excess_market = merged_returns['Benchmark'] - risk_free_daily
     
     # Initialize portfolio_beta with a default value
     portfolio_beta = 0.0
     
     # Only calculate beta if we have enough data
-    if len(merged_returns) > 1:
-        risk_free_daily = risk_free_rate / ann_factor
-        # Calculate excess returns
-        excess_portfolio = merged_returns['Portfolio'] - risk_free_daily
-        excess_market = merged_returns['Benchmark'] - risk_free_daily
-        
+    if len(excess_portfolio) > 1 and len(excess_market) > 1:
         # Check if we have enough variation to calculate beta
         if excess_market.var() > 1e-9:
             # Prepare and run regression
@@ -681,11 +677,11 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
     blume_adjusted_beta = 1 + (b * (portfolio_beta - 1))
     # after computing portfolio_beta (raw) and blume_adjusted_beta:
     vasicek_adjusted_beta = compute_vasicek_adjusted_beta(
+    raw_beta=portfolio_beta,
     excess_portfolio=excess_portfolio,
     excess_market=excess_market,
-    window=126,       # or your preferred lookback
-    prior_beta=1.0    # or cross-sectional mean if available
-    )
+    window=126,
+    prior_beta=1.0)
     skewness = port_returns.skew()
     kurtosis = port_returns.kurt()
     
