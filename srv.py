@@ -2,6 +2,7 @@ from typing import List, Dict, Optional, Tuple, Union
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
 from enum import Enum, IntEnum
+from typing import Sequence
 import yfinance as yf
 import pandas as pd
 from scipy.stats import entropy
@@ -346,6 +347,7 @@ class PortfolioPerformance(BaseModel):
     cagr: float
     portfolio_beta: float
     blume_adjusted_beta : float
+    vasicek_adjusted_beta: float
     skewness: float
     kurtosis: float
     entropy: float
@@ -541,6 +543,64 @@ def freedman_diaconis_bins(port_returns: pd.Series) -> int:
     logger.info("No. of bins computed based on Freedman-Diaconis rule: %d", bins)
     return bins if bins > 0 else 50
 
+def compute_vasicek_adjusted_beta(
+    excess_portfolio: pd.Series,
+    excess_market: pd.Series,
+    window: int = 126,
+    prior_beta: float = 1.0
+) -> float:
+    """
+    Compute Vasicek-adjusted beta for a portfolio given series of excess returns.
+
+    Parameters:
+    -----------
+    excess_portfolio : pd.Series
+        Portfolio excess returns.
+    excess_market : pd.Series
+        Market (benchmark) excess returns (aligned with excess_portfolio).
+    window : int, optional
+        Rolling window length for cross-sectional beta estimation (default 126).
+    prior_beta : float, optional
+        Shrinkage target (default 1.0).
+
+    Returns:
+    --------
+    float
+        Vasicek-adjusted beta.
+    """
+    # 1) Full-sample OLS to get raw beta and its variance
+    X_full = sm.add_constant(excess_market)
+    model_full = sm.OLS(excess_portfolio, X_full).fit()
+    beta_raw = model_full.params['Benchmark']
+    sigma2 = model_full.bse['Benchmark'] ** 2
+
+    # 2) Rolling-window betas for tau^2 estimation
+    raw_betas = []
+    sigma2_list = []
+    n = len(excess_portfolio)
+    if n < window:
+        return beta_raw
+
+    for start in range(n - window + 1):
+        sub_port = excess_portfolio.iloc[start:start + window]
+        sub_mkt  = excess_market.iloc[start:start + window]
+        if sub_mkt.var() <= 1e-9:
+            continue
+        X_sub = sm.add_constant(sub_mkt)
+        m = sm.OLS(sub_port, X_sub).fit()
+        raw_betas.append(m.params['Benchmark'])
+        sigma2_list.append(m.bse['Benchmark'] ** 2)
+
+    if len(raw_betas) <= 1:
+        return beta_raw
+
+    var_raw = np.var(raw_betas, ddof=1)
+    mean_sigma2 = np.mean(sigma2_list)
+    tau2 = max(var_raw - mean_sigma2, 0.0)
+
+    # 3) Compute shrinkage weight and adjusted beta
+    w = tau2 / (tau2 + sigma2) if (tau2 + sigma2) > 0 else 0.0
+    return w * beta_raw + (1 - w) * prior_beta
 def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, risk_free_rate: float = 0.05) -> Dict[str, float]:
     """
     Compute custom daily-return metrics:
@@ -619,6 +679,13 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
                 # Keep default beta of 0.0
     b = 0.67 #Bloom Adjustment Factor
     blume_adjusted_beta = 1 + (b * (portfolio_beta - 1))
+    # after computing portfolio_beta (raw) and blume_adjusted_beta:
+    vasicek_adjusted_beta = compute_vasicek_adjusted_beta(
+    excess_portfolio=excess_portfolio,
+    excess_market=excess_market,
+    window=126,       # or your preferred lookback
+    prior_beta=1.0    # or cross-sectional mean if available
+    )
     skewness = port_returns.skew()
     kurtosis = port_returns.kurt()
     
@@ -642,6 +709,7 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
         "cagr": cagr,
         "portfolio_beta": portfolio_beta,
         "blume_adjusted_beta": blume_adjusted_beta,
+        "vasicek_adjusted_beta": vasicek_adjusted_beta,
         "skewness": skewness,
         "kurtosis": kurtosis,
         "entropy": port_entropy
@@ -763,6 +831,7 @@ def run_optimization(method: OptimizationMethod, mu, S, returns, benchmark_df, r
             cagr=custom["cagr"],
             portfolio_beta=custom["portfolio_beta"],
             blume_adjusted_beta = custom["blume_adjusted_beta"],
+            vasicek_adjusted_beta = custom["vasicek_adjusted_beta"],
             skewness=custom["skewness"],
             kurtosis=custom["kurtosis"],
             entropy=custom["entropy"]
@@ -864,6 +933,7 @@ def run_optimization_MIN_CVAR(mu, returns, benchmark_df, risk_free_rate=0.05):
             cagr=custom["cagr"],
             portfolio_beta=custom["portfolio_beta"],
             blume_adjusted_beta = custom["blume_adjusted_beta"],
+            vasicek_adjusted_beta = custom["vasicek_adjusted_beta"],
             skewness=custom["skewness"],
             kurtosis=custom["kurtosis"],
             entropy=custom["entropy"]
@@ -965,6 +1035,7 @@ def run_optimization_MIN_CDAR(mu, returns, benchmark_df, risk_free_rate=0.05):
             cagr=custom["cagr"],
             portfolio_beta=custom["portfolio_beta"],
             blume_adjusted_beta = custom["blume_adjusted_beta"],
+            vasicek_adjusted_beta = custom["vasicek_adjusted_beta"],
             skewness=custom["skewness"],
             kurtosis=custom["kurtosis"],
             entropy=custom["entropy"]
@@ -1028,6 +1099,7 @@ def run_optimization_CLA(sub_method: str, mu, S, returns, benchmark_df, risk_fre
             cagr=custom["cagr"],
             portfolio_beta=custom["portfolio_beta"],
             blume_adjusted_beta = custom["blume_adjusted_beta"],
+            vasicek_adjusted_beta = custom["vasicek_adjusted_beta"],
             skewness=custom["skewness"],
             kurtosis=custom["kurtosis"],
             entropy=custom["entropy"]
@@ -1083,6 +1155,7 @@ def run_optimization_HRP(returns: pd.DataFrame, cov_matrix: pd.DataFrame, benchm
             cagr=custom["cagr"],
             portfolio_beta=custom["portfolio_beta"],
             blume_adjusted_beta = custom["blume_adjusted_beta"],
+            vasicek_adjusted_beta = custom["vasicek_adjusted_beta"],
             skewness=custom["skewness"],
             kurtosis=custom["kurtosis"],
             entropy=custom["entropy"]
