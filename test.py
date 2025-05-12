@@ -9,6 +9,10 @@ from unittest.mock import patch, MagicMock, mock_open
 
 print("Starting test execution...")
 
+# Suppress specific NumPy deprecation warnings from pypfopt
+warnings.filterwarnings("ignore", category=DeprecationWarning, 
+                       message="Conversion of an array with ndim > 0 to a scalar is deprecated")
+
 # Import the functions and classes from srv.py
 from srv import (
     format_tickers, fetch_and_align_data, freedman_diaconis_bins,
@@ -21,7 +25,7 @@ from srv import (
     TickerRequest, PortfolioOptimizationResponse
 )
 
-# Suppress warnings for cleaner test output
+# Suppress other warnings for cleaner test output
 warnings.filterwarnings("ignore")
 
 class TestPortfolioOptimization(unittest.TestCase):
@@ -194,11 +198,17 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertEqual(metrics['cagr'], 0.0)  # CAGR requires at least 2 points
 
     @patch('srv.plt')
-    @patch('srv.file_to_base64')
-    def test_generate_plots(self, mock_file_to_base64, mock_plt):
-        """Test generate_plots with mocked matplotlib and file handling."""
+    @patch('srv.base64')
+    def test_generate_plots(self, mock_base64, mock_plt):
+        """Test generate_plots with mocked matplotlib and base64 encoding."""
         # Setup mocks
-        mock_file_to_base64.return_value = "base64_encoded_string"
+        mock_bytes = MagicMock()
+        mock_bytes.decode.return_value = 'base64_encoded_string'
+        mock_base64.b64encode.return_value = mock_bytes
+        
+        # Create a mock BytesIO object
+        mock_buf = MagicMock()
+        mock_buf.getvalue.return_value = b'test_image_data'
         
         # Test with normal data
         dist_b64, dd_b64 = generate_plots(self.returns['STOCK1.NS'], "TestMethod")
@@ -212,6 +222,9 @@ class TestPortfolioOptimization(unittest.TestCase):
         
         # Verify plt.savefig was called at least twice (once for each plot)
         self.assertGreaterEqual(mock_plt.savefig.call_count, 2)
+        
+        # Verify base64 encoding was called
+        self.assertGreaterEqual(mock_base64.b64encode.call_count, 2)
 
     def test_run_optimization_mvo(self):
         """Test run_optimization for MVO method."""
