@@ -21,7 +21,7 @@ import {
   LinearScale,
   PointElement,
   Legend,
-  Tooltip,
+  Tooltip as ChartTooltip,
 } from 'chart.js';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -37,8 +37,10 @@ import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import GetApp from '@mui/icons-material/GetApp';
+import InfoIcon from '@mui/icons-material/Info';
+import Tooltip from '@mui/material/Tooltip';
 
-ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Legend, Tooltip);
+ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Legend, ChartTooltip);
 
 // Updated ImageComponent for displaying images
 const ImageComponent: React.FC<{ base64String: string; altText: string }> = ({ base64String, altText }) => (
@@ -1106,7 +1108,12 @@ const HomePage: React.FC = () => {
                               <TableCell>{(perf.cagr * 100).toFixed(2)}%</TableCell>
                             </TableRow>
                             <TableRow>
-                              <TableCell><strong>Portfolio Beta</strong></TableCell>
+                              <TableCell>
+                                <strong>Portfolio Beta</strong>
+                                <Tooltip title="Beta is estimated through Ordinary Least Squares (OLS) regression using the Capital Asset Pricing Model (CAPM). The regression equation is: Ri - Rf = α + β(Rm - Rf) + ε, where Ri is the portfolio return, Rf is the risk-free rate, Rm is the market return, and ε is the error term. The coefficient β represents the portfolio's sensitivity to market movements.">
+                                  <InfoIcon fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
                               <TableCell>{perf.portfolio_beta.toFixed(4)}</TableCell>
                             </TableRow>
                             <TableRow>
