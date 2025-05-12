@@ -345,6 +345,7 @@ class PortfolioPerformance(BaseModel):
     cvar_90: float
     cagr: float
     portfolio_beta: float
+    blume_adjusted_beta : float
     skewness: float
     kurtosis: float
     entropy: float
@@ -616,7 +617,8 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
             except Exception as e:
                 logger.warning(f"Error calculating beta: {e}")
                 # Keep default beta of 0.0
-
+    b = 0.67 #Bloom Adjustment Factor
+    blume_adjusted_beta = 1 + (b * (portfolio_beta - 1))
     skewness = port_returns.skew()
     kurtosis = port_returns.kurt()
     
@@ -639,6 +641,7 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
         "cvar_90": cvar_90,
         "cagr": cagr,
         "portfolio_beta": portfolio_beta,
+        "blume_adjusted_beta": blume_adjusted_beta,
         "skewness": skewness,
         "kurtosis": kurtosis,
         "entropy": port_entropy
@@ -759,6 +762,7 @@ def run_optimization(method: OptimizationMethod, mu, S, returns, benchmark_df, r
             cvar_90=custom["cvar_90"],
             cagr=custom["cagr"],
             portfolio_beta=custom["portfolio_beta"],
+            blume_adjusted_beta = custom["blume_adjusted_beta"],
             skewness=custom["skewness"],
             kurtosis=custom["kurtosis"],
             entropy=custom["entropy"]
@@ -859,6 +863,7 @@ def run_optimization_MIN_CVAR(mu, returns, benchmark_df, risk_free_rate=0.05):
             cvar_90=custom["cvar_90"],
             cagr=custom["cagr"],
             portfolio_beta=custom["portfolio_beta"],
+            blume_adjusted_beta = custom["blume_adjusted_beta"],
             skewness=custom["skewness"],
             kurtosis=custom["kurtosis"],
             entropy=custom["entropy"]
@@ -959,6 +964,7 @@ def run_optimization_MIN_CDAR(mu, returns, benchmark_df, risk_free_rate=0.05):
             cvar_90=custom["cvar_90"],
             cagr=custom["cagr"],
             portfolio_beta=custom["portfolio_beta"],
+            blume_adjusted_beta = custom["blume_adjusted_beta"],
             skewness=custom["skewness"],
             kurtosis=custom["kurtosis"],
             entropy=custom["entropy"]
@@ -1021,6 +1027,7 @@ def run_optimization_CLA(sub_method: str, mu, S, returns, benchmark_df, risk_fre
             cvar_90=custom["cvar_90"],
             cagr=custom["cagr"],
             portfolio_beta=custom["portfolio_beta"],
+            blume_adjusted_beta = custom["blume_adjusted_beta"],
             skewness=custom["skewness"],
             kurtosis=custom["kurtosis"],
             entropy=custom["entropy"]
@@ -1075,6 +1082,7 @@ def run_optimization_HRP(returns: pd.DataFrame, cov_matrix: pd.DataFrame, benchm
             cvar_90=custom["cvar_90"],
             cagr=custom["cagr"],
             portfolio_beta=custom["portfolio_beta"],
+            blume_adjusted_beta = custom["blume_adjusted_beta"],
             skewness=custom["skewness"],
             kurtosis=custom["kurtosis"],
             entropy=custom["entropy"]
