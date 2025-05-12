@@ -41,7 +41,6 @@ export interface PortfolioPerformance {
     cagr: number;
     portfolio_beta: number;
     blume_adjusted_beta: number,
-    vasicek_adjusted_beta: number,
     skewness: number;
     kurtosis: number;
     entropy: number

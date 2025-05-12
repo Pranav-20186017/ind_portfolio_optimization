@@ -1121,10 +1121,6 @@ const HomePage: React.FC = () => {
                               <TableCell>{perf.blume_adjusted_beta.toFixed(4)}</TableCell>
                             </TableRow>
                             <TableRow>
-                              <TableCell><strong>Vasicek Adjusted Beta</strong></TableCell>
-                              <TableCell>{perf.vasicek_adjusted_beta.toFixed(4)}</TableCell>
-                            </TableRow>
-                            <TableRow>
                               <TableCell><strong>Skewness</strong></TableCell>
                               <TableCell>{perf.skewness.toFixed(4)}</TableCell>
                             </TableRow>
