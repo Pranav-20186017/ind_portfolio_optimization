@@ -1300,6 +1300,40 @@ def generate_covariance_heatmap(
 # Main Endpoint
 ########################################
 
+def parallel_optimizations(methods, mu, S, returns, benchmark_df, risk_free_rate, cla_method):
+    """Run multiple optimization methods in parallel using ThreadPoolExecutor."""
+    results = {}
+    with ThreadPoolExecutor() as executor:
+        future_to_method = {}
+        
+        for method in methods:
+            if method == OptimizationMethod.CRITICAL_LINE_ALGORITHM:
+                # For CLA, we need to handle both sub-methods if requested
+                if cla_method == CLAOptimizationMethod.BOTH:
+                    future_to_method[executor.submit(run_optimization_CLA, "MVO", mu, S, returns, benchmark_df, risk_free_rate)] = f"{method.value}_MVO"
+                    future_to_method[executor.submit(run_optimization_CLA, "MinVol", mu, S, returns, benchmark_df, risk_free_rate)] = f"{method.value}_MinVol"
+                else:
+                    future_to_method[executor.submit(run_optimization_CLA, cla_method.value, mu, S, returns, benchmark_df, risk_free_rate)] = method.value
+            elif method == OptimizationMethod.MIN_CVAR:
+                future_to_method[executor.submit(run_optimization_MIN_CVAR, mu, returns, benchmark_df, risk_free_rate)] = method.value
+            elif method == OptimizationMethod.MIN_CDAR:
+                future_to_method[executor.submit(run_optimization_MIN_CDAR, mu, returns, benchmark_df, risk_free_rate)] = method.value
+            elif method == OptimizationMethod.HRP:
+                future_to_method[executor.submit(run_optimization_HRP, returns, S, benchmark_df, risk_free_rate)] = method.value
+            else:
+                future_to_method[executor.submit(run_optimization, method, mu, S, returns, benchmark_df, risk_free_rate)] = method.value
+        
+        for future in as_completed(future_to_method):
+            method_name = future_to_method[future]
+            try:
+                result = future.result()
+                results[method_name] = result
+            except Exception as e:
+                logger.exception("Error in %s optimization", method_name)
+                results[method_name] = (None, None)
+    
+    return results
+
 @app.post("/optimize")
 def optimize_portfolio(request: TickerRequest = Body(...)):
     try:
@@ -1445,7 +1479,7 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         # Let our generic exception handler deal with unexpected errors
         logger.exception("Unexpected error in optimize_portfolio")
         raise APIError(
-                    code = ErrorCode.APIError,
-                    message= str(e),
-                    status_code = 503
+            code=ErrorCode.UNEXPECTED_ERROR,
+            message=str(e),
+            status_code=503
         )

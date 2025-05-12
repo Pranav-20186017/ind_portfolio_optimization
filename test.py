@@ -6,6 +6,8 @@ import sys
 import warnings
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock, mock_open
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from enum import Enum
 
 print("Starting test execution...")
 
@@ -22,7 +24,7 @@ from srv import (
     generate_covariance_heatmap, file_to_base64, EquiWeightedOptimizer,
     OptimizationMethod, CLAOptimizationMethod, StockItem, ExchangeEnum,
     APIError, BENCHMARK_TICKERS, BenchmarkName, BenchmarkReturn,
-    TickerRequest, PortfolioOptimizationResponse
+    TickerRequest, PortfolioOptimizationResponse, parallel_optimizations
 )
 
 # Suppress other warnings for cleaner test output
@@ -623,6 +625,196 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertEqual(len(response.benchmark_returns), 1)
         self.assertEqual(response.benchmark_returns[0].name, BenchmarkName.nifty)
         self.assertEqual(len(response.benchmark_returns[0].returns), len(dates))
+
+    def test_parallel_optimizations_single_method(self):
+        """Test parallel_optimizations with a single method."""
+        methods = [OptimizationMethod.MVO]
+        results = parallel_optimizations(
+            methods, self.mu, self.S, self.returns, 
+            self.nifty_returns, self.risk_free_rate,
+            CLAOptimizationMethod.BOTH
+        )
+        
+        # Check results
+        self.assertIn(OptimizationMethod.MVO.value, results)
+        opt_result, cum_returns = results[OptimizationMethod.MVO.value]
+        self.assertIsNotNone(opt_result)
+        self.assertIsNotNone(cum_returns)
+        
+        # Check weights sum to approximately 1
+        weights_sum = sum(opt_result.weights.values())
+        self.assertAlmostEqual(weights_sum, 1.0, places=2)
+
+    def test_parallel_optimizations_multiple_methods(self):
+        """Test parallel_optimizations with multiple methods."""
+        methods = [
+            OptimizationMethod.MVO,
+            OptimizationMethod.MIN_VOL,
+            OptimizationMethod.EQUI_WEIGHTED
+        ]
+        results = parallel_optimizations(
+            methods, self.mu, self.S, self.returns,
+            self.nifty_returns, self.risk_free_rate,
+            CLAOptimizationMethod.BOTH
+        )
+        
+        # Check all methods are in results
+        for method in methods:
+            self.assertIn(method.value, results)
+            opt_result, cum_returns = results[method.value]
+            self.assertIsNotNone(opt_result)
+            self.assertIsNotNone(cum_returns)
+            
+            # Check weights sum to approximately 1
+            weights_sum = sum(opt_result.weights.values())
+            self.assertAlmostEqual(weights_sum, 1.0, places=2)
+
+    def test_parallel_optimizations_cla_both(self):
+        """Test parallel_optimizations with CLA method using BOTH sub-methods."""
+        methods = [OptimizationMethod.CRITICAL_LINE_ALGORITHM]
+        results = parallel_optimizations(
+            methods, self.mu, self.S, self.returns,
+            self.nifty_returns, self.risk_free_rate,
+            CLAOptimizationMethod.BOTH
+        )
+        
+        # Check both CLA sub-methods are in results
+        self.assertIn(f"{OptimizationMethod.CRITICAL_LINE_ALGORITHM.value}_MVO", results)
+        self.assertIn(f"{OptimizationMethod.CRITICAL_LINE_ALGORITHM.value}_MinVol", results)
+        
+        # Check results for each sub-method
+        for method_name in [f"{OptimizationMethod.CRITICAL_LINE_ALGORITHM.value}_MVO",
+                          f"{OptimizationMethod.CRITICAL_LINE_ALGORITHM.value}_MinVol"]:
+            opt_result, cum_returns = results[method_name]
+            self.assertIsNotNone(opt_result)
+            self.assertIsNotNone(cum_returns)
+            
+            # Check weights sum to approximately 1
+            weights_sum = sum(opt_result.weights.values())
+            self.assertAlmostEqual(weights_sum, 1.0, places=2)
+
+    def test_parallel_optimizations_cla_single(self):
+        """Test parallel_optimizations with CLA method using single sub-method."""
+        methods = [OptimizationMethod.CRITICAL_LINE_ALGORITHM]
+        results = parallel_optimizations(
+            methods, self.mu, self.S, self.returns,
+            self.nifty_returns, self.risk_free_rate,
+            CLAOptimizationMethod.MVO
+        )
+        
+        # Check only MVO sub-method is in results
+        self.assertIn(OptimizationMethod.CRITICAL_LINE_ALGORITHM.value, results)
+        self.assertNotIn(f"{OptimizationMethod.CRITICAL_LINE_ALGORITHM.value}_MVO", results)
+        self.assertNotIn(f"{OptimizationMethod.CRITICAL_LINE_ALGORITHM.value}_MinVol", results)
+        
+        # Check results
+        opt_result, cum_returns = results[OptimizationMethod.CRITICAL_LINE_ALGORITHM.value]
+        self.assertIsNotNone(opt_result)
+        self.assertIsNotNone(cum_returns)
+        
+        # Check weights sum to approximately 1
+        weights_sum = sum(opt_result.weights.values())
+        self.assertAlmostEqual(weights_sum, 1.0, places=2)
+
+    def test_parallel_optimizations_with_failing_method(self):
+        """Test parallel_optimizations when one method fails."""
+        # Create a mock method that will fail
+        class FailingOptimizationMethod(str, Enum):
+            FAILING = "FAILING"
+        
+        methods = [OptimizationMethod.MVO, FailingOptimizationMethod.FAILING]
+        
+        # Mock run_optimization to fail for the failing method
+        def mock_run_optimization(method, *args, **kwargs):
+            if method == FailingOptimizationMethod.FAILING:
+                raise Exception("Simulated failure")
+            return run_optimization(method, *args, **kwargs)
+        
+        with patch('srv.run_optimization', side_effect=mock_run_optimization):
+            results = parallel_optimizations(
+                methods, self.mu, self.S, self.returns,
+                self.nifty_returns, self.risk_free_rate,
+                CLAOptimizationMethod.BOTH
+            )
+            
+            # Check successful method
+            self.assertIn(OptimizationMethod.MVO.value, results)
+            opt_result, cum_returns = results[OptimizationMethod.MVO.value]
+            self.assertIsNotNone(opt_result)
+            self.assertIsNotNone(cum_returns)
+            
+            # Check failing method
+            self.assertIn(FailingOptimizationMethod.FAILING.value, results)
+            opt_result, cum_returns = results[FailingOptimizationMethod.FAILING.value]
+            self.assertIsNone(opt_result)
+            self.assertIsNone(cum_returns)
+
+    def test_parallel_optimizations_edge_cases(self):
+        """Test parallel_optimizations with edge cases."""
+        # Test with empty methods list
+        results = parallel_optimizations(
+            [], self.mu, self.S, self.returns,
+            self.nifty_returns, self.risk_free_rate,
+            CLAOptimizationMethod.BOTH
+        )
+        self.assertEqual(len(results), 0)
+        
+        # Test with invalid method (should be handled gracefully)
+        class InvalidOptimizationMethod(str, Enum):
+            INVALID = "INVALID"
+        
+        methods = [InvalidOptimizationMethod.INVALID]
+        results = parallel_optimizations(
+            methods, self.mu, self.S, self.returns,
+            self.nifty_returns, self.risk_free_rate,
+            CLAOptimizationMethod.BOTH
+        )
+        self.assertIn(InvalidOptimizationMethod.INVALID.value, results)
+        opt_result, cum_returns = results[InvalidOptimizationMethod.INVALID.value]
+        self.assertIsNone(opt_result)
+        self.assertIsNone(cum_returns)
+
+    def test_parallel_optimizations_with_cvar_cdar(self):
+        """Test parallel_optimizations with CVaR and CDaR methods."""
+        methods = [
+            OptimizationMethod.MIN_CVAR,
+            OptimizationMethod.MIN_CDAR
+        ]
+        results = parallel_optimizations(
+            methods, self.mu, self.S, self.returns,
+            self.nifty_returns, self.risk_free_rate,
+            CLAOptimizationMethod.BOTH
+        )
+        
+        # Check both methods are in results
+        for method in methods:
+            self.assertIn(method.value, results)
+            opt_result, cum_returns = results[method.value]
+            self.assertIsNotNone(opt_result)
+            self.assertIsNotNone(cum_returns)
+            
+            # Check weights sum to approximately 1
+            weights_sum = sum(opt_result.weights.values())
+            self.assertAlmostEqual(weights_sum, 1.0, places=2)
+
+    def test_parallel_optimizations_with_hrp(self):
+        """Test parallel_optimizations with HRP method."""
+        methods = [OptimizationMethod.HRP]
+        results = parallel_optimizations(
+            methods, self.mu, self.S, self.returns,
+            self.nifty_returns, self.risk_free_rate,
+            CLAOptimizationMethod.BOTH
+        )
+        
+        # Check HRP method is in results
+        self.assertIn(OptimizationMethod.HRP.value, results)
+        opt_result, cum_returns = results[OptimizationMethod.HRP.value]
+        self.assertIsNotNone(opt_result)
+        self.assertIsNotNone(cum_returns)
+        
+        # Check weights sum to approximately 1
+        weights_sum = sum(opt_result.weights.values())
+        self.assertAlmostEqual(weights_sum, 1.0, places=2)
 
 if __name__ == '__main__':
     unittest.main() 
