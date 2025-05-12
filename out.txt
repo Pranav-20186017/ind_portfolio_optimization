@@ -1,181 +1,96 @@
 Starting test execution...
-19:40:15.417 MOSEK license configured from path: D:\code\ind_portfolio_optimization\mosek\mosek.lic
-19:40:15.477 Computing bins for 522 data points
-19:40:15.483 Computed bin width: 0.006611
-19:40:15.483 No. of bins computed based on Freedman-Diaconis rule: 22
-19:40:15.492 Computing bins for 100 data points
-19:40:15.492 Computed bin width: 0.003983
-19:40:15.492 No. of bins computed based on Freedman-Diaconis rule: 8
-19:40:15.502 Computing bins for 100 data points
-19:40:15.502 Computed bin width: 0.000000
-19:40:15.502 Bin width is zero; returning 50 bins.
-19:40:15.506 Computing bins for 1 data points
-19:40:15.506 Not enough data points. Returning 1 bin.
-19:40:15.524 No data for ticker INVALID.NS
-19:40:15.532 Some tickers failed to fetch data: ['INVALID.NS']
-19:40:15.532 No data for ticker INVALID1.NS
-19:40:15.532 No data for ticker INVALID2.NS
-19:40:15.532 No valid data available for the provided tickers
-19:40:15.549 Computing bins for 522 data points
-19:40:15.549 Computed bin width: 0.006611
-19:40:15.549 No. of bins computed based on Freedman-Diaconis rule: 22
-19:40:15.549 Computing bins for 2 data points
-19:40:15.549 Not enough data points. Returning 1 bin.
-19:40:15.549 Computing bins for 100 data points
-19:40:15.549 Computed bin width: 0.000000
-19:40:15.549 Bin width is zero; returning 50 bins.
-19:40:15.558 Computing bins for 522 data points
-19:40:15.565 Computed bin width: 0.006611
-19:40:15.566 No. of bins computed based on Freedman-Diaconis rule: 22
-19:40:15.576 Computed full average risk-free rate: 6.550000
-19:40:15.576 Could not fetch data from Stooq API. Status code: 404. Using default risk-free rate of 0.05
-19:40:15.576 Expected 'Close' column not found in the retrieved data. Using default risk-free rate of 0.05
-19:40:15.582 Computed full average risk-free rate: -5.000000
-19:40:15.582 Negative risk-free rate (-0.050000) detected, using default 0.05
-19:40:15.607 Computing bins for 522 data points
-19:40:15.607 Computed bin width: 0.003763
-19:40:15.607 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:15.616 Computing bins for 522 data points
-19:40:15.616 Computing bins for 522 data points
-19:40:15.616 Computed bin width: 0.003763
-19:40:15.616 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:15.624 Computed bin width: 0.003990
-19:40:15.624 No. of bins computed based on Freedman-Diaconis rule: 18
-19:40:15.630 Computing bins for 522 data points
-19:40:15.632 Computed bin width: 0.003990
-19:40:15.640 No. of bins computed based on Freedman-Diaconis rule: 18
-19:40:16.821 Optimization completed. Successful methods: ['CriticalLineAlgorithm_MVO', 'CriticalLineAlgorithm_MinVol']
-19:40:16.838 Computing bins for 522 data points
-19:40:16.838 Computed bin width: 0.003990
-19:40:16.846 No. of bins computed based on Freedman-Diaconis rule: 18
-19:40:16.847 Computing bins for 522 data points
-19:40:16.849 Computed bin width: 0.003990
-19:40:16.849 No. of bins computed based on Freedman-Diaconis rule: 18
-19:40:17.452 Optimization completed. Successful methods: ['CriticalLineAlgorithm']
-19:40:17.460 Optimization completed. Successful methods: []
-19:40:17.495 Computing bins for 522 data points
-19:40:17.501 Computed bin width: 0.003704
-19:40:17.501 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:17.509 Computing bins for 522 data points
-19:40:17.509 Computed bin width: 0.003704
-19:40:17.509 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:17.542 Computing bins for 522 data points
-19:40:17.558 Computed bin width: 0.003763
-19:40:17.558 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:17.558 Computing bins for 522 data points
-19:40:17.566 Computing bins for 522 data points
-19:40:17.569 Computed bin width: 0.003763
-19:40:17.569 Computed bin width: 0.004016
-19:40:17.569 No. of bins computed based on Freedman-Diaconis rule: 18
-19:40:17.569 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:17.599 Computing bins for 522 data points
-19:40:17.616 Computed bin width: 0.004016
-19:40:17.616 No. of bins computed based on Freedman-Diaconis rule: 18
-19:40:19.520 Optimization completed. Successful methods: ['MVO', 'EquiWeighted', 'MinVol']
-19:40:19.546 Computing bins for 522 data points
-19:40:19.548 Computed bin width: 0.004016
-19:40:19.548 No. of bins computed based on Freedman-Diaconis rule: 18
-19:40:19.548 Computing bins for 522 data points
-19:40:19.550 Computed bin width: 0.004016
-19:40:19.550 No. of bins computed based on Freedman-Diaconis rule: 18
-19:40:20.188 Optimization completed. Successful methods: ['MVO']
-19:40:20.225 Attempting MIN_CVAR optimization with MOSEK license at: D:\code\ind_portfolio_optimization\mosek\mosek.lic
-19:40:20.232 Attempting MIN_CDAR optimization with MOSEK license at: D:\code\ind_portfolio_optimization\mosek\mosek.lic
-19:40:20.265 Error in CVaR optimization: rescode.err_missing_license_file(1008): License cannot be located. The default search path is ';C:\Users\spsk9\mosek\mosek.lic;'.
+20:13:01.109 MOSEK license configured from path: D:\code\ind_portfolio_optimization\mosek\mosek.lic
+20:13:01.524 Computing bins for 522 data points
+20:13:01.530 Computed bin width: 0.006611
+20:13:01.532 No. of bins computed based on Freedman-Diaconis rule: 22
+20:13:01.538 Computing bins for 100 data points
+20:13:01.538 Computed bin width: 0.003983
+20:13:01.539 No. of bins computed based on Freedman-Diaconis rule: 8
+20:13:01.544 Computing bins for 100 data points
+20:13:01.545 Computed bin width: 0.000000
+20:13:01.545 Bin width is zero; returning 50 bins.
+20:13:01.548 Computing bins for 1 data points
+20:13:01.548 Not enough data points. Returning 1 bin.
+20:13:01.566 No data for ticker INVALID.NS
+20:13:01.569 Some tickers failed to fetch data: ['INVALID.NS']
+20:13:01.570 No data for ticker INVALID1.NS
+20:13:01.570 No data for ticker INVALID2.NS
+20:13:01.570 No valid data available for the provided tickers
+20:13:01.586 Computing bins for 522 data points
+20:13:01.587 Computed bin width: 0.006611
+20:13:01.588 No. of bins computed based on Freedman-Diaconis rule: 22
+20:13:01.588 Computing bins for 2 data points
+20:13:01.589 Not enough data points. Returning 1 bin.
+20:13:01.589 Computing bins for 100 data points
+20:13:01.590 Computed bin width: 0.000000
+20:13:01.590 Bin width is zero; returning 50 bins.
+20:13:01.595 Computing bins for 522 data points
+20:13:01.596 Computed bin width: 0.006611
+20:13:01.597 No. of bins computed based on Freedman-Diaconis rule: 22
+20:13:01.608 Computed full average risk-free rate: 6.550000
+20:13:01.609 Could not fetch data from Stooq API. Status code: 404. Using default risk-free rate of 0.05
+20:13:01.611 Expected 'Close' column not found in the retrieved data. Using default risk-free rate of 0.05
+20:13:01.613 Computed full average risk-free rate: -5.000000
+20:13:01.613 Negative risk-free rate (-0.050000) detected, using default 0.05
+20:13:01.624 Computing bins for 522 data points
+20:13:01.624 Computed bin width: 0.003763
+20:13:01.625 No. of bins computed based on Freedman-Diaconis rule: 17
+20:13:01.625 Computing bins for 522 data points
+20:13:01.627 Computed bin width: 0.003763
+20:13:01.627 No. of bins computed based on Freedman-Diaconis rule: 17
+20:13:02.060 Computing bins for 522 data points
+20:13:02.061 Computed bin width: 0.003990
+20:13:02.061 No. of bins computed based on Freedman-Diaconis rule: 18
+20:13:02.062 Computing bins for 522 data points
+20:13:02.063 Computed bin width: 0.003990
+20:13:02.063 No. of bins computed based on Freedman-Diaconis rule: 18
+20:13:02.465 Computing bins for 522 data points
+20:13:02.467 Computed bin width: 0.003704
+20:13:02.467 No. of bins computed based on Freedman-Diaconis rule: 17
+20:13:02.468 Computing bins for 522 data points
+20:13:02.469 Computed bin width: 0.003704
+20:13:02.469 No. of bins computed based on Freedman-Diaconis rule: 17
+20:13:02.885 Computing bins for 522 data points
+20:13:02.887 Computed bin width: 0.003765
+20:13:02.887 No. of bins computed based on Freedman-Diaconis rule: 17
+20:13:02.888 Computing bins for 522 data points
+20:13:02.889 Computed bin width: 0.003765
+20:13:02.889 No. of bins computed based on Freedman-Diaconis rule: 17
+20:13:03.305 Computing bins for 522 data points
+20:13:03.307 Computed bin width: 0.004681
+20:13:03.307 No. of bins computed based on Freedman-Diaconis rule: 19
+20:13:03.308 Computing bins for 522 data points
+20:13:03.309 Computed bin width: 0.004681
+20:13:03.309 No. of bins computed based on Freedman-Diaconis rule: 19
+20:13:03.673 Attempting MIN_CDAR optimization with MOSEK license at: D:\code\ind_portfolio_optimization\mosek\mosek.lic
+20:13:03.699 Error in CDaR optimization: rescode.err_missing_license_file(1008): License cannot be located. The default search path is ';C:\Users\spsk9\mosek\mosek.lic;'.
 . Using min_volatility as fallback.
-19:40:20.265 Error in CDaR optimization: rescode.err_missing_license_file(1008): License cannot be located. The default search path is ';C:\Users\spsk9\mosek\mosek.lic;'.
+20:13:03.706 Used min_volatility as fallback for min_cdar (MOSEK error)
+20:13:03.715 Computing bins for 522 data points
+20:13:03.716 Computed bin width: 0.003763
+20:13:03.718 No. of bins computed based on Freedman-Diaconis rule: 17
+20:13:03.718 Computing bins for 522 data points
+20:13:03.719 Computed bin width: 0.003763
+20:13:03.720 No. of bins computed based on Freedman-Diaconis rule: 17
+20:13:04.296 Attempting MIN_CVAR optimization with MOSEK license at: D:\code\ind_portfolio_optimization\mosek\mosek.lic
+20:13:04.307 Error in CVaR optimization: rescode.err_missing_license_file(1008): License cannot be located. The default search path is ';C:\Users\spsk9\mosek\mosek.lic;'.
 . Using min_volatility as fallback.
-19:40:20.284 Used min_volatility as fallback for min_cdar (MOSEK error)
-19:40:20.284 Used min_volatility as fallback for min_cvar (MOSEK error)
-19:40:20.298 Computing bins for 522 data points
-19:40:20.298 Computed bin width: 0.003763
-19:40:20.307 Computing bins for 522 data points
-19:40:20.307 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:20.307 Computing bins for 522 data points
-19:40:20.307 Computed bin width: 0.003763
-19:40:20.307 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:20.307 Computing bins for 522 data points
-19:40:20.307 Computed bin width: 0.003763
-19:40:20.307 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:20.323 Computed bin width: 0.003763
-19:40:20.323 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:21.477 Optimization completed. Successful methods: ['MinCDaR', 'MinCVaR']
-19:40:21.490 Error in FAILING optimization: Simulated failure
-19:40:21.556 Computing bins for 522 data points
-19:40:21.564 Computed bin width: 0.004016
-19:40:21.564 No. of bins computed based on Freedman-Diaconis rule: 18
-19:40:21.564 Computing bins for 522 data points
-19:40:21.564 Computed bin width: 0.004016
-19:40:21.564 No. of bins computed based on Freedman-Diaconis rule: 18
-19:40:22.156 Optimization completed. Successful methods: ['FAILING', 'MVO']
-19:40:22.156 Failed methods: ['FAILING']
-19:40:22.156 Method FAILING failed at stage optimization: Simulated failure
-19:40:22.175 Computing bins for 522 data points
-19:40:22.175 Computed bin width: 0.003765
-19:40:22.175 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:22.175 Computing bins for 522 data points
-19:40:22.175 Computed bin width: 0.003765
-19:40:22.175 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:22.753 Optimization completed. Successful methods: ['HRP']
-19:40:22.771 Computing bins for 522 data points
-19:40:22.777 Computed bin width: 0.003763
-19:40:22.777 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:22.777 Computing bins for 522 data points
-19:40:22.777 Computed bin width: 0.003763
-19:40:22.777 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:23.425 Computing bins for 522 data points
-19:40:23.425 Computed bin width: 0.003990
-19:40:23.425 No. of bins computed based on Freedman-Diaconis rule: 18
-19:40:23.434 Computing bins for 522 data points
-19:40:23.434 Computed bin width: 0.003990
-19:40:23.434 No. of bins computed based on Freedman-Diaconis rule: 18
-19:40:24.071 Computing bins for 522 data points
-19:40:24.071 Computed bin width: 0.003704
-19:40:24.071 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:24.071 Computing bins for 522 data points
-19:40:24.071 Computed bin width: 0.003704
-19:40:24.071 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:24.691 Computing bins for 522 data points
-19:40:24.694 Computed bin width: 0.003765
-19:40:24.694 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:24.694 Computing bins for 522 data points
-19:40:24.694 Computed bin width: 0.003765
-19:40:24.694 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:25.348 Computing bins for 522 data points
-19:40:25.348 Computed bin width: 0.004681
-19:40:25.348 No. of bins computed based on Freedman-Diaconis rule: 19
-19:40:25.348 Computing bins for 522 data points
-19:40:25.348 Computed bin width: 0.004681
-19:40:25.348 No. of bins computed based on Freedman-Diaconis rule: 19
-19:40:25.961 Attempting MIN_CDAR optimization with MOSEK license at: D:\code\ind_portfolio_optimization\mosek\mosek.lic
-19:40:25.974 Error in CDaR optimization: rescode.err_missing_license_file(1008): License cannot be located. The default search path is ';C:\Users\spsk9\mosek\mosek.lic;'.
-. Using min_volatility as fallback.
-19:40:25.985 Used min_volatility as fallback for min_cdar (MOSEK error)
-19:40:25.990 Computing bins for 522 data points
-19:40:25.990 Computed bin width: 0.003763
-19:40:25.997 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:25.997 Computing bins for 522 data points
-19:40:25.998 Computed bin width: 0.003763
-19:40:25.998 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:26.800 Attempting MIN_CVAR optimization with MOSEK license at: D:\code\ind_portfolio_optimization\mosek\mosek.lic
-19:40:26.807 Error in CVaR optimization: rescode.err_missing_license_file(1008): License cannot be located. The default search path is ';C:\Users\spsk9\mosek\mosek.lic;'.
-. Using min_volatility as fallback.
-19:40:26.815 Used min_volatility as fallback for min_cvar (MOSEK error)
-19:40:26.824 Computing bins for 522 data points
-19:40:26.824 Computed bin width: 0.003763
-19:40:26.824 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:26.824 Computing bins for 522 data points
-19:40:26.824 Computed bin width: 0.003763
-19:40:26.831 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:27.521 Computing bins for 522 data points
-19:40:27.521 Computed bin width: 0.003763
-19:40:27.521 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:27.526 Computing bins for 522 data points
-19:40:27.526 Computed bin width: 0.003763
-19:40:27.526 No. of bins computed based on Freedman-Diaconis rule: 17
-19:40:28.291 Computing bins for 522 data points
-19:40:28.298 Computed bin width: 0.004016
-19:40:28.298 No. of bins computed based on Freedman-Diaconis rule: 18
-19:40:28.298 Computing bins for 522 data points
-19:40:28.302 Computed bin width: 0.004016
-19:40:28.302 No. of bins computed based on Freedman-Diaconis rule: 18
+20:13:04.314 Used min_volatility as fallback for min_cvar (MOSEK error)
+20:13:04.322 Computing bins for 522 data points
+20:13:04.323 Computed bin width: 0.003763
+20:13:04.323 No. of bins computed based on Freedman-Diaconis rule: 17
+20:13:04.324 Computing bins for 522 data points
+20:13:04.325 Computed bin width: 0.003763
+20:13:04.326 No. of bins computed based on Freedman-Diaconis rule: 17
+20:13:04.749 Computing bins for 522 data points
+20:13:04.750 Computed bin width: 0.003763
+20:13:04.751 No. of bins computed based on Freedman-Diaconis rule: 17
+20:13:04.751 Computing bins for 522 data points
+20:13:04.753 Computed bin width: 0.003763
+20:13:04.753 No. of bins computed based on Freedman-Diaconis rule: 17
+20:13:05.186 Computing bins for 522 data points
+20:13:05.188 Computed bin width: 0.004016
+20:13:05.188 No. of bins computed based on Freedman-Diaconis rule: 18
+20:13:05.189 Computing bins for 522 data points
+20:13:05.190 Computed bin width: 0.004016
+20:13:05.190 No. of bins computed based on Freedman-Diaconis rule: 18

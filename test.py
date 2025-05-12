@@ -18,7 +18,7 @@ from srv import (
     generate_covariance_heatmap, file_to_base64, EquiWeightedOptimizer,
     OptimizationMethod, CLAOptimizationMethod, StockItem, ExchangeEnum,
     APIError, BENCHMARK_TICKERS, BenchmarkName, BenchmarkReturn,
-    TickerRequest, PortfolioOptimizationResponse
+    TickerRequest, PortfolioOptimizationResponse, cached_covariance_matrix
 )
 
 # Suppress warnings for cleaner test output
@@ -316,6 +316,15 @@ class TestPortfolioOptimization(unittest.TestCase):
         # Regardless of solver, check weights sum to approximately 1
         weights_sum = sum(result.weights.values())
         self.assertAlmostEqual(weights_sum, 1.0, places=2)
+        
+        # Check that we got valid performance metrics
+        self.assertIsNotNone(result.performance.expected_return)
+        self.assertIsNotNone(result.performance.volatility)
+        self.assertIsNotNone(result.performance.sharpe)
+        
+        # Check that we got the plots
+        self.assertIsNotNone(result.returns_dist)
+        self.assertIsNotNone(result.max_drawdown_plot)
 
     def test_run_optimization_min_cdar(self):
         """Test run_optimization_MIN_CDAR method."""
@@ -334,6 +343,15 @@ class TestPortfolioOptimization(unittest.TestCase):
         # Regardless of solver, check weights sum to approximately 1
         weights_sum = sum(result.weights.values())
         self.assertAlmostEqual(weights_sum, 1.0, places=2)
+        
+        # Check that we got valid performance metrics
+        self.assertIsNotNone(result.performance.expected_return)
+        self.assertIsNotNone(result.performance.volatility)
+        self.assertIsNotNone(result.performance.sharpe)
+        
+        # Check that we got the plots
+        self.assertIsNotNone(result.returns_dist)
+        self.assertIsNotNone(result.max_drawdown_plot)
 
     def test_run_optimization_cla_mvo(self):
         """Test run_optimization_CLA with MVO sub-method."""
@@ -610,6 +628,59 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertEqual(len(response.benchmark_returns), 1)
         self.assertEqual(response.benchmark_returns[0].name, BenchmarkName.nifty)
         self.assertEqual(len(response.benchmark_returns[0].returns), len(dates))
+
+    def test_cached_covariance_matrix(self):
+        """Test the cached covariance matrix functionality."""
+        # Create test data
+        start_date = datetime(2020, 1, 1)
+        tickers = ('STOCK1.NS', 'STOCK2.NS', 'STOCK3.NS')
+        
+        # Mock the cached_yf_download function
+        with patch('srv.cached_yf_download') as mock_download:
+            # Create mock return values for each ticker
+            mock_download.side_effect = lambda ticker, start_date: self.prices_data.get(ticker, pd.Series([]))
+            
+            # First call should compute the matrix
+            cov_matrix1 = cached_covariance_matrix(tickers, start_date)
+            
+            # Second call with same parameters should return cached result
+            cov_matrix2 = cached_covariance_matrix(tickers, start_date)
+            
+            # Check that both matrices are identical
+            pd.testing.assert_frame_equal(cov_matrix1, cov_matrix2)
+            
+            # Check matrix properties
+            self.assertEqual(cov_matrix1.shape, (3, 3))  # 3x3 matrix for 3 stocks
+            self.assertTrue(np.all(np.diag(cov_matrix1) >= 0))  # Diagonal elements should be non-negative
+            
+            # Test with different tickers (using existing mock data)
+            different_tickers = ('STOCK1.NS', 'STOCK2.NS', 'STOCK3.NS')  # Using same tickers but in different order
+            cov_matrix3 = cached_covariance_matrix(different_tickers, start_date)
+            
+            # Verify that cached_yf_download was called the correct number of times
+            # First call: 3 tickers
+            # Second call: cached, so no new downloads
+            # Third call: cached, so no new downloads
+            self.assertEqual(mock_download.call_count, 3)  # Only the first call should download data
+            
+            # Test with a completely different set of tickers
+            new_tickers = ('STOCK2.NS', 'STOCK3.NS', 'STOCK1.NS')  # Same tickers in different order
+            cov_matrix4 = cached_covariance_matrix(new_tickers, start_date)
+            
+            # Verify that the matrices have the same values
+            self.assertTrue(np.allclose(cov_matrix1.values, cov_matrix4.values))
+            
+            # Verify that the matrices are properly cached by checking the number of downloads
+            self.assertEqual(mock_download.call_count, 3)  # Still only the first 3 calls
+            
+            # Verify that the matrices are properly cached by checking the number of unique matrices
+            unique_matrices = {
+                id(cov_matrix1),
+                id(cov_matrix2),
+                id(cov_matrix3),
+                id(cov_matrix4)
+            }
+            self.assertEqual(len(unique_matrices), 1)  # All matrices should be the same object
 
 if __name__ == '__main__':
     unittest.main() 

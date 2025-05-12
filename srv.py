@@ -425,6 +425,39 @@ def cached_yf_download(ticker: str, start_date: datetime) -> pd.Series:
     """Cached download of 'Close' price from yfinance."""
     return yf.download(ticker, start=start_date, multi_level_index=False, progress=False, auto_adjust=True)['Close']
 
+from functools import wraps, lru_cache
+from datetime import datetime
+import pandas as pd
+from pypfopt.risk_models import CovarianceShrinkage
+
+def sorted_lru_cache(maxsize=128):
+    """Decorator to sort the first arg (tickers) before caching."""
+    def decorator(func):
+        cached = lru_cache(maxsize=maxsize)(func)
+        @wraps(func)
+        def wrapper(tickers, start_date):
+            # normalize order
+            sorted_tickers = tuple(sorted(tickers))
+            return cached(sorted_tickers, start_date)
+        return wrapper
+    return decorator
+
+@sorted_lru_cache(maxsize=64)
+def _compute_cov_matrix(sorted_tickers: tuple[str, ...],
+                        start_date: datetime) -> pd.DataFrame:
+    df = pd.concat(
+        [cached_yf_download(t, start_date) for t in sorted_tickers], axis=1
+    )
+    df.dropna(inplace=True)
+    return CovarianceShrinkage(df).ledoit_wolf()
+
+# Public API
+def cached_covariance_matrix(tickers: tuple[str, ...],
+                             start_date: datetime) -> pd.DataFrame:
+    # even though this just delegates, there's no duplicated body here
+    return _compute_cov_matrix(tickers, start_date)
+
+
 def format_tickers(stocks: List[StockItem]) -> List[str]:
     """Convert StockItem list into yfinance-friendly tickers (adding .BO or .NS)."""
     formatted_tickers = []
@@ -1329,7 +1362,8 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         try:
             returns = df.pct_change().dropna()
             mu = expected_returns.mean_historical_return(df, frequency=252)
-            S = CovarianceShrinkage(df).ledoit_wolf()
+            # Use cached covariance matrix
+            S = cached_covariance_matrix(tuple(formatted_tickers), start_date)
             cov_heatmap_b64 = generate_covariance_heatmap(S)
             stock_yearly_returns = compute_yearly_returns_stocks(returns)
         except Exception as e:
