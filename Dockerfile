@@ -11,8 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Create directory for MOSEK license (will be populated at runtime from secrets)
 RUN mkdir -p /app/mosek
 
-# Copy only production files (exclude test files)
+# Copy the server files
 COPY srv.py .
+COPY test.py .
 COPY main.py .
 
 # Create outputs directory

@@ -31,8 +31,6 @@ import logfire
 from fastapi.responses import JSONResponse
 import time
 import uuid
-from io import BytesIO
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ---- MOSEK License Configuration ----
 def configure_mosek_license():
@@ -658,27 +656,9 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
         "entropy": port_entropy
     }
 
-@lru_cache(maxsize=64)
-def cached_covariance_matrix(tickers: Tuple[str], start_date: datetime):
-    """Cache the covariance matrix computation for a given set of tickers and start date."""
-    df = pd.concat([cached_yf_download(t, start_date) for t in tickers], axis=1)
-    df.dropna(inplace=True)
-    return CovarianceShrinkage(df).ledoit_wolf()
-
-@lru_cache(maxsize=64)
-def cached_benchmark_returns(ticker: str, start_date: datetime):
-    """Cache benchmark returns for a given ticker and start date."""
-    return yf.download(ticker, start=start_date, progress=False, auto_adjust=True)['Close'].pct_change().dropna()
-
-@lru_cache(maxsize=32)
-def cached_risk_free_rate(start_date: datetime, end_date: datetime):
-    """Cache risk-free rate for a given date range."""
-    return get_risk_free_rate(start_date, end_date)
-
 def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
-    """Generate distribution and drawdown plots in memory, return base64 encoded images"""
+    """Generate distribution and drawdown plots, return base64 encoded images"""
     bins = freedman_diaconis_bins(port_returns)
-    
     # Plot distribution (histogram)
     plt.figure(figsize=(10, 6))
     plt.hist(port_returns, bins=bins, edgecolor='black', alpha=0.7, label='Daily Returns')
@@ -702,11 +682,10 @@ def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
     plt.axvline(cvar_90, color='g', linestyle='-', label=f"CVaR 90%: {cvar_90:.4f}")
     plt.legend()
 
-    # Save to BytesIO instead of file
-    buf_hist = BytesIO()
-    plt.savefig(buf_hist, format='png', bbox_inches='tight')
+    dist_file = os.path.join(output_dir, f"{method.lower()}_dist.png")
+    plt.savefig(dist_file)
     plt.close()
-    dist_b64 = base64.b64encode(buf_hist.getvalue()).decode('utf-8')
+    dist_b64 = file_to_base64(dist_file)
 
     # Plot drawdown
     cum = (1 + port_returns).cumprod()
@@ -720,11 +699,10 @@ def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
     plt.grid(True)
     plt.legend()
     
-    # Save to BytesIO instead of file
-    buf_dd = BytesIO()
-    plt.savefig(buf_dd, format='png', bbox_inches='tight')
+    dd_file = os.path.join(output_dir, f"{method.lower()}_drawdown.png")
+    plt.savefig(dd_file)
     plt.close()
-    dd_b64 = base64.b64encode(buf_dd.getvalue()).decode('utf-8')
+    dd_b64 = file_to_base64(dd_file)
     
     return dist_b64, dd_b64
 
@@ -1300,71 +1278,6 @@ def generate_covariance_heatmap(
 # Main Endpoint
 ########################################
 
-def parallel_optimizations(methods, mu, S, returns, benchmark_df, risk_free_rate, cla_method):
-    """Run multiple optimization methods in parallel using ThreadPoolExecutor."""
-    results = {}
-    failed_methods = {}  # Dictionary to store method name and error details
-    
-    with ThreadPoolExecutor() as executor:
-        future_to_method = {}
-        
-        for method in methods:
-            try:
-                if method == OptimizationMethod.CRITICAL_LINE_ALGORITHM:
-                    # For CLA, we need to handle both sub-methods if requested
-                    if cla_method == CLAOptimizationMethod.BOTH:
-                        future_to_method[executor.submit(run_optimization_CLA, "MVO", mu, S, returns, benchmark_df, risk_free_rate)] = f"{method.value}_MVO"
-                        future_to_method[executor.submit(run_optimization_CLA, "MinVol", mu, S, returns, benchmark_df, risk_free_rate)] = f"{method.value}_MinVol"
-                    else:
-                        future_to_method[executor.submit(run_optimization_CLA, cla_method.value, mu, S, returns, benchmark_df, risk_free_rate)] = method.value
-                elif method == OptimizationMethod.MIN_CVAR:
-                    future_to_method[executor.submit(run_optimization_MIN_CVAR, mu, returns, benchmark_df, risk_free_rate)] = method.value
-                elif method == OptimizationMethod.MIN_CDAR:
-                    future_to_method[executor.submit(run_optimization_MIN_CDAR, mu, returns, benchmark_df, risk_free_rate)] = method.value
-                elif method == OptimizationMethod.HRP:
-                    future_to_method[executor.submit(run_optimization_HRP, returns, S, benchmark_df, risk_free_rate)] = method.value
-                else:
-                    future_to_method[executor.submit(run_optimization, method, mu, S, returns, benchmark_df, risk_free_rate)] = method.value
-            except Exception as e:
-                logger.error(f"Failed to submit optimization task for method {method.value}: {str(e)}")
-                failed_methods[method.value] = {
-                    "error": str(e),
-                    "type": type(e).__name__,
-                    "stage": "task_submission"
-                }
-        
-        for future in as_completed(future_to_method):
-            method_name = future_to_method[future]
-            try:
-                result = future.result()
-                if result is None or (isinstance(result, tuple) and result[0] is None):
-                    failed_methods[method_name] = {
-                        "error": "Optimization returned None result",
-                        "type": "NoneResult",
-                        "stage": "optimization"
-                    }
-                else:
-                    results[method_name] = result
-            except Exception as e:
-                error_details = {
-                    "error": str(e),
-                    "type": type(e).__name__,
-                    "stage": "optimization"
-                }
-                logger.error(f"Error in {method_name} optimization: {str(e)}", exc_info=True)
-                failed_methods[method_name] = error_details
-                results[method_name] = (None, None)
-    
-    # Log summary of results
-    successful_methods = list(results.keys())
-    logger.info(f"Optimization completed. Successful methods: {successful_methods}")
-    if failed_methods:
-        logger.warning(f"Failed methods: {list(failed_methods.keys())}")
-        for method, error in failed_methods.items():
-            logger.warning(f"Method {method} failed at stage {error['stage']}: {error['error']}")
-    
-    return results, failed_methods
-
 @app.post("/optimize")
 def optimize_portfolio(request: TickerRequest = Body(...)):
     try:
@@ -1405,9 +1318,9 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         start_date = df.index.min().date()
         end_date = df.index.max().date()
 
-        # Get risk-free rate using cached function
+        # Get risk-free rate
         try:
-            risk_free_rate = cached_risk_free_rate(start_date, end_date)
+            risk_free_rate = get_risk_free_rate(start_date, end_date)
         except Exception as e:
             logger.warning("Error fetching risk-free rate: %s. Using default 0.05", str(e))
             risk_free_rate = 0.05  # Default fallback
@@ -1416,8 +1329,7 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         try:
             returns = df.pct_change().dropna()
             mu = expected_returns.mean_historical_return(df, frequency=252)
-            # Use cached covariance matrix
-            S = cached_covariance_matrix(tuple(formatted_tickers), datetime(1990, 1, 1))
+            S = CovarianceShrinkage(df).ledoit_wolf()
             cov_heatmap_b64 = generate_covariance_heatmap(S)
             stock_yearly_returns = compute_yearly_returns_stocks(returns)
         except Exception as e:
@@ -1429,48 +1341,78 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
                 details={"error": str(e)}
             )
         
-        # Run optimizations in parallel
-        optimization_results, failed_methods = parallel_optimizations(
-            request.methods,
-            mu,
-            S,
-            returns,
-            benchmark_df,
-            risk_free_rate,
-            request.cla_method
-        )
-        
-        # Process results
+        # Initialize dictionaries to hold results and cumulative returns
         results: Dict[str, Optional[OptimizationResult]] = {}
         cum_returns_df = pd.DataFrame(index=returns.index)
+        failed_methods = []
         
-        for method_name, (opt_result, cum_returns) in optimization_results.items():
-            if opt_result:
-                results[method_name] = opt_result
-                if cum_returns is not None:
-                    cum_returns_df[method_name] = cum_returns
+        for method in request.methods:
+            optimization_result = None
+            cum_returns = None
+            
+            try:
+                if method == OptimizationMethod.HRP:
+                    # For HRP, use sample covariance matrix (returns.cov())
+                    sample_cov = returns.cov()
+                    optimization_result, cum_returns = run_optimization_HRP(returns, sample_cov, benchmark_df, risk_free_rate)
+                elif method == OptimizationMethod.MIN_CVAR:
+                    optimization_result, cum_returns = run_optimization_MIN_CVAR(mu, returns, benchmark_df, risk_free_rate)
+                elif method == OptimizationMethod.MIN_CDAR:
+                    optimization_result, cum_returns = run_optimization_MIN_CDAR(mu, returns, benchmark_df, risk_free_rate)
+                elif method != OptimizationMethod.CRITICAL_LINE_ALGORITHM:
+                    optimization_result, cum_returns = run_optimization(method, mu, S, returns, benchmark_df, risk_free_rate)
+                else:
+                    # Handle CLA separately
+                    if request.cla_method == CLAOptimizationMethod.BOTH:
+                        result_mvo, cum_returns_mvo = run_optimization_CLA("MVO", mu, S, returns, benchmark_df, risk_free_rate)
+                        result_min_vol, cum_returns_min_vol = run_optimization_CLA("MinVol", mu, S, returns, benchmark_df, risk_free_rate)
+                        
+                        if result_mvo:
+                            results["CriticalLineAlgorithm_MVO"] = result_mvo
+                            cum_returns_df["CriticalLineAlgorithm_MVO"] = cum_returns_mvo
+                        else:
+                            failed_methods.append("CriticalLineAlgorithm_MVO")
+                            
+                        if result_min_vol:
+                            results["CriticalLineAlgorithm_MinVol"] = result_min_vol
+                            cum_returns_df["CriticalLineAlgorithm_MinVol"] = cum_returns_min_vol
+                        else:
+                            failed_methods.append("CriticalLineAlgorithm_MinVol")
+                        
+                        # Continue to next method since we've handled CLA specially
+                        continue
+                    else:
+                        sub_method = request.cla_method.value
+                        optimization_result, cum_returns = run_optimization_CLA(sub_method, mu, S, returns, benchmark_df, risk_free_rate)
+                        if optimization_result:
+                            results[f"CriticalLineAlgorithm_{sub_method}"] = optimization_result
+                            cum_returns_df[f"CriticalLineAlgorithm_{sub_method}"] = cum_returns
+                        else:
+                            failed_methods.append(f"CriticalLineAlgorithm_{sub_method}")
+                        continue
+            
+            except Exception as e:
+                logger.exception("Error in optimization method %s: %s", method.value, str(e))
+                failed_methods.append(method.value)
+                continue  # Skip to next method
+                
+            if optimization_result:
+                results[method.value] = optimization_result
+                cum_returns_df[method.value] = cum_returns
+            else:
+                failed_methods.append(method.value)
         
         # If all methods failed, return an error
         if len(results) == 0:
-            error_details = {
-                "failed_methods": {
-                    method: {
-                        "error": details.get("error", "Unknown error"),
-                        "stage": details.get("stage", "unknown"),
-                        "type": details.get("type", "unknown")
-                    }
-                    for method, details in failed_methods.items()
-                }
-            }
             raise APIError(
                 code=ErrorCode.OPTIMIZATION_FAILED,
                 message="All optimization methods failed",
                 status_code=500,
-                details=error_details
+                details={"failed_methods": failed_methods}
             )
         
-        # Calculate benchmark returns using cached function
-        benchmark_ret = cached_benchmark_returns(benchmark_ticker, datetime(1990, 1, 1))
+        # Calculate benchmark returns
+        benchmark_ret = benchmark_df.pct_change().dropna()
         cum_benchmark = (1 + benchmark_ret).cumprod()
         
         # Align with benchmark
@@ -1492,18 +1434,11 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
             risk_free_rate=risk_free_rate
         )
         
-        # Include detailed warnings in the response if some methods failed
+        # Include a warning in the response if some methods failed
         response_data = jsonable_encoder(response)
         if failed_methods:
             response_data["warnings"] = {
-                "failed_methods": {
-                    method: {
-                        "error": details.get("error", "Unknown error"),
-                        "stage": details.get("stage", "unknown"),
-                        "type": details.get("type", "unknown")
-                    }
-                    for method, details in failed_methods.items()
-                },
+                "failed_methods": failed_methods,
                 "message": "Some optimization methods failed to complete"
             }
         
@@ -1523,8 +1458,4 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
     except Exception as e:
         # Let our generic exception handler deal with unexpected errors
         logger.exception("Unexpected error in optimize_portfolio")
-        raise APIError(
-            code=ErrorCode.UNEXPECTED_ERROR,
-            message=str(e),
-            status_code=503
-        )
+        raise
