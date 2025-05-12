@@ -1303,36 +1303,67 @@ def generate_covariance_heatmap(
 def parallel_optimizations(methods, mu, S, returns, benchmark_df, risk_free_rate, cla_method):
     """Run multiple optimization methods in parallel using ThreadPoolExecutor."""
     results = {}
+    failed_methods = {}  # Dictionary to store method name and error details
+    
     with ThreadPoolExecutor() as executor:
         future_to_method = {}
         
         for method in methods:
-            if method == OptimizationMethod.CRITICAL_LINE_ALGORITHM:
-                # For CLA, we need to handle both sub-methods if requested
-                if cla_method == CLAOptimizationMethod.BOTH:
-                    future_to_method[executor.submit(run_optimization_CLA, "MVO", mu, S, returns, benchmark_df, risk_free_rate)] = f"{method.value}_MVO"
-                    future_to_method[executor.submit(run_optimization_CLA, "MinVol", mu, S, returns, benchmark_df, risk_free_rate)] = f"{method.value}_MinVol"
+            try:
+                if method == OptimizationMethod.CRITICAL_LINE_ALGORITHM:
+                    # For CLA, we need to handle both sub-methods if requested
+                    if cla_method == CLAOptimizationMethod.BOTH:
+                        future_to_method[executor.submit(run_optimization_CLA, "MVO", mu, S, returns, benchmark_df, risk_free_rate)] = f"{method.value}_MVO"
+                        future_to_method[executor.submit(run_optimization_CLA, "MinVol", mu, S, returns, benchmark_df, risk_free_rate)] = f"{method.value}_MinVol"
+                    else:
+                        future_to_method[executor.submit(run_optimization_CLA, cla_method.value, mu, S, returns, benchmark_df, risk_free_rate)] = method.value
+                elif method == OptimizationMethod.MIN_CVAR:
+                    future_to_method[executor.submit(run_optimization_MIN_CVAR, mu, returns, benchmark_df, risk_free_rate)] = method.value
+                elif method == OptimizationMethod.MIN_CDAR:
+                    future_to_method[executor.submit(run_optimization_MIN_CDAR, mu, returns, benchmark_df, risk_free_rate)] = method.value
+                elif method == OptimizationMethod.HRP:
+                    future_to_method[executor.submit(run_optimization_HRP, returns, S, benchmark_df, risk_free_rate)] = method.value
                 else:
-                    future_to_method[executor.submit(run_optimization_CLA, cla_method.value, mu, S, returns, benchmark_df, risk_free_rate)] = method.value
-            elif method == OptimizationMethod.MIN_CVAR:
-                future_to_method[executor.submit(run_optimization_MIN_CVAR, mu, returns, benchmark_df, risk_free_rate)] = method.value
-            elif method == OptimizationMethod.MIN_CDAR:
-                future_to_method[executor.submit(run_optimization_MIN_CDAR, mu, returns, benchmark_df, risk_free_rate)] = method.value
-            elif method == OptimizationMethod.HRP:
-                future_to_method[executor.submit(run_optimization_HRP, returns, S, benchmark_df, risk_free_rate)] = method.value
-            else:
-                future_to_method[executor.submit(run_optimization, method, mu, S, returns, benchmark_df, risk_free_rate)] = method.value
+                    future_to_method[executor.submit(run_optimization, method, mu, S, returns, benchmark_df, risk_free_rate)] = method.value
+            except Exception as e:
+                logger.error(f"Failed to submit optimization task for method {method.value}: {str(e)}")
+                failed_methods[method.value] = {
+                    "error": str(e),
+                    "type": type(e).__name__,
+                    "stage": "task_submission"
+                }
         
         for future in as_completed(future_to_method):
             method_name = future_to_method[future]
             try:
                 result = future.result()
-                results[method_name] = result
+                if result is None or (isinstance(result, tuple) and result[0] is None):
+                    failed_methods[method_name] = {
+                        "error": "Optimization returned None result",
+                        "type": "NoneResult",
+                        "stage": "optimization"
+                    }
+                else:
+                    results[method_name] = result
             except Exception as e:
-                logger.exception("Error in %s optimization", method_name)
+                error_details = {
+                    "error": str(e),
+                    "type": type(e).__name__,
+                    "stage": "optimization"
+                }
+                logger.error(f"Error in {method_name} optimization: {str(e)}", exc_info=True)
+                failed_methods[method_name] = error_details
                 results[method_name] = (None, None)
     
-    return results
+    # Log summary of results
+    successful_methods = list(results.keys())
+    logger.info(f"Optimization completed. Successful methods: {successful_methods}")
+    if failed_methods:
+        logger.warning(f"Failed methods: {list(failed_methods.keys())}")
+        for method, error in failed_methods.items():
+            logger.warning(f"Method {method} failed at stage {error['stage']}: {error['error']}")
+    
+    return results, failed_methods
 
 @app.post("/optimize")
 def optimize_portfolio(request: TickerRequest = Body(...)):
@@ -1399,7 +1430,7 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
             )
         
         # Run optimizations in parallel
-        optimization_results = parallel_optimizations(
+        optimization_results, failed_methods = parallel_optimizations(
             request.methods,
             mu,
             S,
@@ -1412,23 +1443,30 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         # Process results
         results: Dict[str, Optional[OptimizationResult]] = {}
         cum_returns_df = pd.DataFrame(index=returns.index)
-        failed_methods = []
         
         for method_name, (opt_result, cum_returns) in optimization_results.items():
             if opt_result:
                 results[method_name] = opt_result
                 if cum_returns is not None:
                     cum_returns_df[method_name] = cum_returns
-            else:
-                failed_methods.append(method_name)
         
         # If all methods failed, return an error
         if len(results) == 0:
+            error_details = {
+                "failed_methods": {
+                    method: {
+                        "error": details.get("error", "Unknown error"),
+                        "stage": details.get("stage", "unknown"),
+                        "type": details.get("type", "unknown")
+                    }
+                    for method, details in failed_methods.items()
+                }
+            }
             raise APIError(
                 code=ErrorCode.OPTIMIZATION_FAILED,
                 message="All optimization methods failed",
                 status_code=500,
-                details={"failed_methods": failed_methods}
+                details=error_details
             )
         
         # Calculate benchmark returns using cached function
@@ -1454,11 +1492,18 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
             risk_free_rate=risk_free_rate
         )
         
-        # Include a warning in the response if some methods failed
+        # Include detailed warnings in the response if some methods failed
         response_data = jsonable_encoder(response)
         if failed_methods:
             response_data["warnings"] = {
-                "failed_methods": failed_methods,
+                "failed_methods": {
+                    method: {
+                        "error": details.get("error", "Unknown error"),
+                        "stage": details.get("stage", "unknown"),
+                        "type": details.get("type", "unknown")
+                    }
+                    for method, details in failed_methods.items()
+                },
                 "message": "Some optimization methods failed to complete"
             }
         

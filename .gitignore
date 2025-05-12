@@ -175,3 +175,23 @@ min_vol_port_report.html
 mosek/
 mosek.lic
 **/mosek.lic
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Outputs
+outputs/
+*.jpg
+*.jpeg
+*.gif
+
+# Misc
+.DS_Store
+Thumbs.db
