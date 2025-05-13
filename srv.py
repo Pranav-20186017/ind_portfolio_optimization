@@ -753,23 +753,34 @@ class RiskFreeRate:
                     
                 logger.debug(f"Data from CSV: {data.head()}")
                 
-                # Process the data and populate _series
+                # 1) Parse annual yields (e.g. 6.5% → 0.065)
                 data['Date'] = pd.to_datetime(data['Date'])
                 data.set_index('Date', inplace=True)
+                annual_yield = data['Close'].div(100.0).sort_index()
                 
-                # Create a fresh Series with the Close column divided by 100
-                temp_series = pd.Series(data['Close'].values / 100.0, index=data.index).sort_index()
+                # Additional sanity check for yield values
+                if (annual_yield > 0.5).any():
+                    logger.warning("Found implausibly high annual yields (>50%). Capping values.")
+                    annual_yield = annual_yield.clip(upper=0.5)  # Cap at 50%
                 
                 # Make sure the series is not empty
-                if temp_series.empty:
-                    logger.warning("Empty risk-free series after processing; using default RF %f", settings.default_rf_rate)
+                if annual_yield.empty:
+                    logger.warning("Empty annual yield series after processing; using default RF %f", settings.default_rf_rate)
                     self._annualized_rate = settings.default_rf_rate
                     return self._annualized_rate
+                
+                # 2) Convert to daily simple rate: (1+y)^(1/252) - 1
+                ann_factor = 252
+                daily_rate = (1 + annual_yield) ** (1/ann_factor) - 1
+                
+                # Store a global reference for regression access
+                global _rf_series
+                _rf_series = daily_rate
                 
                 # Check if we're in a testing environment
                 if is_testing:
                     # In testing mode, just use the data as-is to preserve test expectations
-                    self._series = temp_series
+                    self._series = daily_rate
                 else:
                     # In production mode, fill in missing dates
                     # Generate a complete date range from start to end date
@@ -777,7 +788,7 @@ class RiskFreeRate:
                     date_range = pd.date_range(start=start_date, end=end_date, freq='D')
                     
                     # Reindex the series to include all dates in the range and forward fill missing values
-                    complete_series = temp_series.reindex(date_range)
+                    complete_series = daily_rate.reindex(date_range)
                     
                     # Check how many dates are missing
                     missing_count = complete_series.isna().sum()
@@ -797,15 +808,18 @@ class RiskFreeRate:
                 logger.debug(f"_series after assignment: {self._series.head()}")
                 logger.debug(f"_series shape: {self._series.shape}")
                 
-                # Compute annualized mean RF for point metrics
-                ann_factor = 252
+                # 4) Compute annualized rate properly via compounding
                 avg_daily = self._series.mean()
-                annualized_rf = (1 + avg_daily) ** ann_factor - 1
+                annualized_rf = (1 + avg_daily)**ann_factor - 1
+                
                 logger.info("Computed annualized RF: %f%% from %d daily rates", annualized_rf * 100, len(self._series))
                 
-                # Never return negative
+                # Final sanity checks
                 if annualized_rf < 0:
                     logger.warning("Negative annualized RF: %f%%. Using default RF %f", annualized_rf * 100, settings.default_rf_rate)
+                    self._annualized_rate = settings.default_rf_rate
+                elif annualized_rf > 0.5:  # More than 50% is unrealistic for risk-free
+                    logger.warning("Unrealistically high annualized RF: %f%%. Using default RF %f", annualized_rf * 100, settings.default_rf_rate)
                     self._annualized_rate = settings.default_rf_rate
                 else:
                     self._annualized_rate = annualized_rf
@@ -836,7 +850,8 @@ class RiskFreeRate:
         """
         ann_factor = 252
         fallback_rate = risk_free_rate if risk_free_rate is not None else self._annualized_rate
-        daily_fallback = fallback_rate / ann_factor
+        # Convert annual rate to daily rate
+        daily_fallback = (1 + fallback_rate) ** (1/ann_factor) - 1
         
         if self.is_empty():
             return pd.Series(daily_fallback, index=dates_index)
@@ -859,6 +874,11 @@ class RiskFreeRate:
         
         # As a last resort, fill any remaining NaNs with the constant risk-free rate
         rf_aligned = rf_aligned.fillna(daily_fallback)
+        
+        # Add sanity check to prevent extreme values
+        # Max daily rate equivalent to 50% annual
+        max_daily = (1 + 0.5) ** (1/ann_factor) - 1
+        rf_aligned = rf_aligned.clip(lower=0, upper=max_daily)
         
         return rf_aligned
 
@@ -1528,10 +1548,6 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
     else:
         cagr = 0.0
 
-    # Calculate annualized returns for both portfolio and benchmark for comparison
-    port_annual_return = port_returns.mean() * ann_factor
-    benchmark_annual_return = benchmark_df.pct_change().dropna().mean() * ann_factor
-
     # Portfolio Beta using OLS regression
     benchmark_ret = benchmark_df.pct_change().dropna()
 
@@ -1565,35 +1581,20 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
             results = model.fit()
             
             # Extract results (alpha is constant, beta is the slope)
-            portfolio_alpha = results.params[0]
+            daily_alpha = results.params[0]  # This is the daily alpha
             portfolio_beta = results.params[1]
             
-            # Get p-value for beta and R-squared
-            beta_pvalue = results.pvalues[1]
-            r_squared = results.rsquared
-            
-            # Special handling for large-cap stocks with positive expected returns
-            # If portfolio has positive annualized return but negative alpha, adjust alpha
-            if port_annual_return > 0 and portfolio_alpha < 0:
-                # If R-squared is low, the alpha may be less reliable
-                if r_squared < 0.3:
-                    # For low R-squared, positive return stocks, use a small positive alpha
-                    # The magnitude scales with the outperformance vs benchmark
-                    outperformance = port_annual_return - benchmark_annual_return
-                    if outperformance > 0:
-                        # Portfolio outperforms benchmark but has negative alpha - likely an error
-                        # Set alpha to a small fraction of the outperformance
-                        portfolio_alpha = outperformance * 0.1  # 10% of outperformance as alpha
-                        logger.info(f"Adjusted negative alpha to {portfolio_alpha:.4f} based on positive outperformance")
-                    else:
-                        # If not outperforming, set a very small alpha
-                        portfolio_alpha = 0.0005
-                        logger.info(f"Set small positive alpha {portfolio_alpha:.4f} for positive return stock")
+            # Annualize alpha from daily to annual
+            portfolio_alpha = daily_alpha * ann_factor
             
             # Apply sanity check for alpha (cap at +/- 25%)
             if abs(portfolio_alpha) > 0.25:
                 portfolio_alpha = 0.25 * (1 if portfolio_alpha > 0 else -1)
                 logger.warning(f"Alpha value was capped at {portfolio_alpha:.4f} due to unrealistic value")
+            
+            # Get p-value for beta and R-squared
+            beta_pvalue = results.pvalues[1]
+            r_squared = results.rsquared
             
             # Log some debugging information
             logger.debug(f"OLS Beta: {portfolio_beta:.4f} (p-value: {beta_pvalue:.4f}, R²: {r_squared:.4f})")
@@ -1604,18 +1605,12 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
             if bench_excess.var() > 1e-9:
                 cov_pb = port_excess.cov(bench_excess)
                 portfolio_beta = cov_pb / bench_excess.var()
-                
-                # For alpha, use a simple CAPM-based calculation
-                portfolio_alpha = port_annual_return - risk_free_rate - (portfolio_beta * (benchmark_annual_return - risk_free_rate))
     else:
         # Fallback to covariance method for small sample sizes
         logger.debug("Not enough data points for OLS regression, using covariance method")
         if len(port_excess) > 1 and bench_excess.var() > 1e-9:
             cov_pb = port_excess.cov(bench_excess)
             portfolio_beta = cov_pb / bench_excess.var()
-            
-            # For alpha, use a simple CAPM-based calculation
-            portfolio_alpha = port_annual_return - risk_free_rate - (portfolio_beta * (benchmark_annual_return - risk_free_rate))
     
     # Apply a sanity check for beta (avoid extreme values)
     if abs(portfolio_beta) > 5:
@@ -1629,9 +1624,10 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
     b = 0.67  # Blume Adjustment Factor
     blume_adjusted_beta = 1 + (b * (portfolio_beta - 1))
     
-    # Calculate Treynor ratio
-    excess_return = port_annual_return - risk_free_rate
-    treynor_ratio = excess_return / portfolio_beta if portfolio_beta != 0 else 0.0
+    # Treynor ratio on annualized data
+    annual_return = port_returns.mean() * ann_factor
+    annual_excess = annual_return - risk_free_rate
+    treynor_ratio = annual_excess / portfolio_beta if portfolio_beta != 0 else 0.0
     
     # Apply sanity checks to Treynor ratio
     # Cap Treynor ratio at ±2 (which is already a very high value)

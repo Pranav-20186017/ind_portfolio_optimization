@@ -195,8 +195,12 @@ class TestPortfolioOptimization(unittest.TestCase):
 
     def test_compute_custom_metrics(self):
         """Test compute_custom_metrics function with different data characteristics."""
-        # Test with normal returns data
-        metrics = compute_custom_metrics(self.returns['STOCK1.NS'], self.nifty_returns)
+        # Test with normal returns data (benchmark must be prices, not returns)
+        metrics = compute_custom_metrics(
+            self.returns['STOCK1.NS'],
+            # pass the price series here
+            self.nifty_df
+        )
         
         # Check all metrics are calculated
         expected_metrics = [
@@ -210,23 +214,84 @@ class TestPortfolioOptimization(unittest.TestCase):
         
         # Test with all positive returns (affects Sortino)
         all_positive = pd.Series(np.abs(np.random.normal(0.001, 0.01, 100)))
-        metrics = compute_custom_metrics(all_positive, self.nifty_returns[:100])
+        # for the positive‐returns case, slice the first 101 price points
+        metrics = compute_custom_metrics(
+            all_positive,
+            self.nifty_df.iloc[:len(all_positive) + 1]
+        )
         self.assertTrue(np.isfinite(metrics['sortino']))
         
         # Test with returns that have no drawdown
         always_up = pd.Series([0.001] * 100)
-        metrics = compute_custom_metrics(always_up, self.nifty_returns[:100])
+        metrics = compute_custom_metrics(
+            always_up,
+            self.nifty_df.iloc[:len(always_up) + 1]
+        )
         self.assertEqual(metrics['max_drawdown'], 0)
         self.assertEqual(metrics['romad'], 0.0)
         
         # Test with single return (edge case)
         single_return = pd.Series([0.01])
         single_nifty = pd.Series([0.005])
-        metrics = compute_custom_metrics(single_return, single_nifty)
+        # single_nifty is a 1-point return series—convert it to a "price" of 1*(1+return)
+        single_price = (1 + single_nifty).cumprod()
+        metrics = compute_custom_metrics(single_return, single_price)
         self.assertEqual(metrics['cagr'], 0.0)  # CAGR requires at least 2 points
         
         # Verify alpha, beta, and other regression statistics are calculated
-        metrics = compute_custom_metrics(self.returns['STOCK1.NS'], self.nifty_returns)
+        metrics = compute_custom_metrics(self.returns['STOCK1.NS'], self.nifty_df)
+        
+        # Test alpha annualization specifically
+        # But be careful about OLS with random data - results can be noisy
+        # Instead, verify that alpha has the right magnitude (not necessarily the exact value)
+        
+        # Controlled test case with constant positive returns for determinism
+        dates = pd.date_range('2020-01-01', periods=100, freq='B')
+        # 1. Use a varying benchmark return series so regression has non-zero variance
+        #    Linearly increase from 0.05% to 0.5%
+        bench_returns = pd.Series(
+            np.linspace(0.0005, 0.005, len(dates)),
+            index=dates
+        )
+        # 2. Build portfolio = alpha + beta * benchmark, no extra noise
+        daily_alpha = 0.0004  # 0.04% daily alpha (~10% annualized)
+        beta = 1.0
+        port_returns = pd.Series(daily_alpha + beta * bench_returns.values, index=dates)
+        
+        # 3. Compute metrics with a controlled risk-free rate
+        risk_free_rate = 0.02  # 2% annual risk-free rate
+        
+        # Patch the risk-free rate manager to return a controlled value
+        original_get_aligned_series = risk_free_rate_manager.get_aligned_series
+        
+        try:
+            # Override the get_aligned_series to return a constant daily RF
+            daily_rf = (1 + risk_free_rate) ** (1/252) - 1
+            risk_free_rate_manager.get_aligned_series = lambda dates_index, risk_free_rate=None: pd.Series(daily_rf, index=dates_index)
+            
+            # our controlled setup uses bench_returns, so convert them to a price series
+            bench_price = (1 + bench_returns).cumprod()
+            # pass the price series (not raw returns) into compute_custom_metrics
+            metrics_test = compute_custom_metrics(port_returns, bench_price, risk_free_rate)
+            
+            # With high correlation and controlled setup, we expect:
+            # 1. Beta should be close to 1.0
+            self.assertAlmostEqual(metrics_test['portfolio_beta'], 1.0, places=1)
+            
+            # 2. Alpha should be positive and in the right order of magnitude when annualized
+            # Daily alpha of 0.0004 → Annual of around 0.1 (0.0004 * 252)
+            # Allow wider tolerance due to random noise
+            self.assertGreater(metrics_test['portfolio_alpha'], 0.05)  # Should be significantly positive
+            self.assertLess(metrics_test['portfolio_alpha'], 0.15)  # But not implausibly high
+            
+            # 3. Treynor ratio should also be positive for this test case
+            self.assertGreater(metrics_test['treynor_ratio'], 0)
+            
+        finally:
+            # Restore the original method
+            risk_free_rate_manager.get_aligned_series = original_get_aligned_series
+        
+        # Verify basic type checking for original metrics
         self.assertTrue(isinstance(metrics['portfolio_alpha'], float))
         self.assertTrue(isinstance(metrics['beta_pvalue'], float))
         self.assertTrue(isinstance(metrics['r_squared'], float))
@@ -531,17 +596,27 @@ class TestPortfolioOptimization(unittest.TestCase):
             else:
                 print("risk_free_rate_manager series is empty")
             
-            # Check if the series was populated
+            # Check if the series was populated with daily rates
             self.assertFalse(srv.risk_free_rate_manager.is_empty())
             self.assertEqual(len(srv.risk_free_rate_manager._series), 2)  # Should have two entries from mock data
-            self.assertAlmostEqual(srv.risk_free_rate_manager._series.iloc[0], 6.5/100, places=4)  # Values should be divided by 100
             
-            # Expected average of the 'Close' column converted to annual rate
-            # (1 + avg_daily)^252 - 1, where avg_daily is (6.5 + 6.6)/2/100
-            ann_factor = 252
-            avg_daily = (6.5 + 6.6) / 2 / 100
-            expected_rf = (1 + avg_daily) ** ann_factor - 1
-            self.assertAlmostEqual(rf_rate, expected_rf, places=4)
+            # Calculate expected daily rate for 6.5% annual: (1+0.065)^(1/252) - 1
+            expected_daily_rate = (1 + 0.065) ** (1/252) - 1
+            self.assertAlmostEqual(srv.risk_free_rate_manager._series.iloc[0], expected_daily_rate, places=6)
+            
+            # Expected annualized rate from daily rates of 6.5% and 6.6%
+            # Convert to daily rates first
+            d0 = (1 + 0.065) ** (1/252) - 1
+            d1 = (1 + 0.066) ** (1/252) - 1
+            
+            # Average daily rate
+            avg_daily = (d0 + d1) / 2
+            
+            # Re-annualize using compound interest formula
+            expected_annual = (1 + avg_daily) ** 252 - 1
+            
+            # Check the annualized rate
+            self.assertAlmostEqual(rf_rate, expected_annual, places=6)
             
             # Test with API error - should now return default value instead of raising exception
             srv.risk_free_rate_manager._series = pd.Series(dtype=float)  # Reset for next test
@@ -557,15 +632,21 @@ class TestPortfolioOptimization(unittest.TestCase):
             self.assertEqual(rf_rate, default_rf_rate)
             self.assertTrue(srv.risk_free_rate_manager.is_empty())  # Should not populate series with bad data
             
-            # Test with negative average (should return default from settings)
+            # Test with negative annual yield (the current implementation doesn't clip at daily rate level)
             mock_response.status_code = 200
             mock_response.text = "Date,Open,High,Low,Close,Volume\n2022-01-01,-5.0,-4.9,-5.1,-5.0,1000\n"
             rf_rate = srv.risk_free_rate_manager.fetch_and_set(start_date, end_date)
-            self.assertEqual(rf_rate, default_rf_rate)
+            
+            # For negative annual yield (-5.0%), the daily rate is (1-0.05)^(1/252)-1
+            # which is a negative value
+            expected_daily_rate = (1 - 0.05) ** (1/252) - 1
             
             # Should still populate series even with negative values
             self.assertFalse(srv.risk_free_rate_manager.is_empty())
-            self.assertAlmostEqual(srv.risk_free_rate_manager._series.iloc[0], -5.0/100, places=4)
+            self.assertAlmostEqual(srv.risk_free_rate_manager._series.iloc[0], expected_daily_rate, places=6)
+            
+            # But the final RF rate should be default since we don't want negative annualized rates
+            self.assertEqual(rf_rate, default_rf_rate)
 
             # Test get_aligned_series method
             test_dates = pd.date_range(start='2022-01-01', end='2022-01-10', freq='D')
