@@ -1477,7 +1477,7 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
             end_date=end_date,
             cumulative_returns=cumulative_returns,
             dates=cum_returns_df.index.tolist(),
-            benchmark_returns=[BenchmarkReturn(name=request.benchmark, returns=cum_benchmark.tolist())],
+            benchmark_returns=[BenchmarkReturn(name=request.benchmark, returns=cum_benchmark.values.tolist())],
             stock_yearly_returns=stock_yearly_returns,
             covariance_heatmap=cov_heatmap_b64,
             risk_free_rate=risk_free_rate
