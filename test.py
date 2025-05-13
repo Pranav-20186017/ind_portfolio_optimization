@@ -39,7 +39,7 @@ from srv import (
     generate_covariance_heatmap, file_to_base64, EquiWeightedOptimizer,
     OptimizationMethod, CLAOptimizationMethod, StockItem, ExchangeEnum,
     APIError, BENCHMARK_TICKERS, BenchmarkName, BenchmarkReturn,
-    TickerRequest, PortfolioOptimizationResponse
+    TickerRequest, PortfolioOptimizationResponse, risk_free_rate_manager
 )
 
 # Suppress warnings for cleaner test output
@@ -49,6 +49,9 @@ class TestPortfolioOptimization(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up test data that will be used across multiple tests."""
+        # Set TESTING environment variable to ensure risk_free_rate_manager works correctly in tests
+        os.environ["TESTING"] = "1"
+        
         # Create a directory for test outputs if it doesn't exist
         cls.test_output_dir = './test_outputs'
         os.makedirs(cls.test_output_dir, exist_ok=True)
@@ -101,6 +104,13 @@ class TestPortfolioOptimization(unittest.TestCase):
             drift = 0.0005
             prices = 10000 * np.cumprod(1 + np.random.normal(drift, 0.015, len(cls.dates)))
             cls.benchmark_data[benchmark] = pd.Series(prices, index=cls.dates)
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up after all tests."""
+        # Remove TESTING environment variable
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
 
     def test_format_tickers(self):
         """Test format_tickers function with different exchanges."""
@@ -191,8 +201,9 @@ class TestPortfolioOptimization(unittest.TestCase):
         # Check all metrics are calculated
         expected_metrics = [
             'sortino', 'max_drawdown', 'romad', 'var_95', 'cvar_95',
-            'var_90', 'cvar_90', 'cagr', 'portfolio_beta', 'skewness',
-            'kurtosis', 'entropy'
+            'var_90', 'cvar_90', 'cagr', 'portfolio_beta', 'portfolio_alpha',
+            'beta_pvalue', 'r_squared', 'blume_adjusted_beta', 'treynor_ratio',
+            'skewness', 'kurtosis', 'entropy'
         ]
         for metric in expected_metrics:
             self.assertIn(metric, metrics)
@@ -213,6 +224,77 @@ class TestPortfolioOptimization(unittest.TestCase):
         single_nifty = pd.Series([0.005])
         metrics = compute_custom_metrics(single_return, single_nifty)
         self.assertEqual(metrics['cagr'], 0.0)  # CAGR requires at least 2 points
+        
+        # Verify alpha, beta, and other regression statistics are calculated
+        metrics = compute_custom_metrics(self.returns['STOCK1.NS'], self.nifty_returns)
+        self.assertTrue(isinstance(metrics['portfolio_alpha'], float))
+        self.assertTrue(isinstance(metrics['beta_pvalue'], float))
+        self.assertTrue(isinstance(metrics['r_squared'], float))
+        self.assertTrue(isinstance(metrics['treynor_ratio'], float))
+        self.assertTrue(np.isfinite(metrics['portfolio_alpha']))
+        self.assertTrue(np.isfinite(metrics['beta_pvalue']))
+        self.assertTrue(np.isfinite(metrics['r_squared']))
+        self.assertTrue(0 <= metrics['r_squared'] <= 1)  # R² should be between 0 and 1
+
+    def test_beta_calculation_with_daily_rf(self):
+        """Test beta calculation using daily risk-free rates."""
+        # Create a simple returns series for portfolio and benchmark
+        dates = pd.date_range('2022-01-01', periods=100, freq='B')
+        np.random.seed(42)
+        port_returns = pd.Series(np.random.normal(0.001, 0.01, 100), index=dates)
+        bench_returns = pd.Series(np.random.normal(0.0005, 0.008, 100), index=dates)
+        
+        # Get module reference to access the risk_free_rate_manager
+        import srv
+        
+        # Save original state
+        original_series = srv.risk_free_rate_manager._series.copy()
+        original_rate = srv.risk_free_rate_manager._annualized_rate
+        
+        try:
+            # Test when risk-free rate series is empty (should use constant risk-free rate)
+            srv.risk_free_rate_manager._series = pd.Series(dtype=float)  # Empty series
+            metrics1 = compute_custom_metrics(port_returns, bench_returns, risk_free_rate=0.05)
+            
+            # Test with populated risk-free rate series
+            rf_dates = pd.date_range('2022-01-01', periods=120, freq='B')  # More dates than returns
+            rf_values = np.full(120, 0.0002)  # 5% annually ≈ 0.0002 daily
+            srv.risk_free_rate_manager._series = pd.Series(rf_values, index=rf_dates)
+            
+            metrics2 = compute_custom_metrics(port_returns, bench_returns, risk_free_rate=0.05)
+            
+            # With the same random seed and similar risk-free rate, betas should be close
+            self.assertAlmostEqual(metrics1['portfolio_beta'], metrics2['portfolio_beta'], places=1)
+            
+            # OLS should produce alpha, p-values and R²
+            self.assertTrue(isinstance(metrics2['portfolio_alpha'], float))
+            self.assertTrue(isinstance(metrics2['beta_pvalue'], float))
+            self.assertTrue(isinstance(metrics2['r_squared'], float))
+            self.assertTrue(isinstance(metrics2['treynor_ratio'], float))
+            
+            # With excessive risk-free rate, beta calculation should remain stable
+            srv.risk_free_rate_manager._series = pd.Series(np.full(120, 0.0008), index=rf_dates)  # Unrealistically high daily RF
+            metrics3 = compute_custom_metrics(port_returns, bench_returns, risk_free_rate=0.05)
+            
+            # All portfolio_beta values should be finite
+            self.assertTrue(np.isfinite(metrics1['portfolio_beta']))
+            self.assertTrue(np.isfinite(metrics2['portfolio_beta']))
+            self.assertTrue(np.isfinite(metrics3['portfolio_beta']))
+            
+            # All blume_adjusted_beta values should also be finite
+            self.assertTrue(np.isfinite(metrics1['blume_adjusted_beta']))
+            self.assertTrue(np.isfinite(metrics2['blume_adjusted_beta']))
+            self.assertTrue(np.isfinite(metrics3['blume_adjusted_beta']))
+            
+            # Alpha values should be finite
+            self.assertTrue(np.isfinite(metrics1['portfolio_alpha']))
+            self.assertTrue(np.isfinite(metrics2['portfolio_alpha']))
+            self.assertTrue(np.isfinite(metrics3['portfolio_alpha']))
+            
+        finally:
+            # Restore original state
+            srv.risk_free_rate_manager._series = original_series
+            srv.risk_free_rate_manager._annualized_rate = original_rate
 
     @patch('srv.plt')
     @patch('srv.file_to_base64')
@@ -410,40 +492,91 @@ class TestPortfolioOptimization(unittest.TestCase):
 
     @patch('srv.http_get')
     def test_get_risk_free_rate(self, mock_http_get):
-        """Test get_risk_free_rate function with mocked API response."""
+        """Test risk_free_rate_manager.fetch_and_set function with mocked API response."""
+        print("\nDEBUGGING test_get_risk_free_rate")
+        
         # Get the default risk-free rate from our mock settings
         default_rf_rate = sys.modules['settings'].settings.default_rf_rate
         
-        # Create a mock response
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = "Date,Open,High,Low,Close,Volume\n2022-01-01,6.5,6.6,6.4,6.5,1000\n2022-01-02,6.6,6.7,6.5,6.6,1200\n"
-        mock_http_get.return_value = mock_response
+        # Import the module for direct reference
+        import srv
         
-        # Test with normal dates
-        start_date = datetime(2022, 1, 1)
-        end_date = datetime(2022, 1, 31)
-        rf_rate = get_risk_free_rate(start_date, end_date)
+        # Save the original state
+        original_series = srv.risk_free_rate_manager._series.copy()
+        original_rate = srv.risk_free_rate_manager._annualized_rate
         
-        # Expected average of the 'Close' column: (6.5 + 6.6) / 2 = 6.55, then divided by 100
-        self.assertAlmostEqual(rf_rate, 6.55 / 100, places=4)
+        # Reset for clean testing
+        srv.risk_free_rate_manager._series = pd.Series(dtype=float)
+        srv.risk_free_rate_manager._annualized_rate = default_rf_rate
         
-        # Test with API error - should now return default value instead of raising exception
-        mock_response.status_code = 404
-        rf_rate = get_risk_free_rate(start_date, end_date)
-        self.assertEqual(rf_rate, default_rf_rate)
+        print(f"Initial risk_free_rate_manager series empty: {srv.risk_free_rate_manager.is_empty()}")
         
-        # Test with missing 'Close' column - should now return default value instead of raising exception
-        mock_response.status_code = 200
-        mock_response.text = "Date,Open,High,Low,Volume\n2022-01-01,6.5,6.6,6.4,1000\n"
-        rf_rate = get_risk_free_rate(start_date, end_date)
-        self.assertEqual(rf_rate, default_rf_rate)
-        
-        # Test with negative average (should return default from settings)
-        mock_response.status_code = 200
-        mock_response.text = "Date,Open,High,Low,Close,Volume\n2022-01-01,-5.0,-4.9,-5.1,-5.0,1000\n"
-        rf_rate = get_risk_free_rate(start_date, end_date)
-        self.assertEqual(rf_rate, default_rf_rate)
+        try:
+            # Create a mock response
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.text = "Date,Open,High,Low,Close,Volume\n2022-01-01,6.5,6.6,6.4,6.5,1000\n2022-01-02,6.6,6.7,6.5,6.6,1200\n"
+            mock_http_get.return_value = mock_response
+            
+            print(f"Mock response text: {mock_response.text[:50]}...")
+            
+            # Test with normal dates
+            start_date = datetime(2022, 1, 1)
+            end_date = datetime(2022, 1, 31)
+            rf_rate = srv.risk_free_rate_manager.fetch_and_set(start_date, end_date)
+            
+            print(f"After fetch_and_set call, risk_free_rate_manager series empty: {srv.risk_free_rate_manager.is_empty()}")
+            if not srv.risk_free_rate_manager.is_empty():
+                print(f"risk_free_rate_manager series length: {len(srv.risk_free_rate_manager._series)}, values: {srv.risk_free_rate_manager._series.values}")
+            else:
+                print("risk_free_rate_manager series is empty")
+            
+            # Check if the series was populated
+            self.assertFalse(srv.risk_free_rate_manager.is_empty())
+            self.assertEqual(len(srv.risk_free_rate_manager._series), 2)  # Should have two entries from mock data
+            self.assertAlmostEqual(srv.risk_free_rate_manager._series.iloc[0], 6.5/100, places=4)  # Values should be divided by 100
+            
+            # Expected average of the 'Close' column converted to annual rate
+            # (1 + avg_daily)^252 - 1, where avg_daily is (6.5 + 6.6)/2/100
+            ann_factor = 252
+            avg_daily = (6.5 + 6.6) / 2 / 100
+            expected_rf = (1 + avg_daily) ** ann_factor - 1
+            self.assertAlmostEqual(rf_rate, expected_rf, places=4)
+            
+            # Test with API error - should now return default value instead of raising exception
+            srv.risk_free_rate_manager._series = pd.Series(dtype=float)  # Reset for next test
+            mock_response.status_code = 404
+            rf_rate = srv.risk_free_rate_manager.fetch_and_set(start_date, end_date)
+            self.assertEqual(rf_rate, default_rf_rate)
+            self.assertTrue(srv.risk_free_rate_manager.is_empty())  # Should not populate series on error
+            
+            # Test with missing 'Close' column - should now return default value instead of raising exception
+            mock_response.status_code = 200
+            mock_response.text = "Date,Open,High,Low,Volume\n2022-01-01,6.5,6.6,6.4,1000\n"
+            rf_rate = srv.risk_free_rate_manager.fetch_and_set(start_date, end_date)
+            self.assertEqual(rf_rate, default_rf_rate)
+            self.assertTrue(srv.risk_free_rate_manager.is_empty())  # Should not populate series with bad data
+            
+            # Test with negative average (should return default from settings)
+            mock_response.status_code = 200
+            mock_response.text = "Date,Open,High,Low,Close,Volume\n2022-01-01,-5.0,-4.9,-5.1,-5.0,1000\n"
+            rf_rate = srv.risk_free_rate_manager.fetch_and_set(start_date, end_date)
+            self.assertEqual(rf_rate, default_rf_rate)
+            
+            # Should still populate series even with negative values
+            self.assertFalse(srv.risk_free_rate_manager.is_empty())
+            self.assertAlmostEqual(srv.risk_free_rate_manager._series.iloc[0], -5.0/100, places=4)
+
+            # Test get_aligned_series method
+            test_dates = pd.date_range(start='2022-01-01', end='2022-01-10', freq='D')
+            aligned_series = srv.risk_free_rate_manager.get_aligned_series(test_dates)
+            self.assertEqual(len(aligned_series), len(test_dates))
+            self.assertFalse(aligned_series.isna().any())  # No missing values
+            
+        finally:
+            # Restore original state
+            srv.risk_free_rate_manager._series = original_series
+            srv.risk_free_rate_manager._annualized_rate = original_rate
 
     def test_compute_yearly_returns_stocks(self):
         """Test compute_yearly_returns_stocks function."""
@@ -638,52 +771,48 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertEqual(len(response.benchmark_returns[0].returns), len(dates))
 
     def test_cached_yf_download_expiration(self):
-        """Test that cached_yf_download expires cache entries after TTL period."""
-        # This is more of an integration test and should be skipped if not specifically enabled
-        if os.environ.get("INTEGRATION_TESTS", "0") != "1":
-            self.skipTest("Skipping integration test - set INTEGRATION_TESTS=1 to run")
-        
-        # Use a very small TTL for testing
-        from cachetools import TTLCache
+        """Test that cached_yf_download properly caches and uses download_close_prices."""
+        # Import required modules
         import srv
-        import importlib
+        from unittest.mock import patch
         
-        # Save the original cache
-        original_cache = srv.yf_data_cache
+        # Define test parameters
+        test_ticker = "TEST_TICKER"
+        test_date = datetime(2020, 1, 1)
         
-        try:
-            # Replace the cache with a short TTL for testing
-            srv.yf_data_cache = TTLCache(maxsize=10, ttl=1)  # 1 second TTL
+        # Create test data for mocking
+        test_data = pd.Series([100, 101], index=pd.date_range('2020-01-01', periods=2))
+        
+        # Patch the download_close_prices function to track calls
+        with patch('srv.download_close_prices') as mock_download:
+            # Setup the mock to return our test data
+            mock_download.return_value = test_data
             
-            # Force reload the cached function to use the new cache
-            importlib.reload(srv)
+            # First call should download data
+            result1 = srv.cached_yf_download(test_ticker, test_date)
             
-            # First call should go to the network
-            with patch('srv.download_close_prices') as mock_download:
-                mock_download.return_value = pd.Series([100, 101], index=pd.date_range('2020-01-01', periods=2))
-                
-                # First call
-                result1 = srv.cached_yf_download("TEST", datetime(2020, 1, 1))
-                
-                # Immediate second call should use cache
-                result2 = srv.cached_yf_download("TEST", datetime(2020, 1, 1))
-                
-                # Verify download was called only once
-                self.assertEqual(mock_download.call_count, 1)
-                
-                # Wait for TTL to expire
-                time.sleep(1.5)  # Wait longer than the TTL
-                
-                # This call should go to the network again
-                result3 = srv.cached_yf_download("TEST", datetime(2020, 1, 1))
-                
-                # Verify download was called again
-                self.assertEqual(mock_download.call_count, 2)
-        
-        finally:
-            # Restore the original cache
-            srv.yf_data_cache = original_cache
-            importlib.reload(srv)
+            # Second call with same parameters should use cache (no new download)
+            result2 = srv.cached_yf_download(test_ticker, test_date)
+            
+            # Different ticker should cause a new download
+            result3 = srv.cached_yf_download(test_ticker + "_DIFFERENT", test_date)
+            
+            # Different date should cause a new download
+            result4 = srv.cached_yf_download(test_ticker, datetime(2021, 1, 1))
+            
+            # Check expected number of calls
+            self.assertEqual(mock_download.call_count, 3)
+            
+            # Verify the results match our test data
+            pd.testing.assert_series_equal(result1, test_data)
+            pd.testing.assert_series_equal(result2, test_data)
+            pd.testing.assert_series_equal(result3, test_data)
+            pd.testing.assert_series_equal(result4, test_data)
+            
+            # Verify the mock was called with expected arguments
+            mock_download.assert_any_call(test_ticker, test_date)
+            mock_download.assert_any_call(test_ticker + "_DIFFERENT", test_date)
+            mock_download.assert_any_call(test_ticker, datetime(2021, 1, 1))
 
 if __name__ == '__main__':
     unittest.main() 

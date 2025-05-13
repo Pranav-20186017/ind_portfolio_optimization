@@ -1117,6 +1117,42 @@ const HomePage: React.FC = () => {
                               <TableCell>{perf.portfolio_beta.toFixed(4)}</TableCell>
                             </TableRow>
                             <TableRow>
+                              <TableCell>
+                                <strong>Alpha (Jensen's)</strong>
+                                <Tooltip title="Alpha is the portfolio's excess return over what would be predicted by the Capital Asset Pricing Model (CAPM). It represents the portfolio manager's ability to generate returns through security selection rather than market movements. A positive alpha means the portfolio outperformed its benchmark on a risk-adjusted basis.">
+                                  <InfoIcon fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{(perf.portfolio_alpha * 100).toFixed(4)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>R-squared</strong>
+                                <Tooltip title="R-squared measures how well the portfolio's returns are explained by the benchmark returns. Values range from 0 to 1, with 1 indicating perfect correlation. Higher values suggest the portfolio's performance is largely driven by the benchmark, while lower values suggest more independence.">
+                                  <InfoIcon fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{perf.r_squared.toFixed(4)}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Beta p-value</strong>
+                                <Tooltip title="The p-value for beta indicates the statistical significance of the beta estimate. A lower p-value (typically <0.05) suggests higher confidence that the portfolio's beta is not zero and that there is a real relationship between the portfolio and benchmark returns.">
+                                  <InfoIcon fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{perf.beta_pvalue.toFixed(4)}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Treynor Ratio</strong>
+                                <Tooltip title="The Treynor Ratio measures excess return per unit of market risk. It's calculated as (Portfolio Return - Risk-Free Rate) / Portfolio Beta. A higher Treynor Ratio indicates better risk-adjusted performance relative to market risk.">
+                                  <InfoIcon fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{perf.treynor_ratio.toFixed(4)}</TableCell>
+                            </TableRow>
+                            <TableRow>
                               <TableCell><strong>Blume Adjusted Beta</strong></TableCell>
                               <TableCell>{perf.blume_adjusted_beta.toFixed(4)}</TableCell>
                             </TableRow>
