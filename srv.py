@@ -92,6 +92,7 @@ def finalize_portfolio(
 
     # Compute yearly rolling betas
     yearly_betas = compute_yearly_betas(port_excess, bench_excess)
+    logger.info(f"Calculated yearly betas for {method}: {yearly_betas}")
     
     # Generate plots
     dist_b64, dd_b64 = generate_plots(port_returns, method)

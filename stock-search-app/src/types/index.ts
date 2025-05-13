@@ -59,8 +59,8 @@ export interface OptimizationResult {
     returns_dist?: string;
     max_drawdown_plot?: string;
     
-    // Yearly rolling betas
-    rolling_betas?: { [year: number]: number };
+    // Yearly rolling betas - Note: JSON serializes the Python int keys as strings
+    rolling_betas?: { [year: string]: number };
 }
 
 // Use a dictionary for "results", keyed by method name (e.g. "MVO", "MinVol", "HRP", etc.)

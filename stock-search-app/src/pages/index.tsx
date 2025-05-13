@@ -1053,6 +1053,7 @@ const HomePage: React.FC = () => {
 
             {Object.entries(optimizationResult!.results || {}).map(([methodKey, methodData]) => {
               if (!methodData) return null;
+              console.log('Method data for', methodKey, methodData);
               const perf = methodData.performance;
               return (
                 <Card key={methodKey} style={{ marginBottom: '1.5rem' }} className="method-card">
@@ -1242,24 +1243,33 @@ const HomePage: React.FC = () => {
                           </TableBody>
                         </Table>
                         
-                        {methodData.rolling_betas && Object.keys(methodData.rolling_betas).length > 0 && (
+                        {methodData.rolling_betas && (
                           <>
-                            <Typography variant="subtitle1" style={{ marginTop: '1rem', fontWeight: 'bold' }}>
-                              Yearly Betas
-                              <Tooltip title="Beta values calculated for each calendar year, showing how the portfolio's market sensitivity changes over time. Beta is calculated using the covariance method which is mathematically equivalent to OLS slope.">
-                                <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                              </Tooltip>
-                            </Typography>
-                            <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                              {Object.entries(methodData.rolling_betas).map(([year, beta]) => (
-                                <Chip 
-                                  key={year} 
-                                  label={`${year}: ${isNaN(beta) ? 'N/A' : beta.toFixed(2)}`} 
-                                  color={beta > 1.2 ? 'error' : beta > 0.8 ? 'warning' : 'success'}
-                                  sx={{ m: 0.5 }}
-                                />
-                              ))}
-                            </Box>
+                            {console.log('Has rolling_betas:', methodData.rolling_betas)}
+                            {console.log('Type of rolling_betas:', typeof methodData.rolling_betas)}
+                            {console.log('Keys in rolling_betas:', methodData.rolling_betas ? Object.keys(methodData.rolling_betas) : 'none')}
+                            {console.log('Keys length:', methodData.rolling_betas ? Object.keys(methodData.rolling_betas).length : 0)}
+                            
+                            {Object.keys(methodData.rolling_betas).length > 0 && (
+                              <>
+                                <Typography variant="subtitle1" style={{ marginTop: '1rem', fontWeight: 'bold' }}>
+                                  Yearly Betas
+                                  <Tooltip title="Beta values calculated for each calendar year, showing how the portfolio's market sensitivity changes over time. Beta is calculated using the covariance method which is mathematically equivalent to OLS slope.">
+                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                  </Tooltip>
+                                </Typography>
+                                <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                  {Object.entries(methodData.rolling_betas).map(([year, beta]) => (
+                                    <Chip 
+                                      key={year} 
+                                      label={`${year}: ${isNaN(beta) ? 'N/A' : beta.toFixed(2)}`} 
+                                      color={beta > 1.2 ? 'error' : beta > 0.8 ? 'warning' : 'success'}
+                                      sx={{ m: 0.5 }}
+                                    />
+                                  ))}
+                                </Box>
+                              </>
+                            )}
                           </>
                         )}
                       </Grid>
