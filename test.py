@@ -5,6 +5,7 @@ import os
 import sys
 import warnings
 import logging
+import time
 from datetime import datetime
 from unittest.mock import patch, MagicMock, mock_open
 from pathlib import Path
@@ -635,6 +636,54 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertEqual(len(response.benchmark_returns), 1)
         self.assertEqual(response.benchmark_returns[0].name, BenchmarkName.nifty)
         self.assertEqual(len(response.benchmark_returns[0].returns), len(dates))
+
+    def test_cached_yf_download_expiration(self):
+        """Test that cached_yf_download expires cache entries after TTL period."""
+        # This is more of an integration test and should be skipped if not specifically enabled
+        if os.environ.get("INTEGRATION_TESTS", "0") != "1":
+            self.skipTest("Skipping integration test - set INTEGRATION_TESTS=1 to run")
+        
+        # Use a very small TTL for testing
+        from cachetools import TTLCache
+        import srv
+        import importlib
+        
+        # Save the original cache
+        original_cache = srv.yf_data_cache
+        
+        try:
+            # Replace the cache with a short TTL for testing
+            srv.yf_data_cache = TTLCache(maxsize=10, ttl=1)  # 1 second TTL
+            
+            # Force reload the cached function to use the new cache
+            importlib.reload(srv)
+            
+            # First call should go to the network
+            with patch('srv.download_close_prices') as mock_download:
+                mock_download.return_value = pd.Series([100, 101], index=pd.date_range('2020-01-01', periods=2))
+                
+                # First call
+                result1 = srv.cached_yf_download("TEST", datetime(2020, 1, 1))
+                
+                # Immediate second call should use cache
+                result2 = srv.cached_yf_download("TEST", datetime(2020, 1, 1))
+                
+                # Verify download was called only once
+                self.assertEqual(mock_download.call_count, 1)
+                
+                # Wait for TTL to expire
+                time.sleep(1.5)  # Wait longer than the TTL
+                
+                # This call should go to the network again
+                result3 = srv.cached_yf_download("TEST", datetime(2020, 1, 1))
+                
+                # Verify download was called again
+                self.assertEqual(mock_download.call_count, 2)
+        
+        finally:
+            # Restore the original cache
+            srv.yf_data_cache = original_cache
+            importlib.reload(srv)
 
 if __name__ == '__main__':
     unittest.main() 

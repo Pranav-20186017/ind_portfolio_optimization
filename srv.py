@@ -13,7 +13,7 @@ import statsmodels.api as sm
 from pypfopt.risk_models import CovarianceShrinkage
 from pypfopt import CLA
 from pypfopt.hierarchical_portfolio import HRPOpt
-from functools import lru_cache
+from cachetools import TTLCache, cached
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 from fastapi.encoders import jsonable_encoder
@@ -545,9 +545,12 @@ async def async_file_to_base64(filepath: str) -> str:
         # Fallback to synchronous version if aiofiles fails
         return file_to_base64(filepath)
 
-@lru_cache(maxsize=128)
+# Define the cache with a 1-hour TTL
+yf_data_cache = TTLCache(maxsize=256, ttl=3600)  # 1 hour TTL
+
+@cached(cache=yf_data_cache)
 def cached_yf_download(ticker: str, start_date: datetime) -> pd.Series:
-    """Cached download of 'Close' price from yfinance."""
+    """Cached download of 'Close' price from yfinance with a 1-hour TTL."""
     return download_close_prices(ticker, start_date)
 
 def format_tickers(stocks: List[StockItem]) -> List[str]:
