@@ -33,6 +33,98 @@ import time
 import uuid
 from fastapi.concurrency import run_in_threadpool
 
+########################################
+# Helper Functions for Optimization
+########################################
+
+def finalize_portfolio(
+    method: str,
+    weights: Dict[str, float],
+    returns: pd.DataFrame,
+    benchmark_df: pd.Series,
+    risk_free_rate: float = 0.05,
+    pfolio_perf: Optional[Tuple] = None
+) -> Tuple:
+    """
+    Common post-processing for all optimization methods:
+    - Calculate portfolio returns
+    - Compute custom metrics
+    - Generate plots
+    - Build OptimizationResult
+    
+    Parameters:
+        method (str): Optimization method name for labeling
+        weights (Dict[str, float]): Portfolio weights
+        returns (pd.DataFrame): Historical returns data
+        benchmark_df (pd.Series): Benchmark returns
+        risk_free_rate (float): Risk-free rate, default 0.05
+        pfolio_perf (Optional[Tuple]): Performance metrics from optimization, if available
+    
+    Returns:
+        Tuple: (OptimizationResult, cumulative_returns)
+    """
+    # Create Series from weights dictionary
+    w_series = pd.Series(weights)
+    
+    # Calculate portfolio returns
+    port_returns = returns.dot(w_series)
+    
+    # Compute custom metrics
+    custom = compute_custom_metrics(port_returns, benchmark_df, risk_free_rate)
+    
+    # Generate plots
+    dist_b64, dd_b64 = generate_plots(port_returns, method)
+    
+    # Get or calculate expected_return, volatility, sharpe
+    if pfolio_perf is not None:
+        # Use provided values if available
+        expected_return = pfolio_perf[0] if len(pfolio_perf) > 0 else 0.0
+        volatility = pfolio_perf[1] if len(pfolio_perf) > 1 else 0.0
+        # If sharpe ratio is missing, calculate it manually or use a default
+        if len(pfolio_perf) > 2:
+            sharpe = pfolio_perf[2]
+        else:
+            # Calculate manually if we have expected_return and volatility
+            sharpe = (expected_return - risk_free_rate) / volatility if volatility > 0 else 0.0
+    else:
+        # Calculate basic metrics if not provided
+        expected_return = port_returns.mean() * 252
+        volatility = port_returns.std() * np.sqrt(252)
+        sharpe = (expected_return - risk_free_rate) / volatility if volatility > 0 else 0.0
+    
+    # Create performance object
+    performance = PortfolioPerformance(
+        expected_return=expected_return,
+        volatility=volatility,
+        sharpe=sharpe,
+        sortino=custom["sortino"],
+        max_drawdown=custom["max_drawdown"],
+        romad=custom["romad"],
+        var_95=custom["var_95"],
+        cvar_95=custom["cvar_95"],
+        var_90=custom["var_90"],
+        cvar_90=custom["cvar_90"],
+        cagr=custom["cagr"],
+        portfolio_beta=custom["portfolio_beta"],
+        blume_adjusted_beta=custom["blume_adjusted_beta"],
+        skewness=custom["skewness"],
+        kurtosis=custom["kurtosis"],
+        entropy=custom["entropy"]
+    )
+    
+    # Create result object
+    result = OptimizationResult(
+        weights=weights,
+        performance=performance,
+        returns_dist=dist_b64,
+        max_drawdown_plot=dd_b64
+    )
+    
+    # Calculate cumulative returns
+    cum_returns = (1 + port_returns).cumprod()
+    
+    return result, cum_returns
+
 # ---- MOSEK License Configuration ----
 def configure_mosek_license():
     """Configure MOSEK license by setting the appropriate environment variable.
@@ -1098,47 +1190,15 @@ def run_optimization_HRP(returns: pd.DataFrame, cov_matrix: pd.DataFrame, benchm
         weights = hrp.optimize(linkage_method=linkage_method)
         pfolio_perf = hrp.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate, frequency=252)
         
-        # Calculate portfolio returns
-        w_series = pd.Series(weights)
-        port_returns = returns.dot(w_series)
-        
-        # Compute custom metrics
-        custom = compute_custom_metrics(port_returns, benchmark_df, risk_free_rate)
-        
-        # Generate plots using "HRP" as the method label
-        method_label = "HRP"
-        dist_b64, dd_b64 = generate_plots(port_returns, method_label)
-        
-        # Create performance object
-        performance = PortfolioPerformance(
-            expected_return=pfolio_perf[0],
-            volatility=pfolio_perf[1],
-            sharpe=pfolio_perf[2],
-            sortino=custom["sortino"],
-            max_drawdown=custom["max_drawdown"],
-            romad=custom["romad"],
-            var_95=custom["var_95"],
-            cvar_95=custom["cvar_95"],
-            var_90=custom["var_90"],
-            cvar_90=custom["cvar_90"],
-            cagr=custom["cagr"],
-            portfolio_beta=custom["portfolio_beta"],
-            blume_adjusted_beta = custom["blume_adjusted_beta"],
-            skewness=custom["skewness"],
-            kurtosis=custom["kurtosis"],
-            entropy=custom["entropy"]
-        )
-        
-        # Create result object
-        result = OptimizationResult(
+        # Use the finalize_portfolio helper function to generate results
+        result, cum_returns = finalize_portfolio(
+            method="HRP",
             weights=weights,
-            performance=performance,
-            returns_dist=dist_b64,
-            max_drawdown_plot=dd_b64
+            returns=returns,
+            benchmark_df=benchmark_df,
+            risk_free_rate=risk_free_rate,
+            pfolio_perf=pfolio_perf
         )
-        
-        # Calculate cumulative returns
-        cum_returns = (1 + port_returns).cumprod()
         
         return result, cum_returns
         
