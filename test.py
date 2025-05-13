@@ -4,10 +4,30 @@ import numpy as np
 import os
 import sys
 import warnings
+import logging
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock, mock_open
+from pathlib import Path
 
 print("Starting test execution...")
+
+# Set a testing flag that srv.py can check
+os.environ["TESTING"] = "1"
+
+# Create a simple mock for settings
+class MockSettings:
+    logfire_token = "test_token"
+    environment = "test"
+    output_dir = Path("./test_outputs")
+    default_rf_rate = 0.05
+    mosek_license_content = None
+    mosek_license_path = None
+    allowed_origins = ["https://indportfoliooptimization.vercel.app"]
+
+# Create mock settings module
+settings_module = MagicMock()
+settings_module.settings = MockSettings()
+sys.modules['settings'] = settings_module
 
 # Import the functions and classes from srv.py
 from srv import (
@@ -111,9 +131,9 @@ class TestPortfolioOptimization(unittest.TestCase):
         # Mock the cached_yf_download function
         mock_cached_yf_download.side_effect = lambda ticker, start_date: self.prices_data.get(ticker, pd.Series([]))
         
-        # Mock yf.download for benchmark data
-        with patch('yfinance.download') as mock_yf_download:
-            mock_yf_download.return_value = pd.DataFrame({'Close': self.nifty_df})
+        # Mock download_close_prices for benchmark data
+        with patch('srv.download_close_prices') as mock_download_close_prices:
+            mock_download_close_prices.return_value = self.nifty_df
             
             # Test with valid tickers
             tickers = ['STOCK1.NS', 'STOCK2.NS', 'STOCK3.NS']
@@ -387,14 +407,17 @@ class TestPortfolioOptimization(unittest.TestCase):
         weights_sum = sum(result.weights.values())
         self.assertAlmostEqual(weights_sum, 1.0, places=2)
 
-    @patch('requests.get')
-    def test_get_risk_free_rate(self, mock_get):
+    @patch('srv.http_get')
+    def test_get_risk_free_rate(self, mock_http_get):
         """Test get_risk_free_rate function with mocked API response."""
+        # Get the default risk-free rate from our mock settings
+        default_rf_rate = sys.modules['settings'].settings.default_rf_rate
+        
         # Create a mock response
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "Date,Open,High,Low,Close,Volume\n2022-01-01,6.5,6.6,6.4,6.5,1000\n2022-01-02,6.6,6.7,6.5,6.6,1200\n"
-        mock_get.return_value = mock_response
+        mock_http_get.return_value = mock_response
         
         # Test with normal dates
         start_date = datetime(2022, 1, 1)
@@ -407,19 +430,19 @@ class TestPortfolioOptimization(unittest.TestCase):
         # Test with API error - should now return default value instead of raising exception
         mock_response.status_code = 404
         rf_rate = get_risk_free_rate(start_date, end_date)
-        self.assertEqual(rf_rate, 0.05)
+        self.assertEqual(rf_rate, default_rf_rate)
         
         # Test with missing 'Close' column - should now return default value instead of raising exception
         mock_response.status_code = 200
         mock_response.text = "Date,Open,High,Low,Volume\n2022-01-01,6.5,6.6,6.4,1000\n"
         rf_rate = get_risk_free_rate(start_date, end_date)
-        self.assertEqual(rf_rate, 0.05)
+        self.assertEqual(rf_rate, default_rf_rate)
         
-        # Test with negative average (should return default 0.05)
+        # Test with negative average (should return default from settings)
         mock_response.status_code = 200
         mock_response.text = "Date,Open,High,Low,Close,Volume\n2022-01-01,-5.0,-4.9,-5.1,-5.0,1000\n"
         rf_rate = get_risk_free_rate(start_date, end_date)
-        self.assertEqual(rf_rate, 0.05)
+        self.assertEqual(rf_rate, default_rf_rate)
 
     def test_compute_yearly_returns_stocks(self):
         """Test compute_yearly_returns_stocks function."""
@@ -560,10 +583,9 @@ class TestPortfolioOptimization(unittest.TestCase):
         
         # Test with each benchmark
         for benchmark_ticker in BENCHMARK_TICKERS.values():
-            with patch('yfinance.download') as mock_yf_download:
-                # Create a DataFrame with Close column and set its name
-                benchmark_df = pd.DataFrame({'Close': self.benchmark_data[benchmark_ticker]})
-                mock_yf_download.return_value = benchmark_df
+            with patch('srv.download_close_prices') as mock_download_close_prices:
+                # Set the return value directly
+                mock_download_close_prices.return_value = self.benchmark_data[benchmark_ticker]
                 
                 # Test with valid tickers
                 tickers = ['STOCK1.NS', 'STOCK2.NS', 'STOCK3.NS']
@@ -594,6 +616,9 @@ class TestPortfolioOptimization(unittest.TestCase):
         cum_returns = (1 + returns).cumprod()
         cum_benchmark = (1 + benchmark_returns).cumprod()
         
+        # Get default risk-free rate from settings
+        default_rf_rate = sys.modules['settings'].settings.default_rf_rate
+        
         # Create response
         response = PortfolioOptimizationResponse(
             results={},
@@ -603,7 +628,7 @@ class TestPortfolioOptimization(unittest.TestCase):
             dates=dates.tolist(),
             benchmark_returns=[BenchmarkReturn(name=BenchmarkName.nifty, returns=cum_benchmark.tolist())],
             stock_yearly_returns={},
-            risk_free_rate=0.05
+            risk_free_rate=default_rf_rate
         )
         
         # Check benchmark returns structure

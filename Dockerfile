@@ -5,19 +5,14 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Create directory for MOSEK license (will be populated at runtime from secrets)
-RUN mkdir -p /app/mosek
+# Create directories
+RUN mkdir -p /app/mosek /app/outputs
 
-# Copy the server files
-COPY srv.py .
-COPY test.py .
-COPY main.py .
-
-# Create outputs directory
-RUN mkdir -p /app/outputs
+# Copy all application files at once (reducing layers)
+COPY srv.py settings.py test.py main.py ./
 
 # Create entrypoint script to handle MOSEK license
 RUN echo '#!/bin/bash\n\
@@ -32,17 +27,17 @@ RUN echo '#!/bin/bash\n\
     \n\
     # Run the application\n\
     exec "$@"\n\
-    ' > /app/entrypoint.sh
-
-RUN chmod +x /app/entrypoint.sh
+    ' > /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh
 
 # Expose port
 EXPOSE 80
 
-# Set environment variables to suppress warnings
-ENV PYTHONWARNINGS="ignore::DeprecationWarning,ignore::FutureWarning,ignore::PendingDeprecationWarning,ignore::UserWarning"
-# Set MOSEK license path environment variable
-ENV MOSEKLM_LICENSE_FILE=/app/mosek/mosek.lic
+# Set environment variables
+ARG ENVIRONMENT=production
+ENV ENVIRONMENT=${ENVIRONMENT}
+ENV PYTHONWARNINGS="ignore::DeprecationWarning,ignore::FutureWarning,ignore::PendingDeprecationWarning,ignore::UserWarning" \
+    MOSEKLM_LICENSE_FILE=/app/mosek/mosek.lic
 
 # Set entrypoint and command
 ENTRYPOINT ["/app/entrypoint.sh"]

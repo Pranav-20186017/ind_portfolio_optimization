@@ -26,7 +26,7 @@ import warnings
 import requests
 import logging
 import sys
-from dotenv import load_dotenv
+from settings import settings
 import logfire
 from fastapi.responses import JSONResponse
 import time
@@ -37,19 +37,23 @@ def configure_mosek_license():
     """Configure MOSEK license by setting the appropriate environment variable.
     
     This function looks for the MOSEK license in the following locations:
-    1. Environment variable MOSEK_LICENSE_CONTENT (base64 encoded license)
-    2. Environment variable MOSEK_LICENSE_PATH (path to license file)
+    1. Settings mosek_license_content (base64 encoded license)
+    2. Settings mosek_license_path (path to license file)
     3. Default locations: './mosek/mosek.lic', './mosek.lic', '~/mosek/mosek.lic'
     
     Returns:
         bool: True if a license was found and configured, False otherwise
     """
-    # Check if license content is provided as environment variable (CI/CD)
-    mosek_license_content = os.environ.get('MOSEK_LICENSE_CONTENT')
-    if mosek_license_content:
+    # Check if we're in testing mode
+    if os.environ.get("TESTING", "0") == "1":
+        logger.info("Testing mode detected, skipping MOSEK license configuration")
+        return False
+        
+    # Check if license content is provided in settings (CI/CD)
+    if settings.mosek_license_content:
         try:
             # Decode the base64 content
-            license_content = base64.b64decode(mosek_license_content).decode('utf-8')
+            license_content = base64.b64decode(settings.mosek_license_content).decode('utf-8')
             # Create a temporary license file in the current directory
             license_path = os.path.abspath(os.path.join(os.getcwd(), 'mosek', 'mosek.lic'))
             os.makedirs(os.path.dirname(license_path), exist_ok=True)
@@ -59,7 +63,7 @@ def configure_mosek_license():
                 
             # Set the license path environment variable
             os.environ['MOSEKLM_LICENSE_FILE'] = license_path
-            logger.info(f"MOSEK license configured from environment variable at path: {license_path}")
+            logger.info(f"MOSEK license configured from settings content at path: {license_path}")
             
             # Log the current value of the environment variable
             current_env = os.environ.get('MOSEKLM_LICENSE_FILE', 'Not set')
@@ -67,13 +71,13 @@ def configure_mosek_license():
             
             return True
         except Exception as e:
-            logger.warning(f"Failed to configure MOSEK license from environment variable: {e}")
+            logger.warning(f"Failed to configure MOSEK license from settings content: {e}")
     
-    # Check if license path is provided
-    mosek_license_path = os.environ.get('MOSEK_LICENSE_PATH')
-    if mosek_license_path and os.path.exists(mosek_license_path):
+    # Check if license path is provided in settings
+    if settings.mosek_license_path and settings.mosek_license_path.exists():
+        mosek_license_path = str(settings.mosek_license_path)
         os.environ['MOSEKLM_LICENSE_FILE'] = mosek_license_path
-        logger.info(f"MOSEK license configured from path: {mosek_license_path}")
+        logger.info(f"MOSEK license configured from settings path: {mosek_license_path}")
         return True
     
     # Check common locations
@@ -135,19 +139,32 @@ for handler in root_logger.handlers:
 for handler in logger.handlers:
     logger.removeHandler(handler)
 
-# Configure Logfire handler only
-load_dotenv()  # loads your .env containing LOGFIRE_TOKEN
-LOGFIRE_TOKEN = os.getenv("LOGFIRE_TOKEN")
-logfire.configure(token=LOGFIRE_TOKEN, environment="production")
-formatter = logging.Formatter(
-    "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-lf_handler = logfire.LogfireLoggingHandler()
-lf_handler.setLevel(logging.INFO)
-lf_handler.setFormatter(formatter)
-logger.addHandler(lf_handler)
-root_logger.addHandler(lf_handler)
+# Check if we're in a testing environment
+is_testing = os.environ.get("TESTING", "0") == "1"
+
+# Configure Logfire handler only if not testing
+if not is_testing:
+    logfire.configure(token=settings.logfire_token, environment=settings.environment)
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    lf_handler = logfire.LogfireLoggingHandler()
+    lf_handler.setLevel(logging.INFO)
+    lf_handler.setFormatter(formatter)
+    logger.addHandler(lf_handler)
+    root_logger.addHandler(lf_handler)
+else:
+    # Add a simple StreamHandler for testing
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    root_logger.addHandler(console_handler)
 
 # Prevent double-logging up the hierarchy
 logger.propagate = False
@@ -156,14 +173,13 @@ logger.propagate = False
 from io import StringIO
 warnings.filterwarnings("ignore")
 import seaborn as sns
-# Set Matplotlib to use 'Agg' backend
-plt.switch_backend('Agg')
+# Matplotlib backend configuration moved inside specific plotting functions
 
 ########################################
 # Ensure output directory
 ########################################
-output_dir = './outputs'
-os.makedirs(output_dir, exist_ok=True)
+settings.output_dir.mkdir(parents=True, exist_ok=True)
+output_dir = str(settings.output_dir)  # Keep this variable for backward compatibility
 
 # Configure MOSEK license
 has_mosek_license = configure_mosek_license()
@@ -173,9 +189,8 @@ has_mosek_license = configure_mosek_license()
 ########################################
 app = FastAPI()
 
-origins = [
-    "https://indportfoliooptimization.vercel.app"
-]
+origins = [str(url) for url in settings.allowed_origins]
+origins.append("*")  # Keeping the wildcard for backward compatibility
 
 app.add_middleware(
     CORSMiddleware,
@@ -423,7 +438,7 @@ def file_to_base64(filepath: str) -> str:
 @lru_cache(maxsize=128)
 def cached_yf_download(ticker: str, start_date: datetime) -> pd.Series:
     """Cached download of 'Close' price from yfinance."""
-    return yf.download(ticker, start=start_date, multi_level_index=False, progress=False, auto_adjust=True)['Close']
+    return download_close_prices(ticker, start_date)
 
 def format_tickers(stocks: List[StockItem]) -> List[str]:
     """Convert StockItem list into yfinance-friendly tickers (adding .BO or .NS)."""
@@ -479,7 +494,10 @@ def fetch_and_align_data(tickers: List[str], benchmark_ticker: str) -> Tuple[pd.
 
     # Fetch benchmark data
     try:
-        benchmark_df = yf.download(benchmark_ticker, start=min_date, multi_level_index=False, progress=False, auto_adjust=True)['Close'].dropna()
+        benchmark_df = (
+            download_close_prices(benchmark_ticker, min_date)
+            .dropna()
+        )
     except Exception as e:
         logger.exception("Error fetching benchmark index: %s", str(e))
         raise APIError(
@@ -658,6 +676,9 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
 
 def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
     """Generate distribution and drawdown plots, return base64 encoded images"""
+    # Configure matplotlib backend
+    plt.switch_backend('Agg')
+    
     bins = freedman_diaconis_bins(port_returns)
     # Plot distribution (histogram)
     plt.figure(figsize=(10, 6))
@@ -1135,37 +1156,37 @@ def get_risk_free_rate(start_date, end_date) -> float:
     url = f"https://stooq.com/q/d/l/?s=10yiny.b&f={start_date_str}&t={end_date_str}&i=m"
     
     try:
-        response = requests.get(url)
+        response = http_get(url)
         if response.status_code != 200:
             # Downgrade to warning instead of error for 404s
-            logger.warning("Could not fetch data from Stooq API. Status code: %s. Using default risk-free rate of 0.05", response.status_code)
-            return 0.05
+            logger.warning("Could not fetch data from Stooq API. Status code: %s. Using default risk-free rate of %s", response.status_code, settings.default_rf_rate)
+            return settings.default_rf_rate
             
         # Check if the response body is empty or too small
         if len(response.text) < 10:  # Just a basic sanity check
-            logger.warning("Empty or invalid response from Stooq API. Using default risk-free rate of 0.05")
-            return 0.05
+            logger.warning("Empty or invalid response from Stooq API. Using default risk-free rate of %s", settings.default_rf_rate)
+            return settings.default_rf_rate
             
         # Read the CSV content into a pandas DataFrame
         data = pd.read_csv(StringIO(response.text))
         
         # Ensure the 'Date' column is a datetime type and sort the DataFrame by Date
         if 'Date' not in data.columns:
-            logger.warning("Expected 'Date' column not found in the retrieved data. Using default risk-free rate of 0.05")
-            return 0.05
+            logger.warning("Expected 'Date' column not found in the retrieved data. Using default risk-free rate of %s", settings.default_rf_rate)
+            return settings.default_rf_rate
             
         data['Date'] = pd.to_datetime(data['Date'])
         data.sort_values('Date', inplace=True)
         
         # Check if the 'Close' column exists
         if 'Close' not in data.columns:
-            logger.warning("Expected 'Close' column not found in the retrieved data. Using default risk-free rate of 0.05")
-            return 0.05
+            logger.warning("Expected 'Close' column not found in the retrieved data. Using default risk-free rate of %s", settings.default_rf_rate)
+            return settings.default_rf_rate
         
         # Check if data is empty after filtering
         if data.empty:
-            logger.warning("No risk-free rate data available for the specified period. Using default risk-free rate of 0.05")
-            return 0.05
+            logger.warning("No risk-free rate data available for the specified period. Using default risk-free rate of %s", settings.default_rf_rate)
+            return settings.default_rf_rate
         
         # Compute the full average of the 'Close' column
         avg_rate = data['Close'].mean()
@@ -1176,15 +1197,15 @@ def get_risk_free_rate(start_date, end_date) -> float:
         # Convert from percentage to decimal and handle negative rates
         final_rf = avg_rate / 100.0
         if final_rf < 0:
-            logger.warning("Negative risk-free rate (%f) detected, using default 0.05", final_rf)
-            return 0.05
+            logger.warning("Negative risk-free rate (%f) detected, using default %s", final_rf, settings.default_rf_rate)
+            return settings.default_rf_rate
             
         return final_rf
         
     except Exception as e:
         # For any exception, use default risk-free rate with warning
-        logger.warning("Unexpected error getting risk-free rate: %s. Using default risk-free rate of 0.05", str(e))
-        return 0.05
+        logger.warning("Unexpected error getting risk-free rate: %s. Using default risk-free rate of %s", str(e), settings.default_rf_rate)
+        return settings.default_rf_rate
 
 def compute_yearly_returns_stocks(daily_returns: pd.DataFrame) -> Dict[str, Dict[str, float]]:
     """
@@ -1231,6 +1252,9 @@ def generate_covariance_heatmap(
     Returns:
         str: Base64‑encoded string of the saved heatmap image.
     """
+    # Configure matplotlib backend
+    plt.switch_backend('Agg')
+    
     # Ensure cov_matrix is a DataFrame.
     if not isinstance(cov_matrix, pd.DataFrame):
         cov_matrix = pd.DataFrame(cov_matrix)
@@ -1459,3 +1483,18 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         # Let our generic exception handler deal with unexpected errors
         logger.exception("Unexpected error in optimize_portfolio")
         raise
+
+# ==== Dependency Injection Wrappers ====
+def download_close_prices(ticker: str, start_date: datetime) -> pd.Series:
+    # wrapper around yfinance.download for easier mocking/testing
+    return yf.download(
+        ticker,
+        start=start_date,
+        multi_level_index=False,
+        progress=False,
+        auto_adjust=True
+    )["Close"]
+
+def http_get(url: str):
+    # wrapper around requests.get for easier mocking/testing
+    return requests.get(url)
