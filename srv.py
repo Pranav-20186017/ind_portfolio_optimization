@@ -633,43 +633,46 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
     else:
         cagr = 0.0
 
-    # Portfolio Beta
+    # Portfolio Beta - Calculate using CAPM regression
     benchmark_ret = benchmark_df.pct_change().dropna()
+    portfolio_beta = 0.0
     
-    # Initialize excess returns with empty series
-    risk_free_daily = risk_free_rate / ann_factor
-    excess_portfolio = pd.Series(dtype=float)
-    excess_market = pd.Series(dtype=float)
-    
-    # Only proceed with beta calculation if we have benchmark data
-    if not benchmark_ret.empty:
+    if not benchmark_ret.empty and len(port_returns) > 1:
+        # Align the data
         merged_returns = pd.DataFrame({
             'Portfolio': port_returns,
             'Benchmark': benchmark_ret
         }).dropna()
         
-        if not merged_returns.empty:
-            excess_portfolio = merged_returns['Portfolio'] - risk_free_daily
-            excess_market = merged_returns['Benchmark'] - risk_free_daily
-    
-    # Initialize portfolio_beta with a default value
-    portfolio_beta = 0.0
-    
-    # Only calculate beta if we have enough data
-    if len(excess_portfolio) > 1 and len(excess_market) > 1:
-        # Check if we have enough variation to calculate beta
-        if excess_market.var() > 1e-9:
-            # Prepare and run regression
-            X = sm.add_constant(excess_market)  # Adds intercept term
+        if len(merged_returns) > 1:
+            # Calculate daily risk-free rate
+            daily_rf = risk_free_rate / ann_factor
             
-            try:
-                model = sm.OLS(excess_portfolio, X).fit()
-                portfolio_beta = model.params['Benchmark']
-            except Exception as e:
-                logger.warning(f"Error calculating beta: {e}")
-                # Keep default beta of 0.0
-    b = 0.67 #Bloom Adjustment Factor
+            # Calculate excess returns
+            excess_portfolio = merged_returns['Portfolio'] - daily_rf
+            excess_market = merged_returns['Benchmark'] - daily_rf
+            
+            # Run regression if we have enough data and market variance
+            if len(excess_portfolio) > 1 and excess_market.var() > 1e-9:
+                try:
+                    # Add constant for regression
+                    X = sm.add_constant(excess_market)
+                    model = sm.OLS(excess_portfolio, X).fit()
+                    portfolio_beta = model.params['Benchmark']
+                    
+                    # Log the beta calculation
+                    logger.info(f"Calculated portfolio beta: {portfolio_beta:.4f}")
+                except Exception as e:
+                    logger.warning(f"Error in beta calculation: {e}")
+                    # Calculate beta directly as covariance/variance
+                    portfolio_beta = excess_portfolio.cov(excess_market) / excess_market.var()
+                    logger.info(f"Calculated portfolio beta using covariance method: {portfolio_beta:.4f}")
+    
+    # Calculate Blume adjusted beta
+    b = 0.67  # Blume adjustment factor
     blume_adjusted_beta = 1 + (b * (portfolio_beta - 1))
+    
+    # Calculate other statistics
     skewness = port_returns.skew()
     kurtosis = port_returns.kurt()
     
