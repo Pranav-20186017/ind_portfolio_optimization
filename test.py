@@ -5,7 +5,7 @@ import os
 import sys
 import warnings
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import patch, MagicMock, mock_open
 from pathlib import Path
 

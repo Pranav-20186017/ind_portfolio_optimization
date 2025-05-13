@@ -1,8 +1,7 @@
 from typing import List, Dict, Optional, Tuple, Union
-from fastapi import FastAPI, HTTPException, Body, BackgroundTasks
+from fastapi import FastAPI, Body, BackgroundTasks
 from pydantic import BaseModel
 from enum import Enum, IntEnum
-from typing import Sequence
 import yfinance as yf
 import pandas as pd
 from scipy.stats import entropy
@@ -27,7 +26,6 @@ import requests
 import httpx
 import aiofiles
 import logging
-import sys
 from settings import settings
 import logfire
 from fastapi.responses import JSONResponse

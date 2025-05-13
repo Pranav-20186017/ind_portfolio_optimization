@@ -3,7 +3,6 @@ import sys
 import logging
 import uvicorn
 import logfire
-import asyncio
 from dotenv import load_dotenv
 
 # Load environment variables
