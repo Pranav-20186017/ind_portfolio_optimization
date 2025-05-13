@@ -421,6 +421,25 @@ const HomePage: React.FC = () => {
     return new Date(dateStr).toLocaleDateString(undefined, opts);
   };
 
+  // Helper function to extract all unique years from the rolling betas data
+  const getAllYears = (result: PortfolioOptimizationResponse): number[] => {
+    const yearsSet = new Set<number>();
+    
+    // Loop through all methods that have results
+    Object.entries(result.results).forEach(([methodKey, methodData]) => {
+      // Check if the method has rolling_betas data
+      if (methodData && methodData.rolling_betas) {
+        // Add all years to the set (converting string keys to numbers)
+        Object.keys(methodData.rolling_betas).forEach(yearStr => {
+          yearsSet.add(parseInt(yearStr, 10));
+        });
+      }
+    });
+    
+    // Convert set to array, sort numerically, and return
+    return Array.from(yearsSet).sort((a, b) => a - b);
+  };
+
   // Update prepareChartData to include the new MinCVaR key with its own color (cyan)
   const prepareChartData = (res: PortfolioOptimizationResponse) => {
     const labels = res.dates.map((d) => new Date(d).toLocaleDateString());
@@ -1250,138 +1269,6 @@ const HomePage: React.FC = () => {
                             ))}
                           </TableBody>
                         </Table>
-                        
-                        {methodData.rolling_betas && (
-                          <>
-                            {console.log('Has rolling_betas:', methodData.rolling_betas)}
-                            {console.log('Type of rolling_betas:', typeof methodData.rolling_betas)}
-                            {console.log('Keys in rolling_betas:', methodData.rolling_betas ? Object.keys(methodData.rolling_betas) : 'none')}
-                            {console.log('Keys length:', methodData.rolling_betas ? Object.keys(methodData.rolling_betas).length : 0)}
-                            
-                            {Object.keys(methodData.rolling_betas).length > 0 && (
-                              <div style={{ marginTop: '1rem' }}>
-                                <Typography variant="subtitle1" style={{ fontWeight: 'bold' }}>
-                                  Rolling Betas
-                                  <Tooltip title="Beta values calculated for each calendar year, showing how the portfolio's market sensitivity changes over time. Beta is calculated using the covariance method which is mathematically equivalent to OLS slope.">
-                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                  </Tooltip>
-                                </Typography>
-                                <div style={{ height: '200px' }}>
-                                  <Line 
-                                    data={{
-                                      labels: Object.keys(methodData.rolling_betas).sort(),
-                                      datasets: [
-                                        {
-                                          label: 'Beta',
-                                          data: Object.entries(methodData.rolling_betas)
-                                            .sort(([yearA], [yearB]) => yearA.localeCompare(yearB))
-                                            .map(([_, beta]) => beta),
-                                          borderColor: 'rgba(75, 192, 192, 1)',
-                                          backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                                          borderWidth: 2,
-                                          tension: 0.1,
-                                          pointRadius: 6,
-                                          pointBackgroundColor: Object.entries(methodData.rolling_betas)
-                                            .sort(([yearA], [yearB]) => yearA.localeCompare(yearB))
-                                            .map(([_, beta]) => 
-                                              beta > 1.2 ? 'rgba(255, 99, 132, 1)' : 
-                                              beta > 0.8 ? 'rgba(255, 206, 86, 1)' : 
-                                              'rgba(75, 192, 192, 1)'
-                                            ),
-                                          pointBorderColor: 'rgba(255, 255, 255, 1)',
-                                          pointBorderWidth: 1,
-                                          pointHoverRadius: 8,
-                                          pointHoverBorderWidth: 2
-                                        },
-                                        {
-                                          label: 'Market Beta (1.0)',
-                                          data: Array(Object.keys(methodData.rolling_betas).length).fill(1),
-                                          borderColor: 'rgba(128, 128, 128, 0.7)',
-                                          borderWidth: 1,
-                                          borderDash: [5, 5],
-                                          pointRadius: 0,
-                                          fill: false
-                                        }
-                                      ]
-                                    }}
-                                    options={{
-                                      responsive: true,
-                                      maintainAspectRatio: false,
-                                      scales: {
-                                        y: {
-                                          beginAtZero: false,
-                                          grid: {
-                                            color: 'rgba(0, 0, 0, 0.1)'
-                                          },
-                                          title: {
-                                            display: true,
-                                            text: 'Beta Value',
-                                            font: {
-                                              weight: 'bold'
-                                            }
-                                          },
-                                          ticks: {
-                                            callback: function(value) {
-                                              return typeof value === 'number' ? value.toFixed(2) : value;
-                                            }
-                                          }
-                                        },
-                                        x: {
-                                          grid: {
-                                            color: 'rgba(0, 0, 0, 0.1)'
-                                          },
-                                          title: {
-                                            display: true,
-                                            text: 'Year',
-                                            font: {
-                                              weight: 'bold'
-                                            }
-                                          }
-                                        }
-                                      },
-                                      plugins: {
-                                        legend: {
-                                          display: true,
-                                          position: 'top'
-                                        },
-                                        tooltip: {
-                                          callbacks: {
-                                            label: function(context: any) {
-                                              // Safely access the raw value
-                                              const value = context.raw;
-                                              // Format beta value
-                                              const formattedBeta = typeof value === 'number' ? value.toFixed(2) : 'N/A';
-                                              
-                                              // Determine risk level based on beta value
-                                              let riskLevel = '';
-                                              if (typeof value === 'number') {
-                                                if (value > 1.2) {
-                                                  riskLevel = '🔴 High Risk';
-                                                } else if (value > 0.8) {
-                                                  riskLevel = '🟡 Medium Risk';
-                                                } else {
-                                                  riskLevel = '🟢 Low Risk';
-                                                }
-                                              }
-                                              
-                                              // Return the formatted values as an array
-                                              return [`Beta: ${formattedBeta}`, riskLevel];
-                                            }
-                                          },
-                                          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                                          padding: 10,
-                                          titleFont: {
-                                            weight: 'bold'
-                                          }
-                                        }
-                                      }
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        )}
                       </Grid>
 
                       <Grid item xs={12} md={8}>
@@ -1394,12 +1281,158 @@ const HomePage: React.FC = () => {
               );
             })}
 
-            <div style={{ marginTop: '2rem' }} id="cumulative-returns-chart">
-              <Typography variant="h5" align="center" gutterBottom>
-                Cumulative Returns Over Time
-              </Typography>
-              <Line data={prepareChartData(optimizationResult!)} options={chartOptions} />
-            </div>
+            {/* Chart showing cumulative returns */}
+            <Card style={{ marginBottom: '1.5rem' }}>
+              <CardContent>
+                <Typography variant="h5" gutterBottom>
+                  Cumulative Returns
+                </Typography>
+                <div style={{ height: '400px' }}>
+                  <Line data={prepareChartData(optimizationResult!)} options={chartOptions} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* New combined rolling betas chart */}
+            {optimizationResult && Object.values(optimizationResult.results).some(result => result?.rolling_betas && Object.keys(result.rolling_betas).length > 0) && (
+              <Card style={{ marginBottom: '1.5rem' }}>
+                <CardContent>
+                  <Typography variant="h5" gutterBottom>
+                    Rolling Betas
+                    <Tooltip title="Beta values calculated for each calendar year, showing how the portfolio's market sensitivity changes over time. Beta is calculated using the covariance method which is mathematically equivalent to OLS slope.">
+                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                    </Tooltip>
+                  </Typography>
+                  <div style={{ height: '400px' }}>
+                    <Line 
+                      data={{
+                        labels: getAllYears(optimizationResult),
+                        datasets: [
+                          // Reference line for market beta (1.0)
+                          {
+                            label: 'Market Beta (1.0)',
+                            data: Array(getAllYears(optimizationResult).length).fill(1),
+                            borderColor: 'rgba(128, 128, 128, 0.7)',
+                            borderWidth: 1,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false
+                          },
+                          // Generate a dataset for each optimization method
+                          ...Object.entries(optimizationResult.results)
+                            .filter(([_, methodData]) => methodData?.rolling_betas && Object.keys(methodData.rolling_betas).length > 0)
+                            .map(([methodKey, methodData]) => {
+                              const colors = {
+                                MVO: 'rgba(75, 192, 192, 1)', 
+                                MinVol: 'rgba(153, 102, 255, 1)',
+                                MaxQuadraticUtility: 'rgba(255, 159, 64, 1)',
+                                EquiWeighted: 'rgba(255, 99, 132, 1)',
+                                'CriticalLineAlgorithm_MVO': 'rgba(54, 162, 235, 1)',
+                                'CriticalLineAlgorithm_MinVol': 'rgba(255, 206, 86, 1)',
+                                HRP: 'rgba(75, 192, 75, 1)',
+                                MinCVaR: 'rgba(255, 99, 255, 1)',
+                                MinCDaR: 'rgba(199, 99, 132, 1)'
+                              };
+                              
+                              const yearDataMap = new Map();
+                              Object.entries(methodData!.rolling_betas!).forEach(([year, beta]) => {
+                                yearDataMap.set(year, beta);
+                              });
+                              
+                              return {
+                                label: algoDisplayNames[methodKey] || methodKey,
+                                // Map the aligned years to beta values or null
+                                data: getAllYears(optimizationResult).map((year: number) => 
+                                  yearDataMap.has(year) ? yearDataMap.get(year) : null
+                                ),
+                                borderColor: colors[methodKey as keyof typeof colors] || 'rgba(0, 0, 0, 0.5)',
+                                backgroundColor: 'transparent',
+                                borderWidth: 2,
+                                tension: 0.1,
+                                pointRadius: 5,
+                                pointHoverRadius: 8,
+                                spanGaps: true
+                              };
+                            })
+                        ]
+                      }}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                          y: {
+                            beginAtZero: false,
+                            grid: {
+                              color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            title: {
+                              display: true,
+                              text: 'Beta Value',
+                              font: {
+                                weight: 'bold'
+                              }
+                            },
+                            ticks: {
+                              callback: function(value) {
+                                return typeof value === 'number' ? value.toFixed(2) : value;
+                              }
+                            }
+                          },
+                          x: {
+                            grid: {
+                              color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            title: {
+                              display: true,
+                              text: 'Year',
+                              font: {
+                                weight: 'bold'
+                              }
+                            }
+                          }
+                        },
+                        plugins: {
+                          legend: {
+                            display: true,
+                            position: 'top'
+                          },
+                          tooltip: {
+                            callbacks: {
+                              label: function(context: any) {
+                                // Safely access the raw value
+                                const value = context.raw;
+                                // Format beta value
+                                const formattedBeta = typeof value === 'number' ? value.toFixed(2) : 'N/A';
+                                
+                                // Determine risk level based on beta value
+                                let riskLevel = '';
+                                if (typeof value === 'number') {
+                                  if (value > 1.2) {
+                                    riskLevel = '🔴 High Risk';
+                                  } else if (value > 0.8) {
+                                    riskLevel = '🟡 Medium Risk';
+                                  } else {
+                                    riskLevel = '🟢 Low Risk';
+                                  }
+                                }
+                                
+                                // Return the formatted values as an array
+                                return [`${context.dataset.label}: ${formattedBeta}`, riskLevel];
+                              }
+                            },
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 10,
+                            titleFont: {
+                              weight: 'bold'
+                            }
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {optimizationResult!.stock_yearly_returns && (
               <div style={{ marginTop: '2rem' }} className="yearly-returns-section">
