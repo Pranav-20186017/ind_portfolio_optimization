@@ -310,6 +310,13 @@ async def log_requests(request, call_next):
     if request.url.query:
         request_line += f"?{request.url.query}"
     
+    # Sanitize headers before logging
+    sanitized_headers = dict(request.headers)
+    sensitive_headers = ['authorization', 'cookie', 'x-api-key']
+    for header in sensitive_headers:
+        if header in sanitized_headers:
+            sanitized_headers[header] = "[REDACTED]"
+    
     logger.info(
         f"{client_host}:{client_port} - \"{request_line} HTTP/{request.scope.get('http_version', '1.1')}\"",
         extra={
@@ -319,7 +326,7 @@ async def log_requests(request, call_next):
             "query_params": str(request.url.query),
             "client_host": client_host,
             "client_port": client_port,
-            "headers": dict(request.headers),
+            "headers": sanitized_headers,
             "http_version": request.scope.get("http_version", "1.1")
         }
     )
@@ -1571,16 +1578,17 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         # Let our custom exception handler deal with this
         raise
     except ValueError as e:
-        # Handle other ValueError exceptions not caught earlier
-        logger.exception("ValueError in optimize_portfolio: %s", str(e))
+        # Handle validation errors with a 422 status code
+        logger.warning("Validation error in optimize_portfolio: %s", str(e), exc_info=True)
         raise APIError(
             code=ErrorCode.INVALID_TICKER,
             message=str(e),
-            status_code=400
+            status_code=422  # Changed from 400 to 422 for validation errors
         )
     except Exception as e:
         # Let our generic exception handler deal with unexpected errors
-        logger.exception("Unexpected error in optimize_portfolio")
+        # But include more detailed logging with stack trace
+        logger.exception("Unexpected error in optimize_portfolio: %s", str(e))
         raise
 
 # ==== Dependency Injection Wrappers ====
