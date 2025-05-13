@@ -39,6 +39,7 @@ import TableHead from '@mui/material/TableHead';
 import GetApp from '@mui/icons-material/GetApp';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import Tooltip from '@mui/material/Tooltip';
+import Box from '@mui/material/Box';
 
 ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Legend, ChartTooltip);
 
@@ -1240,6 +1241,27 @@ const HomePage: React.FC = () => {
                             ))}
                           </TableBody>
                         </Table>
+                        
+                        {methodData.rolling_betas && Object.keys(methodData.rolling_betas).length > 0 && (
+                          <>
+                            <Typography variant="subtitle1" style={{ marginTop: '1rem', fontWeight: 'bold' }}>
+                              Yearly Betas
+                              <Tooltip title="Beta values calculated for each calendar year, showing how the portfolio's market sensitivity changes over time. Beta is calculated using the covariance method which is mathematically equivalent to OLS slope.">
+                                <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                              </Tooltip>
+                            </Typography>
+                            <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                              {Object.entries(methodData.rolling_betas).map(([year, beta]) => (
+                                <Chip 
+                                  key={year} 
+                                  label={`${year}: ${isNaN(beta) ? 'N/A' : beta.toFixed(2)}`} 
+                                  color={beta > 1.2 ? 'error' : beta > 0.8 ? 'warning' : 'success'}
+                                  sx={{ m: 0.5 }}
+                                />
+                              ))}
+                            </Box>
+                          </>
+                        )}
                       </Grid>
 
                       <Grid item xs={12} md={8}>

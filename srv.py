@@ -74,6 +74,25 @@ def finalize_portfolio(
     # Compute custom metrics
     custom = compute_custom_metrics(port_returns, benchmark_df, risk_free_rate)
     
+    # Build daily excess‐returns series for rolling beta
+    # 1) portfolio excess
+    if hasattr(risk_free_rate_manager, '_series') and not risk_free_rate_manager._series.empty:
+        rf_port = risk_free_rate_manager._series.reindex(port_returns.index).ffill().fillna(risk_free_rate/252)
+    else:
+        rf_port = pd.Series(risk_free_rate/252, index=port_returns.index)
+    port_excess = port_returns - rf_port
+
+    # 2) benchmark excess
+    bench_ret = benchmark_df.pct_change().dropna()
+    if hasattr(risk_free_rate_manager, '_series') and not risk_free_rate_manager._series.empty:
+        rf_bench = risk_free_rate_manager._series.reindex(bench_ret.index).ffill().fillna(risk_free_rate/252)
+    else:
+        rf_bench = pd.Series(risk_free_rate/252, index=bench_ret.index)
+    bench_excess = bench_ret - rf_bench
+
+    # Compute yearly rolling betas
+    yearly_betas = compute_yearly_betas(port_excess, bench_excess)
+    
     # Generate plots
     dist_b64, dd_b64 = generate_plots(port_returns, method)
     
@@ -123,7 +142,8 @@ def finalize_portfolio(
         weights=weights,
         performance=performance,
         returns_dist=dist_b64,
-        max_drawdown_plot=dd_b64
+        max_drawdown_plot=dd_b64,
+        rolling_betas=yearly_betas
     )
     
     # Calculate cumulative returns
@@ -479,6 +499,7 @@ class OptimizationResult(BaseModel):
     performance: PortfolioPerformance
     returns_dist: Optional[str] = None
     max_drawdown_plot: Optional[str] = None
+    rolling_betas: Optional[Dict[int, float]] = None
 
 class PortfolioOptimizationResponse(BaseModel):
     results: Dict[str, Optional[OptimizationResult]]
@@ -1680,3 +1701,19 @@ def get_risk_free_rate(start_date, end_date) -> float:
         float: The average risk-free rate as a decimal (e.g., 0.05 for 5%)
     """
     return risk_free_rate_manager.fetch_and_set(start_date, end_date)
+
+# ── Rolling‐Beta Helper ───────────────────────────────────────────────────────
+def compute_yearly_betas(port_excess: pd.Series, bench_excess: pd.Series) -> Dict[int, float]:
+    """
+    Compute β for each calendar year via cov/var (equivalent to OLS slope).
+    """
+    df = pd.DataFrame({"p": port_excess, "b": bench_excess}).dropna()
+    # group by year and compute cov(p,b)/var(b)
+    def β(grp: pd.DataFrame) -> float:
+        p = grp["p"].values
+        b = grp["b"].values
+        # population cov/var
+        cov = np.mean((p - p.mean()) * (b - b.mean()))
+        var = np.mean((b - b.mean()) ** 2)
+        return float(cov / var) if var > 1e-9 else float("nan")
+    return df.groupby(df.index.year).apply(β).to_dict()

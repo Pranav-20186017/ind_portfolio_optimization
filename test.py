@@ -380,6 +380,41 @@ class TestPortfolioOptimization(unittest.TestCase):
         
         # Verify plt.savefig was called at least twice (once for each plot)
         self.assertGreaterEqual(mock_plt.savefig.call_count, 2)
+        
+    def test_compute_yearly_betas_matches_ols(self):
+        """Test that compute_yearly_betas matches statsmodels OLS results."""
+        # Build 2 years of synthetic data
+        dates = pd.date_range("2020-01-01", periods=252*2, freq="B")
+        # True benchmark returns ramping slightly
+        bench = pd.Series(
+            np.linspace(0.0002, 0.001, len(dates)),
+            index=dates
+        )
+        # Portfolio = 1.5 * benchmark + noise
+        rng = np.random.RandomState(0)
+        noise = rng.normal(0, 1e-4, len(dates))
+        port = bench * 1.5 + noise
+
+        # No RF (zero) so excess == raw
+        from srv import compute_yearly_betas
+        
+        # Patch the risk_free_rate_manager to have empty series
+        with patch('srv.risk_free_rate_manager') as mock_rf_manager:
+            mock_rf_manager._series = pd.Series(dtype=float)
+            mock_rf_manager.is_empty.return_value = True
+            
+            yearly = compute_yearly_betas(port, bench)
+            
+            # Compare each year's β to statsmodels OLS
+            import statsmodels.api as sm
+            for year, beta_vec in yearly.items():
+                grp = pd.DataFrame({
+                    "p": port[port.index.year == year],
+                    "b": bench[bench.index.year == year]
+                })
+                X = sm.add_constant(grp["b"])
+                beta_ols = sm.OLS(grp["p"], X).fit().params[1]
+                self.assertAlmostEqual(beta_vec, beta_ols, places=5)
 
     def test_run_optimization_mvo(self):
         """Test run_optimization for MVO method."""
