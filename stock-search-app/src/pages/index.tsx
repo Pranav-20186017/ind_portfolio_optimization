@@ -1287,94 +1287,6 @@ const HomePage: React.FC = () => {
                       <Grid item xs={12} md={8}>
                         <ImageComponent base64String={methodData.returns_dist || ''} altText={`${methodKey} Distribution`} />
                         <ImageComponent base64String={methodData.max_drawdown_plot || ''} altText={`${methodKey} Drawdown`} />
-                        
-                        {/* Individual Rolling Beta Chart */}
-                        {methodData.rolling_betas && Object.keys(methodData.rolling_betas).length > 0 && (
-                          <div style={{ height: '250px', marginTop: '1rem' }}>
-                            <Typography variant="subtitle1" style={{ fontWeight: 'bold' }}>
-                              Yearly Beta Values
-                              <Tooltip title="Beta measures the portfolio's sensitivity to market movements. Beta > 1 means higher volatility than the market.">
-                                <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                              </Tooltip>
-                            </Typography>
-                            <Line 
-                              data={{
-                                labels: Object.keys(methodData.rolling_betas).map(year => parseInt(year)),
-                                datasets: [
-                                  // Reference line for market beta (1.0)
-                                  {
-                                    label: 'Market Beta (1.0)',
-                                    data: Array(Object.keys(methodData.rolling_betas).length).fill(1),
-                                    borderColor: 'rgba(128, 128, 128, 0.7)',
-                                    borderWidth: 1,
-                                    borderDash: [5, 5],
-                                    pointRadius: 0,
-                                    fill: false
-                                  },
-                                  // Method's beta values
-                                  {
-                                    label: algoDisplayNames[methodKey] || methodKey,
-                                    data: Object.entries(methodData.rolling_betas).map(([_, beta]) => beta),
-                                    borderColor: colors[methodKey as keyof typeof colors] || 'rgba(0, 0, 0, 0.5)',
-                                    backgroundColor: 'transparent',
-                                    borderWidth: 2,
-                                    pointRadius: 4,
-                                    pointHoverRadius: 6,
-                                    spanGaps: true
-                                  }
-                                ]
-                              }}
-                              options={{
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                scales: {
-                                  y: {
-                                    beginAtZero: false,
-                                    grid: {
-                                      color: 'rgba(0, 0, 0, 0.1)'
-                                    },
-                                    title: {
-                                      display: true,
-                                      text: 'Beta',
-                                      font: {
-                                        weight: 'bold'
-                                      }
-                                    },
-                                    ticks: {
-                                      callback: function(value) {
-                                        return typeof value === 'number' ? value.toFixed(2) : value;
-                                      }
-                                    }
-                                  },
-                                  x: {
-                                    title: {
-                                      display: true,
-                                      text: 'Year',
-                                      font: {
-                                        weight: 'bold'
-                                      }
-                                    }
-                                  }
-                                },
-                                plugins: {
-                                  legend: {
-                                    display: true,
-                                    position: 'top'
-                                  },
-                                  tooltip: {
-                                    callbacks: {
-                                      label: function(context: any) {
-                                        const value = context.raw;
-                                        const formattedBeta = typeof value === 'number' ? value.toFixed(2) : 'N/A';
-                                        return `Beta: ${formattedBeta}`;
-                                      }
-                                    }
-                                  }
-                                }
-                              }}
-                            />
-                          </div>
-                        )}
                       </Grid>
                     </Grid>
                   </CardContent>
@@ -1394,7 +1306,7 @@ const HomePage: React.FC = () => {
               </CardContent>
             </Card>
 
-            {/* New combined rolling betas chart */}
+            {/* New combined rolling betas chart - with proper dynamic data */}
             {optimizationResult && Object.values(optimizationResult.results).some(result => result?.rolling_betas && Object.keys(result.rolling_betas).length > 0) && (
               <Card style={{ marginBottom: '1.5rem' }}>
                 <CardContent>
@@ -1407,7 +1319,7 @@ const HomePage: React.FC = () => {
                   <div style={{ height: '400px' }}>
                     <Line 
                       data={{
-                        labels: getAllYears(optimizationResult),
+                        labels: getAllYears(optimizationResult).map(String),
                         datasets: [
                           // Reference line for market beta (1.0)
                           {
@@ -1419,21 +1331,23 @@ const HomePage: React.FC = () => {
                             pointRadius: 0,
                             fill: false
                           },
-                          // Generate a dataset for each optimization method
+                          // Dynamic datasets based on methods with rolling_betas data
                           ...Object.entries(optimizationResult.results)
                             .filter(([_, methodData]) => methodData?.rolling_betas && Object.keys(methodData.rolling_betas).length > 0)
                             .map(([methodKey, methodData]) => {
-                              const yearDataMap = new Map();
-                              Object.entries(methodData!.rolling_betas!).forEach(([year, beta]) => {
-                                yearDataMap.set(year, beta);
+                              // Convert all years to numbers once
+                              const allYears = getAllYears(optimizationResult);
+                              
+                              // Create array with data points aligned to allYears
+                              const dataPoints = allYears.map(year => {
+                                // Look up the beta value using the year as a string key
+                                const yearStr = year.toString();
+                                return methodData!.rolling_betas![yearStr] || null;
                               });
                               
                               return {
                                 label: algoDisplayNames[methodKey] || methodKey,
-                                // Map the aligned years to beta values or null
-                                data: getAllYears(optimizationResult).map((year: number) => 
-                                  yearDataMap.has(year) ? yearDataMap.get(year) : null
-                                ),
+                                data: dataPoints,
                                 borderColor: colors[methodKey as keyof typeof colors] || 'rgba(0, 0, 0, 0.5)',
                                 backgroundColor: 'transparent',
                                 borderWidth: 2,
@@ -1488,12 +1402,8 @@ const HomePage: React.FC = () => {
                           tooltip: {
                             callbacks: {
                               label: function(context: any) {
-                                // Safely access the raw value
                                 const value = context.raw;
-                                // Format beta value
                                 const formattedBeta = typeof value === 'number' ? value.toFixed(2) : 'N/A';
-                                
-                                // Determine risk level based on beta value
                                 let riskLevel = '';
                                 if (typeof value === 'number') {
                                   if (value > 1.2) {
@@ -1504,8 +1414,6 @@ const HomePage: React.FC = () => {
                                     riskLevel = '🟢 Low Risk';
                                   }
                                 }
-                                
-                                // Return the formatted values as an array
                                 return [`${context.dataset.label}: ${formattedBeta}`, riskLevel];
                               }
                             },
