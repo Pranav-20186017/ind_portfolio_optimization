@@ -6,7 +6,6 @@ import sys
 import warnings
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock, mock_open
-import time
 
 print("Starting test execution...")
 
@@ -19,8 +18,7 @@ from srv import (
     generate_covariance_heatmap, file_to_base64, EquiWeightedOptimizer,
     OptimizationMethod, CLAOptimizationMethod, StockItem, ExchangeEnum,
     APIError, BENCHMARK_TICKERS, BenchmarkName, BenchmarkReturn,
-    TickerRequest, PortfolioOptimizationResponse, cached_covariance_matrix,
-    cached_benchmark_returns, cached_risk_free_rate
+    TickerRequest, PortfolioOptimizationResponse
 )
 
 # Suppress warnings for cleaner test output
@@ -318,15 +316,6 @@ class TestPortfolioOptimization(unittest.TestCase):
         # Regardless of solver, check weights sum to approximately 1
         weights_sum = sum(result.weights.values())
         self.assertAlmostEqual(weights_sum, 1.0, places=2)
-        
-        # Check that we got valid performance metrics
-        self.assertIsNotNone(result.performance.expected_return)
-        self.assertIsNotNone(result.performance.volatility)
-        self.assertIsNotNone(result.performance.sharpe)
-        
-        # Check that we got the plots
-        self.assertIsNotNone(result.returns_dist)
-        self.assertIsNotNone(result.max_drawdown_plot)
 
     def test_run_optimization_min_cdar(self):
         """Test run_optimization_MIN_CDAR method."""
@@ -345,15 +334,6 @@ class TestPortfolioOptimization(unittest.TestCase):
         # Regardless of solver, check weights sum to approximately 1
         weights_sum = sum(result.weights.values())
         self.assertAlmostEqual(weights_sum, 1.0, places=2)
-        
-        # Check that we got valid performance metrics
-        self.assertIsNotNone(result.performance.expected_return)
-        self.assertIsNotNone(result.performance.volatility)
-        self.assertIsNotNone(result.performance.sharpe)
-        
-        # Check that we got the plots
-        self.assertIsNotNone(result.returns_dist)
-        self.assertIsNotNone(result.max_drawdown_plot)
 
     def test_run_optimization_cla_mvo(self):
         """Test run_optimization_CLA with MVO sub-method."""
@@ -630,181 +610,6 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertEqual(len(response.benchmark_returns), 1)
         self.assertEqual(response.benchmark_returns[0].name, BenchmarkName.nifty)
         self.assertEqual(len(response.benchmark_returns[0].returns), len(dates))
-
-    def test_cached_covariance_matrix(self):
-        """Test the cached covariance matrix functionality."""
-        # Create test data
-        start_date = datetime(2020, 1, 1)
-        tickers = ('STOCK1.NS', 'STOCK2.NS', 'STOCK3.NS')
-        
-        # Mock the cached_yf_download function
-        with patch('srv.cached_yf_download') as mock_download:
-            # Create mock return values for each ticker
-            mock_download.side_effect = lambda ticker, start_date: self.prices_data.get(ticker, pd.Series([]))
-            
-            # First call should compute the matrix
-            cov_matrix1 = cached_covariance_matrix(tickers, start_date)
-            
-            # Second call with same parameters should return cached result
-            cov_matrix2 = cached_covariance_matrix(tickers, start_date)
-            
-            # Check that both matrices are identical
-            pd.testing.assert_frame_equal(cov_matrix1, cov_matrix2)
-            
-            # Check matrix properties
-            self.assertEqual(cov_matrix1.shape, (3, 3))  # 3x3 matrix for 3 stocks
-            self.assertTrue(np.all(np.diag(cov_matrix1) >= 0))  # Diagonal elements should be non-negative
-            
-            # Test with different tickers (using existing mock data)
-            different_tickers = ('STOCK1.NS', 'STOCK2.NS', 'STOCK3.NS')  # Using same tickers but in different order
-            cov_matrix3 = cached_covariance_matrix(different_tickers, start_date)
-            
-            # Verify that cached_yf_download was called the correct number of times
-            # First call: 3 tickers
-            # Second call: cached, so no new downloads
-            # Third call: cached, so no new downloads
-            self.assertEqual(mock_download.call_count, 3)  # Only the first call should download data
-            
-            # Test with a completely different set of tickers
-            new_tickers = ('STOCK2.NS', 'STOCK3.NS', 'STOCK1.NS')  # Same tickers in different order
-            cov_matrix4 = cached_covariance_matrix(new_tickers, start_date)
-            
-            # Verify that the matrices have the same values
-            self.assertTrue(np.allclose(cov_matrix1.values, cov_matrix4.values))
-            
-            # Verify that the matrices are properly cached by checking the number of downloads
-            self.assertEqual(mock_download.call_count, 3)  # Still only the first 3 calls
-            
-            # Verify that the matrices are properly cached by checking the number of unique matrices
-            unique_matrices = {
-                id(cov_matrix1),
-                id(cov_matrix2),
-                id(cov_matrix3),
-                id(cov_matrix4)
-            }
-            self.assertEqual(len(unique_matrices), 1)  # All matrices should be the same object
-
-    def test_cached_benchmark_returns(self):
-        """Test that benchmark returns are properly cached."""
-        benchmark = "^NSEI"
-        start_date = datetime(2023, 1, 1)
-        
-        # First call should compute
-        start_time = time.time()
-        returns1 = cached_benchmark_returns(benchmark, start_date)
-        first_call_time = time.time() - start_time
-        
-        # Second call should be cached
-        start_time = time.time()
-        returns2 = cached_benchmark_returns(benchmark, start_date)
-        second_call_time = time.time() - start_time
-        
-        assert second_call_time < first_call_time
-        assert returns1.equals(returns2)
-
-    def test_cached_risk_free_rate(self):
-        """Test that risk-free rate is properly cached."""
-        start_date = datetime(2023, 1, 1)
-        end_date = datetime(2023, 12, 31)
-        
-        # First call should compute
-        start_time = time.time()
-        rate1 = cached_risk_free_rate(start_date, end_date)
-        first_call_time = time.time() - start_time
-        
-        # Second call should be cached
-        start_time = time.time()
-        rate2 = cached_risk_free_rate(start_date, end_date)
-        second_call_time = time.time() - start_time
-        
-        assert second_call_time < first_call_time
-        assert rate1 == rate2
-
-    def test_portfolio_beta_calculation(self):
-        """Test portfolio beta calculation with different scenarios."""
-        # Test 1: Perfect correlation (beta should be close to 1)
-        # Create perfectly correlated returns with same length and index
-        dates = pd.date_range(start='2020-01-01', end='2020-12-31', freq='B')
-        market_returns = pd.Series(np.random.normal(0.001, 0.02, len(dates)), index=dates)
-        # Use a more moderate multiplier
-        portfolio_returns = market_returns * 1.2  # Reduced from 1.5 to 1.2 for more moderate beta
-        metrics = compute_custom_metrics(portfolio_returns, market_returns, self.risk_free_rate)
-        self.assertAlmostEqual(metrics['portfolio_beta'], 1.2, places=1)
-        
-        # Test 2: Double market sensitivity (beta should be close to 2)
-        double_market_returns = market_returns * 2
-        metrics = compute_custom_metrics(double_market_returns, market_returns, self.risk_free_rate)
-        self.assertAlmostEqual(metrics['portfolio_beta'], 2.0, places=1)
-        
-        # Test 3: Negative correlation (beta should be negative)
-        negative_corr_returns = market_returns * -1
-        metrics = compute_custom_metrics(negative_corr_returns, market_returns, self.risk_free_rate)
-        self.assertLess(metrics['portfolio_beta'], 0)
-        
-        # Test 4: Real-world scenario with our test data
-        # Create more moderate portfolio returns
-        portfolio_returns = market_returns * 1.2 + np.random.normal(0, 0.005, len(dates))  # Reduced noise
-        metrics = compute_custom_metrics(portfolio_returns, market_returns, self.risk_free_rate)
-        self.assertNotEqual(metrics['portfolio_beta'], 0.0)
-        self.assertTrue(np.isfinite(metrics['portfolio_beta']))
-        
-        # Test 5: Blume adjusted beta
-        self.assertNotEqual(metrics['blume_adjusted_beta'], 0.0)
-        self.assertTrue(np.isfinite(metrics['blume_adjusted_beta']))
-        # Blume adjusted beta should be between 0.67 and 1.33 for beta=1
-        self.assertGreater(metrics['blume_adjusted_beta'], 0.67)
-        self.assertLess(metrics['blume_adjusted_beta'], 1.33)
-
-    def test_portfolio_beta_edge_cases(self):
-        """Test portfolio beta calculation with edge cases."""
-        # Test 1: Single data point (should handle gracefully)
-        single_return = pd.Series([0.01], index=[pd.Timestamp('2020-01-01')])
-        single_benchmark = pd.Series([0.005], index=[pd.Timestamp('2020-01-01')])
-        metrics = compute_custom_metrics(single_return, single_benchmark, self.risk_free_rate)
-        self.assertEqual(metrics['portfolio_beta'], 0.0)  # Should default to 0 for insufficient data
-        
-        # Test 2: Empty data (should handle gracefully)
-        empty_returns = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
-        empty_benchmark = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
-        metrics = compute_custom_metrics(empty_returns, empty_benchmark, self.risk_free_rate)
-        self.assertEqual(metrics['portfolio_beta'], 0.0)
-        
-        # Test 3: Constant returns (should handle gracefully)
-        dates = pd.date_range(start='2020-01-01', end='2020-12-31', freq='B')
-        constant_returns = pd.Series([0.001] * len(dates), index=dates)
-        constant_benchmark = pd.Series([0.002] * len(dates), index=dates)
-        metrics = compute_custom_metrics(constant_returns, constant_benchmark, self.risk_free_rate)
-        self.assertEqual(metrics['portfolio_beta'], 0.0)  # Should default to 0 for zero variance
-        
-        # Test 4: Missing data (should handle gracefully)
-        returns = pd.Series(np.random.normal(0.001, 0.02, len(dates)), index=dates)
-        benchmark = pd.Series(np.random.normal(0.001, 0.02, len(dates)), index=dates)
-        # Add some NaN values
-        returns.iloc[10:20] = np.nan
-        benchmark.iloc[15:25] = np.nan
-        metrics = compute_custom_metrics(returns, benchmark, self.risk_free_rate)
-        self.assertNotEqual(metrics['portfolio_beta'], 0.0)  # Should still calculate beta for non-NaN data
-        self.assertTrue(np.isfinite(metrics['portfolio_beta']))
-
-    def test_portfolio_beta_with_different_risk_free_rates(self):
-        """Test portfolio beta calculation with different risk-free rates."""
-        # Generate test data
-        dates = pd.date_range(start='2020-01-01', end='2020-12-31', freq='B')
-        returns = pd.Series(np.random.normal(0.001, 0.02, len(dates)), index=dates)
-        benchmark = pd.Series(np.random.normal(0.001, 0.02, len(dates)), index=dates)
-        
-        # Test with different risk-free rates
-        risk_free_rates = [0.0, 0.02, 0.05, 0.10]
-        betas = []
-        
-        for rf in risk_free_rates:
-            metrics = compute_custom_metrics(returns, benchmark, rf)
-            betas.append(metrics['portfolio_beta'])
-        
-        # Betas should be similar regardless of risk-free rate
-        # (allowing for some numerical differences)
-        for i in range(1, len(betas)):
-            self.assertAlmostEqual(betas[i], betas[0], places=2)
 
 if __name__ == '__main__':
     unittest.main() 

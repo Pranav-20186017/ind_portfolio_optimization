@@ -425,48 +425,6 @@ def cached_yf_download(ticker: str, start_date: datetime) -> pd.Series:
     """Cached download of 'Close' price from yfinance."""
     return yf.download(ticker, start=start_date, multi_level_index=False, progress=False, auto_adjust=True)['Close']
 
-from functools import wraps, lru_cache
-from datetime import datetime
-import pandas as pd
-from pypfopt.risk_models import CovarianceShrinkage
-
-def sorted_lru_cache(maxsize=128):
-    """Decorator to sort the first arg (tickers) before caching."""
-    def decorator(func):
-        cached = lru_cache(maxsize=maxsize)(func)
-        @wraps(func)
-        def wrapper(tickers, start_date):
-            # normalize order
-            sorted_tickers = tuple(sorted(tickers))
-            return cached(sorted_tickers, start_date)
-        return wrapper
-    return decorator
-
-@sorted_lru_cache(maxsize=64)
-def _compute_cov_matrix(sorted_tickers: tuple[str, ...],
-                        start_date: datetime) -> pd.DataFrame:
-    df = pd.concat(
-        [cached_yf_download(t, start_date) for t in sorted_tickers], axis=1
-    )
-    df.dropna(inplace=True)
-    return CovarianceShrinkage(df).ledoit_wolf()
-
-# Public API
-def cached_covariance_matrix(tickers: tuple[str, ...],
-                             start_date: datetime) -> pd.DataFrame:
-    # even though this just delegates, there's no duplicated body here
-    return _compute_cov_matrix(tickers, start_date)
-
-@lru_cache(maxsize=64)
-def cached_benchmark_returns(ticker: str, start_date: datetime) -> pd.Series:
-    """Cached download of benchmark returns from yfinance."""
-    return yf.download(ticker, start=start_date, progress=False)['Close'].pct_change().dropna()
-
-@lru_cache(maxsize=32)
-def cached_risk_free_rate(start_date: datetime, end_date: datetime) -> float:
-    """Cached risk-free rate calculation."""
-    return get_risk_free_rate(start_date, end_date)
-
 def format_tickers(stocks: List[StockItem]) -> List[str]:
     """Convert StockItem list into yfinance-friendly tickers (adding .BO or .NS)."""
     formatted_tickers = []
@@ -596,119 +554,107 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
       - cagr
       - portfolio_beta
     """
-    # Initialize default values
-    metrics = {
-        "sortino": 0.0,
-        "max_drawdown": 0.0,
-        "romad": 0.0,
-        "var_95": 0.0,
-        "cvar_95": 0.0,
-        "var_90": 0.0,
-        "cvar_90": 0.0,
-        "cagr": 0.0,
-        "portfolio_beta": 0.0,
-        "blume_adjusted_beta": 0.0,
-        "skewness": 0.0,
-        "kurtosis": 0.0,
-        "entropy": 0.0
-    }
-
-    # Check if we have enough data
-    if len(port_returns) < 2 or port_returns.empty:
-        return metrics
-
     ann_factor = 252
 
     # Sortino
     downside_std = port_returns[port_returns < 0].std()
+    sortino = 0.0
     if downside_std > 1e-9:
         mean_daily = port_returns.mean()
         annual_ret = mean_daily * ann_factor
-        metrics["sortino"] = (annual_ret - risk_free_rate) / (downside_std * np.sqrt(ann_factor))
+        sortino = (annual_ret - risk_free_rate) / (downside_std * np.sqrt(ann_factor))
 
     # Drawdown stats
     cum = (1 + port_returns).cumprod()
     peak = cum.cummax()
     drawdown = (cum - peak) / peak
-    metrics["max_dd"] = drawdown.min()  # negative
+    max_dd = drawdown.min()  # negative
 
     # RoMaD
     final_cum = cum.iloc[-1] - 1.0
-    metrics["romad"] = final_cum / abs(metrics["max_dd"]) if metrics["max_dd"] < 0 else 0.0
+    romad = final_cum / abs(max_dd) if max_dd < 0 else 0.0
 
     # VaR / CVaR
-    metrics["var_95"] = np.percentile(port_returns, 5)
-    below_95 = port_returns[port_returns <= metrics["var_95"]]
-    metrics["cvar_95"] = below_95.mean() if not below_95.empty else metrics["var_95"]
+    var_95 = np.percentile(port_returns, 5)
+    below_95 = port_returns[port_returns <= var_95]
+    cvar_95 = below_95.mean() if not below_95.empty else var_95
 
-    metrics["var_90"] = np.percentile(port_returns, 10)
-    below_90 = port_returns[port_returns <= metrics["var_90"]]
-    metrics["cvar_90"] = below_90.mean() if not below_90.empty else metrics["var_90"]
+    var_90 = np.percentile(port_returns, 10)
+    below_90 = port_returns[port_returns <= var_90]
+    cvar_90 = below_90.mean() if not below_90.empty else var_90
 
     # CAGR
     n_days = len(port_returns)
     if n_days > 1:
         final_growth = cum.iloc[-1]
-        metrics["cagr"] = final_growth ** (ann_factor / n_days) - 1.0
+        cagr = final_growth ** (ann_factor / n_days) - 1.0
+    else:
+        cagr = 0.0
 
-    # Portfolio Beta - Calculate using CAPM regression
-    # benchmark_df is actually the benchmark returns series
-    benchmark_ret = benchmark_df.dropna()
+    # Portfolio Beta
+    benchmark_ret = benchmark_df.pct_change().dropna()
     
-    if not benchmark_ret.empty and len(port_returns) > 1:
-        # Align the data
+    # Initialize excess returns with empty series
+    risk_free_daily = risk_free_rate / ann_factor
+    excess_portfolio = pd.Series(dtype=float)
+    excess_market = pd.Series(dtype=float)
+    
+    # Only proceed with beta calculation if we have benchmark data
+    if not benchmark_ret.empty:
         merged_returns = pd.DataFrame({
             'Portfolio': port_returns,
             'Benchmark': benchmark_ret
         }).dropna()
         
-        if len(merged_returns) > 1:
-            # Calculate daily risk-free rate
-            daily_rf = risk_free_rate / ann_factor
-            
-            # Calculate excess returns
-            excess_portfolio = merged_returns['Portfolio'] - daily_rf
-            excess_market = merged_returns['Benchmark'] - daily_rf
-            
-            # Run regression if we have enough data and market variance
-            if len(excess_portfolio) > 1 and excess_market.var() > 1e-9:
-                try:
-                    # Add constant for regression
-                    X = sm.add_constant(excess_market)
-                    model = sm.OLS(excess_portfolio, X).fit()
-                    metrics["portfolio_beta"] = model.params['Benchmark']
-                    
-                    # Log the beta calculation
-                    logger.info(f"Calculated portfolio beta: {metrics['portfolio_beta']:.4f}")
-                except Exception as e:
-                    logger.warning(f"Error in beta calculation: {e}")
-                    # Calculate beta directly as covariance/variance
-                    metrics["portfolio_beta"] = excess_portfolio.cov(excess_market) / excess_market.var()
-                    logger.info(f"Calculated portfolio beta using covariance method: {metrics['portfolio_beta']:.4f}")
+        if not merged_returns.empty:
+            excess_portfolio = merged_returns['Portfolio'] - risk_free_daily
+            excess_market = merged_returns['Benchmark'] - risk_free_daily
     
-    # Calculate Blume adjusted beta
-    b = 0.67  # Blume adjustment factor
-    metrics["blume_adjusted_beta"] = 1 + (b * (metrics["portfolio_beta"] - 1))
+    # Initialize portfolio_beta with a default value
+    portfolio_beta = 0.0
     
-    # Calculate other statistics
-    metrics["skewness"] = port_returns.skew()
-    metrics["kurtosis"] = port_returns.kurt()
+    # Only calculate beta if we have enough data
+    if len(excess_portfolio) > 1 and len(excess_market) > 1:
+        # Check if we have enough variation to calculate beta
+        if excess_market.var() > 1e-9:
+            # Prepare and run regression
+            X = sm.add_constant(excess_market)  # Adds intercept term
+            
+            try:
+                model = sm.OLS(excess_portfolio, X).fit()
+                portfolio_beta = model.params['Benchmark']
+            except Exception as e:
+                logger.warning(f"Error calculating beta: {e}")
+                # Keep default beta of 0.0
+    b = 0.67 #Bloom Adjustment Factor
+    blume_adjusted_beta = 1 + (b * (portfolio_beta - 1))
+    skewness = port_returns.skew()
+    kurtosis = port_returns.kurt()
     
     # Calculate entropy safely
-    # Handle NaN values before calculating histogram
-    clean_returns = port_returns.dropna()
-    if len(clean_returns) > 1:
-        bins = freedman_diaconis_bins(clean_returns)
-        counts, _ = np.histogram(clean_returns, bins=bins)
-        
-        # Handle zero counts
-        counts = np.array([c if c > 0 else 1 for c in counts])
-        probs = counts / counts.sum()
-        metrics["entropy"] = entropy(probs)
-    else:
-        metrics["entropy"] = 0.0
+    bins = freedman_diaconis_bins(port_returns)
+    counts, _ = np.histogram(port_returns, bins=bins) if len(port_returns) > 1 else ([1], [0, 1])
     
-    return metrics
+    # Handle zero counts
+    counts = np.array([c if c > 0 else 1 for c in counts])
+    probs = counts / counts.sum()
+    port_entropy = entropy(probs)
+    
+    return {
+        "sortino": sortino,
+        "max_drawdown": max_dd,
+        "romad": romad,
+        "var_95": var_95,
+        "cvar_95": cvar_95,
+        "var_90": var_90,
+        "cvar_90": cvar_90,
+        "cagr": cagr,
+        "portfolio_beta": portfolio_beta,
+        "blume_adjusted_beta": blume_adjusted_beta,
+        "skewness": skewness,
+        "kurtosis": kurtosis,
+        "entropy": port_entropy
+    }
 
 def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
     """Generate distribution and drawdown plots, return base64 encoded images"""
@@ -1372,25 +1318,18 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         start_date = df.index.min().date()
         end_date = df.index.max().date()
 
-        # Get benchmark data
+        # Get risk-free rate
         try:
-            benchmark_df = cached_benchmark_returns(request.benchmark, start_date)
-            risk_free_rate = cached_risk_free_rate(start_date, end_date)
+            risk_free_rate = get_risk_free_rate(start_date, end_date)
         except Exception as e:
-            logger.exception("Error fetching benchmark data")
-            raise APIError(
-                code=ErrorCode.DATA_FETCH_ERROR,
-                message="Error fetching benchmark data",
-                status_code=500,
-                details={"error": str(e)}
-            )
+            logger.warning("Error fetching risk-free rate: %s. Using default 0.05", str(e))
+            risk_free_rate = 0.05  # Default fallback
         
         # Prepare data for optimization
         try:
             returns = df.pct_change().dropna()
             mu = expected_returns.mean_historical_return(df, frequency=252)
-            # Use cached covariance matrix
-            S = cached_covariance_matrix(tuple(formatted_tickers), start_date)
+            S = CovarianceShrinkage(df).ledoit_wolf()
             cov_heatmap_b64 = generate_covariance_heatmap(S)
             stock_yearly_returns = compute_yearly_returns_stocks(returns)
         except Exception as e:
@@ -1489,7 +1428,7 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
             end_date=end_date,
             cumulative_returns=cumulative_returns,
             dates=cum_returns_df.index.tolist(),
-            benchmark_returns=[BenchmarkReturn(name=request.benchmark, returns=cum_benchmark.values.tolist())],
+            benchmark_returns=[BenchmarkReturn(name=request.benchmark, returns=cum_benchmark.tolist())],
             stock_yearly_returns=stock_yearly_returns,
             covariance_heatmap=cov_heatmap_b64,
             risk_free_rate=risk_free_rate
