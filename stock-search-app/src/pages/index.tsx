@@ -787,6 +787,19 @@ const HomePage: React.FC = () => {
     }
   }, [selectedExchange]);
 
+  // Define common color scheme for algorithm visualization for consistency
+  const colors = {
+    MVO: 'rgba(75, 192, 192, 1)', 
+    MinVol: 'rgba(153, 102, 255, 1)',
+    MaxQuadraticUtility: 'rgba(255, 159, 64, 1)',
+    EquiWeighted: 'rgba(255, 99, 132, 1)',
+    'CriticalLineAlgorithm_MVO': 'rgba(54, 162, 235, 1)',
+    'CriticalLineAlgorithm_MinVol': 'rgba(255, 206, 86, 1)',
+    HRP: 'rgba(75, 192, 75, 1)',
+    MinCVaR: 'rgba(255, 99, 255, 1)',
+    MinCDaR: 'rgba(199, 99, 132, 1)'
+  };
+
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <Typography variant="h3" align="center" gutterBottom>
@@ -1274,6 +1287,94 @@ const HomePage: React.FC = () => {
                       <Grid item xs={12} md={8}>
                         <ImageComponent base64String={methodData.returns_dist || ''} altText={`${methodKey} Distribution`} />
                         <ImageComponent base64String={methodData.max_drawdown_plot || ''} altText={`${methodKey} Drawdown`} />
+                        
+                        {/* Individual Rolling Beta Chart */}
+                        {methodData.rolling_betas && Object.keys(methodData.rolling_betas).length > 0 && (
+                          <div style={{ height: '250px', marginTop: '1rem' }}>
+                            <Typography variant="subtitle1" style={{ fontWeight: 'bold' }}>
+                              Yearly Beta Values
+                              <Tooltip title="Beta measures the portfolio's sensitivity to market movements. Beta > 1 means higher volatility than the market.">
+                                <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                              </Tooltip>
+                            </Typography>
+                            <Line 
+                              data={{
+                                labels: Object.keys(methodData.rolling_betas).map(year => parseInt(year)),
+                                datasets: [
+                                  // Reference line for market beta (1.0)
+                                  {
+                                    label: 'Market Beta (1.0)',
+                                    data: Array(Object.keys(methodData.rolling_betas).length).fill(1),
+                                    borderColor: 'rgba(128, 128, 128, 0.7)',
+                                    borderWidth: 1,
+                                    borderDash: [5, 5],
+                                    pointRadius: 0,
+                                    fill: false
+                                  },
+                                  // Method's beta values
+                                  {
+                                    label: algoDisplayNames[methodKey] || methodKey,
+                                    data: Object.entries(methodData.rolling_betas).map(([_, beta]) => beta),
+                                    borderColor: colors[methodKey as keyof typeof colors] || 'rgba(0, 0, 0, 0.5)',
+                                    backgroundColor: 'transparent',
+                                    borderWidth: 2,
+                                    pointRadius: 4,
+                                    pointHoverRadius: 6,
+                                    spanGaps: true
+                                  }
+                                ]
+                              }}
+                              options={{
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                scales: {
+                                  y: {
+                                    beginAtZero: false,
+                                    grid: {
+                                      color: 'rgba(0, 0, 0, 0.1)'
+                                    },
+                                    title: {
+                                      display: true,
+                                      text: 'Beta',
+                                      font: {
+                                        weight: 'bold'
+                                      }
+                                    },
+                                    ticks: {
+                                      callback: function(value) {
+                                        return typeof value === 'number' ? value.toFixed(2) : value;
+                                      }
+                                    }
+                                  },
+                                  x: {
+                                    title: {
+                                      display: true,
+                                      text: 'Year',
+                                      font: {
+                                        weight: 'bold'
+                                      }
+                                    }
+                                  }
+                                },
+                                plugins: {
+                                  legend: {
+                                    display: true,
+                                    position: 'top'
+                                  },
+                                  tooltip: {
+                                    callbacks: {
+                                      label: function(context: any) {
+                                        const value = context.raw;
+                                        const formattedBeta = typeof value === 'number' ? value.toFixed(2) : 'N/A';
+                                        return `Beta: ${formattedBeta}`;
+                                      }
+                                    }
+                                  }
+                                }
+                              }}
+                            />
+                          </div>
+                        )}
                       </Grid>
                     </Grid>
                   </CardContent>
@@ -1322,18 +1423,6 @@ const HomePage: React.FC = () => {
                           ...Object.entries(optimizationResult.results)
                             .filter(([_, methodData]) => methodData?.rolling_betas && Object.keys(methodData.rolling_betas).length > 0)
                             .map(([methodKey, methodData]) => {
-                              const colors = {
-                                MVO: 'rgba(75, 192, 192, 1)', 
-                                MinVol: 'rgba(153, 102, 255, 1)',
-                                MaxQuadraticUtility: 'rgba(255, 159, 64, 1)',
-                                EquiWeighted: 'rgba(255, 99, 132, 1)',
-                                'CriticalLineAlgorithm_MVO': 'rgba(54, 162, 235, 1)',
-                                'CriticalLineAlgorithm_MinVol': 'rgba(255, 206, 86, 1)',
-                                HRP: 'rgba(75, 192, 75, 1)',
-                                MinCVaR: 'rgba(255, 99, 255, 1)',
-                                MinCDaR: 'rgba(199, 99, 132, 1)'
-                              };
-                              
                               const yearDataMap = new Map();
                               Object.entries(methodData!.rolling_betas!).forEach(([year, beta]) => {
                                 yearDataMap.set(year, beta);
