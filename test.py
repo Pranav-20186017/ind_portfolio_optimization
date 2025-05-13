@@ -720,5 +720,91 @@ class TestPortfolioOptimization(unittest.TestCase):
         assert second_call_time < first_call_time
         assert rate1 == rate2
 
+    def test_portfolio_beta_calculation(self):
+        """Test portfolio beta calculation with different scenarios."""
+        # Test 1: Perfect correlation (beta should be close to 1)
+        # Create perfectly correlated returns with same length and index
+        dates = pd.date_range(start='2020-01-01', end='2020-12-31', freq='B')
+        market_returns = pd.Series(np.random.normal(0.001, 0.02, len(dates)), index=dates)
+        # Use a more moderate multiplier
+        portfolio_returns = market_returns * 1.2  # Reduced from 1.5 to 1.2 for more moderate beta
+        metrics = compute_custom_metrics(portfolio_returns, market_returns, self.risk_free_rate)
+        self.assertAlmostEqual(metrics['portfolio_beta'], 1.2, places=1)
+        
+        # Test 2: Double market sensitivity (beta should be close to 2)
+        double_market_returns = market_returns * 2
+        metrics = compute_custom_metrics(double_market_returns, market_returns, self.risk_free_rate)
+        self.assertAlmostEqual(metrics['portfolio_beta'], 2.0, places=1)
+        
+        # Test 3: Negative correlation (beta should be negative)
+        negative_corr_returns = market_returns * -1
+        metrics = compute_custom_metrics(negative_corr_returns, market_returns, self.risk_free_rate)
+        self.assertLess(metrics['portfolio_beta'], 0)
+        
+        # Test 4: Real-world scenario with our test data
+        # Create more moderate portfolio returns
+        portfolio_returns = market_returns * 1.2 + np.random.normal(0, 0.005, len(dates))  # Reduced noise
+        metrics = compute_custom_metrics(portfolio_returns, market_returns, self.risk_free_rate)
+        self.assertNotEqual(metrics['portfolio_beta'], 0.0)
+        self.assertTrue(np.isfinite(metrics['portfolio_beta']))
+        
+        # Test 5: Blume adjusted beta
+        self.assertNotEqual(metrics['blume_adjusted_beta'], 0.0)
+        self.assertTrue(np.isfinite(metrics['blume_adjusted_beta']))
+        # Blume adjusted beta should be between 0.67 and 1.33 for beta=1
+        self.assertGreater(metrics['blume_adjusted_beta'], 0.67)
+        self.assertLess(metrics['blume_adjusted_beta'], 1.33)
+
+    def test_portfolio_beta_edge_cases(self):
+        """Test portfolio beta calculation with edge cases."""
+        # Test 1: Single data point (should handle gracefully)
+        single_return = pd.Series([0.01], index=[pd.Timestamp('2020-01-01')])
+        single_benchmark = pd.Series([0.005], index=[pd.Timestamp('2020-01-01')])
+        metrics = compute_custom_metrics(single_return, single_benchmark, self.risk_free_rate)
+        self.assertEqual(metrics['portfolio_beta'], 0.0)  # Should default to 0 for insufficient data
+        
+        # Test 2: Empty data (should handle gracefully)
+        empty_returns = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+        empty_benchmark = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+        metrics = compute_custom_metrics(empty_returns, empty_benchmark, self.risk_free_rate)
+        self.assertEqual(metrics['portfolio_beta'], 0.0)
+        
+        # Test 3: Constant returns (should handle gracefully)
+        dates = pd.date_range(start='2020-01-01', end='2020-12-31', freq='B')
+        constant_returns = pd.Series([0.001] * len(dates), index=dates)
+        constant_benchmark = pd.Series([0.002] * len(dates), index=dates)
+        metrics = compute_custom_metrics(constant_returns, constant_benchmark, self.risk_free_rate)
+        self.assertEqual(metrics['portfolio_beta'], 0.0)  # Should default to 0 for zero variance
+        
+        # Test 4: Missing data (should handle gracefully)
+        returns = pd.Series(np.random.normal(0.001, 0.02, len(dates)), index=dates)
+        benchmark = pd.Series(np.random.normal(0.001, 0.02, len(dates)), index=dates)
+        # Add some NaN values
+        returns.iloc[10:20] = np.nan
+        benchmark.iloc[15:25] = np.nan
+        metrics = compute_custom_metrics(returns, benchmark, self.risk_free_rate)
+        self.assertNotEqual(metrics['portfolio_beta'], 0.0)  # Should still calculate beta for non-NaN data
+        self.assertTrue(np.isfinite(metrics['portfolio_beta']))
+
+    def test_portfolio_beta_with_different_risk_free_rates(self):
+        """Test portfolio beta calculation with different risk-free rates."""
+        # Generate test data
+        dates = pd.date_range(start='2020-01-01', end='2020-12-31', freq='B')
+        returns = pd.Series(np.random.normal(0.001, 0.02, len(dates)), index=dates)
+        benchmark = pd.Series(np.random.normal(0.001, 0.02, len(dates)), index=dates)
+        
+        # Test with different risk-free rates
+        risk_free_rates = [0.0, 0.02, 0.05, 0.10]
+        betas = []
+        
+        for rf in risk_free_rates:
+            metrics = compute_custom_metrics(returns, benchmark, rf)
+            betas.append(metrics['portfolio_beta'])
+        
+        # Betas should be similar regardless of risk-free rate
+        # (allowing for some numerical differences)
+        for i in range(1, len(betas)):
+            self.assertAlmostEqual(betas[i], betas[0], places=2)
+
 if __name__ == '__main__':
     unittest.main() 

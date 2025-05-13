@@ -596,46 +596,64 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
       - cagr
       - portfolio_beta
     """
+    # Initialize default values
+    metrics = {
+        "sortino": 0.0,
+        "max_drawdown": 0.0,
+        "romad": 0.0,
+        "var_95": 0.0,
+        "cvar_95": 0.0,
+        "var_90": 0.0,
+        "cvar_90": 0.0,
+        "cagr": 0.0,
+        "portfolio_beta": 0.0,
+        "blume_adjusted_beta": 0.0,
+        "skewness": 0.0,
+        "kurtosis": 0.0,
+        "entropy": 0.0
+    }
+
+    # Check if we have enough data
+    if len(port_returns) < 2 or port_returns.empty:
+        return metrics
+
     ann_factor = 252
 
     # Sortino
     downside_std = port_returns[port_returns < 0].std()
-    sortino = 0.0
     if downside_std > 1e-9:
         mean_daily = port_returns.mean()
         annual_ret = mean_daily * ann_factor
-        sortino = (annual_ret - risk_free_rate) / (downside_std * np.sqrt(ann_factor))
+        metrics["sortino"] = (annual_ret - risk_free_rate) / (downside_std * np.sqrt(ann_factor))
 
     # Drawdown stats
     cum = (1 + port_returns).cumprod()
     peak = cum.cummax()
     drawdown = (cum - peak) / peak
-    max_dd = drawdown.min()  # negative
+    metrics["max_dd"] = drawdown.min()  # negative
 
     # RoMaD
     final_cum = cum.iloc[-1] - 1.0
-    romad = final_cum / abs(max_dd) if max_dd < 0 else 0.0
+    metrics["romad"] = final_cum / abs(metrics["max_dd"]) if metrics["max_dd"] < 0 else 0.0
 
     # VaR / CVaR
-    var_95 = np.percentile(port_returns, 5)
-    below_95 = port_returns[port_returns <= var_95]
-    cvar_95 = below_95.mean() if not below_95.empty else var_95
+    metrics["var_95"] = np.percentile(port_returns, 5)
+    below_95 = port_returns[port_returns <= metrics["var_95"]]
+    metrics["cvar_95"] = below_95.mean() if not below_95.empty else metrics["var_95"]
 
-    var_90 = np.percentile(port_returns, 10)
-    below_90 = port_returns[port_returns <= var_90]
-    cvar_90 = below_90.mean() if not below_90.empty else var_90
+    metrics["var_90"] = np.percentile(port_returns, 10)
+    below_90 = port_returns[port_returns <= metrics["var_90"]]
+    metrics["cvar_90"] = below_90.mean() if not below_90.empty else metrics["var_90"]
 
     # CAGR
     n_days = len(port_returns)
     if n_days > 1:
         final_growth = cum.iloc[-1]
-        cagr = final_growth ** (ann_factor / n_days) - 1.0
-    else:
-        cagr = 0.0
+        metrics["cagr"] = final_growth ** (ann_factor / n_days) - 1.0
 
     # Portfolio Beta - Calculate using CAPM regression
-    benchmark_ret = benchmark_df.pct_change().dropna()
-    portfolio_beta = 0.0
+    # benchmark_df is actually the benchmark returns series
+    benchmark_ret = benchmark_df.dropna()
     
     if not benchmark_ret.empty and len(port_returns) > 1:
         # Align the data
@@ -658,48 +676,39 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
                     # Add constant for regression
                     X = sm.add_constant(excess_market)
                     model = sm.OLS(excess_portfolio, X).fit()
-                    portfolio_beta = model.params['Benchmark']
+                    metrics["portfolio_beta"] = model.params['Benchmark']
                     
                     # Log the beta calculation
-                    logger.info(f"Calculated portfolio beta: {portfolio_beta:.4f}")
+                    logger.info(f"Calculated portfolio beta: {metrics['portfolio_beta']:.4f}")
                 except Exception as e:
                     logger.warning(f"Error in beta calculation: {e}")
                     # Calculate beta directly as covariance/variance
-                    portfolio_beta = excess_portfolio.cov(excess_market) / excess_market.var()
-                    logger.info(f"Calculated portfolio beta using covariance method: {portfolio_beta:.4f}")
+                    metrics["portfolio_beta"] = excess_portfolio.cov(excess_market) / excess_market.var()
+                    logger.info(f"Calculated portfolio beta using covariance method: {metrics['portfolio_beta']:.4f}")
     
     # Calculate Blume adjusted beta
     b = 0.67  # Blume adjustment factor
-    blume_adjusted_beta = 1 + (b * (portfolio_beta - 1))
+    metrics["blume_adjusted_beta"] = 1 + (b * (metrics["portfolio_beta"] - 1))
     
     # Calculate other statistics
-    skewness = port_returns.skew()
-    kurtosis = port_returns.kurt()
+    metrics["skewness"] = port_returns.skew()
+    metrics["kurtosis"] = port_returns.kurt()
     
     # Calculate entropy safely
-    bins = freedman_diaconis_bins(port_returns)
-    counts, _ = np.histogram(port_returns, bins=bins) if len(port_returns) > 1 else ([1], [0, 1])
+    # Handle NaN values before calculating histogram
+    clean_returns = port_returns.dropna()
+    if len(clean_returns) > 1:
+        bins = freedman_diaconis_bins(clean_returns)
+        counts, _ = np.histogram(clean_returns, bins=bins)
+        
+        # Handle zero counts
+        counts = np.array([c if c > 0 else 1 for c in counts])
+        probs = counts / counts.sum()
+        metrics["entropy"] = entropy(probs)
+    else:
+        metrics["entropy"] = 0.0
     
-    # Handle zero counts
-    counts = np.array([c if c > 0 else 1 for c in counts])
-    probs = counts / counts.sum()
-    port_entropy = entropy(probs)
-    
-    return {
-        "sortino": sortino,
-        "max_drawdown": max_dd,
-        "romad": romad,
-        "var_95": var_95,
-        "cvar_95": cvar_95,
-        "var_90": var_90,
-        "cvar_90": cvar_90,
-        "cagr": cagr,
-        "portfolio_beta": portfolio_beta,
-        "blume_adjusted_beta": blume_adjusted_beta,
-        "skewness": skewness,
-        "kurtosis": kurtosis,
-        "entropy": port_entropy
-    }
+    return metrics
 
 def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
     """Generate distribution and drawdown plots, return base64 encoded images"""
