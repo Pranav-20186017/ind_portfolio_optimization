@@ -41,7 +41,15 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import Tooltip from '@mui/material/Tooltip';
 import Box from '@mui/material/Box';
 
-ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Legend, ChartTooltip);
+// Register Chart.js components
+ChartJS.register(
+  LineElement, 
+  CategoryScale, 
+  LinearScale, 
+  PointElement, 
+  Legend, 
+  ChartTooltip
+);
 
 // Updated ImageComponent for displaying images
 const ImageComponent: React.FC<{ base64String: string; altText: string }> = ({ base64String, altText }) => (
@@ -54,6 +62,13 @@ const ImageComponent: React.FC<{ base64String: string; altText: string }> = ({ b
   </div>
 );
 
+// CLA sub-method options
+const claSubOptions = [
+  { label: 'Mean-Variance Optimization', value: 'MVO' },
+  { label: 'Minimum Volatility', value: 'MinVol' },
+  { label: 'Both', value: 'Both' },
+];
+
 // Algorithm options for selection
 const algorithmOptions = [
   { label: 'Mean-Variance Optimization', value: 'MVO' },
@@ -65,13 +80,6 @@ const algorithmOptions = [
   { label: 'Minimum Conditional Value at Risk (CVaR)', value: 'MinCVaR' },
   { label: 'Minimum Conditional Drawdown at Risk (CDaR)', value: 'MinCDaR' },
   
-];
-
-// CLA sub-method options
-const claSubOptions = [
-  { label: 'Mean-Variance Optimization', value: 'MVO' },
-  { label: 'Minimum Volatility', value: 'MinVol' },
-  { label: 'Both', value: 'Both' },
 ];
 
 // Mapping for descriptive headings in the results section
@@ -1251,24 +1259,126 @@ const HomePage: React.FC = () => {
                             {console.log('Keys length:', methodData.rolling_betas ? Object.keys(methodData.rolling_betas).length : 0)}
                             
                             {Object.keys(methodData.rolling_betas).length > 0 && (
-                              <>
-                                <Typography variant="subtitle1" style={{ marginTop: '1rem', fontWeight: 'bold' }}>
-                                  Yearly Betas
+                              <div style={{ marginTop: '1rem' }}>
+                                <Typography variant="subtitle1" style={{ fontWeight: 'bold' }}>
+                                  Rolling Betas
                                   <Tooltip title="Beta values calculated for each calendar year, showing how the portfolio's market sensitivity changes over time. Beta is calculated using the covariance method which is mathematically equivalent to OLS slope.">
                                     <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
                                   </Tooltip>
                                 </Typography>
-                                <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                  {Object.entries(methodData.rolling_betas).map(([year, beta]) => (
-                                    <Chip 
-                                      key={year} 
-                                      label={`${year}: ${isNaN(beta) ? 'N/A' : beta.toFixed(2)}`} 
-                                      color={beta > 1.2 ? 'error' : beta > 0.8 ? 'warning' : 'success'}
-                                      sx={{ m: 0.5 }}
-                                    />
-                                  ))}
-                                </Box>
-                              </>
+                                <div style={{ height: '200px' }}>
+                                  <Line 
+                                    data={{
+                                      labels: Object.keys(methodData.rolling_betas).sort(),
+                                      datasets: [
+                                        {
+                                          label: 'Beta',
+                                          data: Object.entries(methodData.rolling_betas)
+                                            .sort(([yearA], [yearB]) => yearA.localeCompare(yearB))
+                                            .map(([_, beta]) => beta),
+                                          borderColor: 'rgba(75, 192, 192, 1)',
+                                          backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                                          borderWidth: 2,
+                                          tension: 0.1,
+                                          pointRadius: 6,
+                                          pointBackgroundColor: Object.entries(methodData.rolling_betas)
+                                            .sort(([yearA], [yearB]) => yearA.localeCompare(yearB))
+                                            .map(([_, beta]) => 
+                                              beta > 1.2 ? 'rgba(255, 99, 132, 1)' : 
+                                              beta > 0.8 ? 'rgba(255, 206, 86, 1)' : 
+                                              'rgba(75, 192, 192, 1)'
+                                            ),
+                                          pointBorderColor: 'rgba(255, 255, 255, 1)',
+                                          pointBorderWidth: 1,
+                                          pointHoverRadius: 8,
+                                          pointHoverBorderWidth: 2
+                                        },
+                                        {
+                                          label: 'Market Beta (1.0)',
+                                          data: Array(Object.keys(methodData.rolling_betas).length).fill(1),
+                                          borderColor: 'rgba(128, 128, 128, 0.7)',
+                                          borderWidth: 1,
+                                          borderDash: [5, 5],
+                                          pointRadius: 0,
+                                          fill: false
+                                        }
+                                      ]
+                                    }}
+                                    options={{
+                                      responsive: true,
+                                      maintainAspectRatio: false,
+                                      scales: {
+                                        y: {
+                                          beginAtZero: false,
+                                          grid: {
+                                            color: 'rgba(0, 0, 0, 0.1)'
+                                          },
+                                          title: {
+                                            display: true,
+                                            text: 'Beta Value',
+                                            font: {
+                                              weight: 'bold'
+                                            }
+                                          },
+                                          ticks: {
+                                            callback: function(value) {
+                                              return typeof value === 'number' ? value.toFixed(2) : value;
+                                            }
+                                          }
+                                        },
+                                        x: {
+                                          grid: {
+                                            color: 'rgba(0, 0, 0, 0.1)'
+                                          },
+                                          title: {
+                                            display: true,
+                                            text: 'Year',
+                                            font: {
+                                              weight: 'bold'
+                                            }
+                                          }
+                                        }
+                                      },
+                                      plugins: {
+                                        legend: {
+                                          display: true,
+                                          position: 'top'
+                                        },
+                                        tooltip: {
+                                          callbacks: {
+                                            label: function(context: any) {
+                                              // Safely access the raw value
+                                              const value = context.raw;
+                                              // Format beta value
+                                              const formattedBeta = typeof value === 'number' ? value.toFixed(2) : 'N/A';
+                                              
+                                              // Determine risk level based on beta value
+                                              let riskLevel = '';
+                                              if (typeof value === 'number') {
+                                                if (value > 1.2) {
+                                                  riskLevel = '🔴 High Risk';
+                                                } else if (value > 0.8) {
+                                                  riskLevel = '🟡 Medium Risk';
+                                                } else {
+                                                  riskLevel = '🟢 Low Risk';
+                                                }
+                                              }
+                                              
+                                              // Return the formatted values as an array
+                                              return [`Beta: ${formattedBeta}`, riskLevel];
+                                            }
+                                          },
+                                          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                          padding: 10,
+                                          titleFont: {
+                                            weight: 'bold'
+                                          }
+                                        }
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              </div>
                             )}
                           </>
                         )}
