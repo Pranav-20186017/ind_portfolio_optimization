@@ -6,6 +6,7 @@ import sys
 import warnings
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock, mock_open
+import time
 
 print("Starting test execution...")
 
@@ -18,7 +19,8 @@ from srv import (
     generate_covariance_heatmap, file_to_base64, EquiWeightedOptimizer,
     OptimizationMethod, CLAOptimizationMethod, StockItem, ExchangeEnum,
     APIError, BENCHMARK_TICKERS, BenchmarkName, BenchmarkReturn,
-    TickerRequest, PortfolioOptimizationResponse, cached_covariance_matrix
+    TickerRequest, PortfolioOptimizationResponse, cached_covariance_matrix,
+    cached_benchmark_returns, cached_risk_free_rate
 )
 
 # Suppress warnings for cleaner test output
@@ -681,6 +683,42 @@ class TestPortfolioOptimization(unittest.TestCase):
                 id(cov_matrix4)
             }
             self.assertEqual(len(unique_matrices), 1)  # All matrices should be the same object
+
+    def test_cached_benchmark_returns(self):
+        """Test that benchmark returns are properly cached."""
+        benchmark = "^NSEI"
+        start_date = datetime(2023, 1, 1)
+        
+        # First call should compute
+        start_time = time.time()
+        returns1 = cached_benchmark_returns(benchmark, start_date)
+        first_call_time = time.time() - start_time
+        
+        # Second call should be cached
+        start_time = time.time()
+        returns2 = cached_benchmark_returns(benchmark, start_date)
+        second_call_time = time.time() - start_time
+        
+        assert second_call_time < first_call_time
+        assert returns1.equals(returns2)
+
+    def test_cached_risk_free_rate(self):
+        """Test that risk-free rate is properly cached."""
+        start_date = datetime(2023, 1, 1)
+        end_date = datetime(2023, 12, 31)
+        
+        # First call should compute
+        start_time = time.time()
+        rate1 = cached_risk_free_rate(start_date, end_date)
+        first_call_time = time.time() - start_time
+        
+        # Second call should be cached
+        start_time = time.time()
+        rate2 = cached_risk_free_rate(start_date, end_date)
+        second_call_time = time.time() - start_time
+        
+        assert second_call_time < first_call_time
+        assert rate1 == rate2
 
 if __name__ == '__main__':
     unittest.main() 

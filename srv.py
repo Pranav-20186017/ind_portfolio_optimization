@@ -457,6 +457,15 @@ def cached_covariance_matrix(tickers: tuple[str, ...],
     # even though this just delegates, there's no duplicated body here
     return _compute_cov_matrix(tickers, start_date)
 
+@lru_cache(maxsize=64)
+def cached_benchmark_returns(ticker: str, start_date: datetime) -> pd.Series:
+    """Cached download of benchmark returns from yfinance."""
+    return yf.download(ticker, start=start_date, progress=False)['Close'].pct_change().dropna()
+
+@lru_cache(maxsize=32)
+def cached_risk_free_rate(start_date: datetime, end_date: datetime) -> float:
+    """Cached risk-free rate calculation."""
+    return get_risk_free_rate(start_date, end_date)
 
 def format_tickers(stocks: List[StockItem]) -> List[str]:
     """Convert StockItem list into yfinance-friendly tickers (adding .BO or .NS)."""
@@ -1351,12 +1360,18 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         start_date = df.index.min().date()
         end_date = df.index.max().date()
 
-        # Get risk-free rate
+        # Get benchmark data
         try:
-            risk_free_rate = get_risk_free_rate(start_date, end_date)
+            benchmark_df = cached_benchmark_returns(request.benchmark, start_date)
+            risk_free_rate = cached_risk_free_rate(start_date, end_date)
         except Exception as e:
-            logger.warning("Error fetching risk-free rate: %s. Using default 0.05", str(e))
-            risk_free_rate = 0.05  # Default fallback
+            logger.exception("Error fetching benchmark data")
+            raise APIError(
+                code=ErrorCode.DATA_FETCH_ERROR,
+                message="Error fetching benchmark data",
+                status_code=500,
+                details={"error": str(e)}
+            )
         
         # Prepare data for optimization
         try:
