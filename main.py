@@ -3,6 +3,7 @@ import sys
 import logging
 import uvicorn
 import logfire
+import asyncio
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -52,12 +53,13 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 80))
     
     try:
-        # Run Uvicorn with proper logging configuration
+        # Run Uvicorn with proper logging configuration and enable asyncio for Python 3.7+
         uvicorn.run(
             "srv:app",
             host="0.0.0.0",
             port=port,
-            log_level="info"
+            log_level="info",
+            loop="asyncio"
         )
     finally:
         # Ensure all logs are flushed on shutdown

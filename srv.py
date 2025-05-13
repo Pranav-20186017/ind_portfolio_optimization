@@ -1,5 +1,5 @@
 from typing import List, Dict, Optional, Tuple, Union
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, BackgroundTasks
 from pydantic import BaseModel
 from enum import Enum, IntEnum
 from typing import Sequence
@@ -24,6 +24,8 @@ import base64
 import numpy as np
 import warnings
 import requests
+import httpx
+import aiofiles
 import logging
 import sys
 from settings import settings
@@ -31,6 +33,7 @@ import logfire
 from fastapi.responses import JSONResponse
 import time
 import uuid
+from fastapi.concurrency import run_in_threadpool
 
 # ---- MOSEK License Configuration ----
 def configure_mosek_license():
@@ -435,6 +438,16 @@ def file_to_base64(filepath: str) -> str:
     with open(filepath, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
+async def async_file_to_base64(filepath: str) -> str:
+    """Async version of file_to_base64."""
+    try:
+        async with aiofiles.open(filepath, "rb") as image_file:
+            content = await image_file.read()
+            return base64.b64encode(content).decode('utf-8')
+    except Exception:
+        # Fallback to synchronous version if aiofiles fails
+        return file_to_base64(filepath)
+
 @lru_cache(maxsize=128)
 def cached_yf_download(ticker: str, start_date: datetime) -> pd.Series:
     """Cached download of 'Close' price from yfinance."""
@@ -814,7 +827,7 @@ def run_optimization(method: OptimizationMethod, mu, S, returns, benchmark_df, r
     except Exception as e:
         logger.exception("Error in %s optimization", method.value)
         return None, None
-    
+
 def run_optimization_MIN_CVAR(mu, returns, benchmark_df, risk_free_rate=0.05):
     try:
         # Check if the MOSEK license is configured
@@ -1303,7 +1316,7 @@ def generate_covariance_heatmap(
 ########################################
 
 @app.post("/optimize")
-def optimize_portfolio(request: TickerRequest = Body(...)):
+async def optimize_portfolio(request: TickerRequest = Body(...), background_tasks: BackgroundTasks = None):
     try:
         # Format tickers
         formatted_tickers = format_tickers(request.stocks)
@@ -1319,9 +1332,9 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         benchmark_ticker = BENCHMARK_TICKERS[request.benchmark]
         logger.info("Using benchmark: %s (ticker: %s)", request.benchmark.value, benchmark_ticker)
         
-        # Fetch & align data
+        # Fetch & align data - run in threadpool because it's I/O and CPU intensive
         try:
-            df, benchmark_df = fetch_and_align_data(formatted_tickers, benchmark_ticker)
+            df, benchmark_df = await run_in_threadpool(fetch_and_align_data, formatted_tickers, benchmark_ticker)
         except ValueError as e:
             if "No valid data available" in str(e):
                 raise APIError(
@@ -1342,20 +1355,33 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
         start_date = df.index.min().date()
         end_date = df.index.max().date()
 
-        # Get risk-free rate
+        # Get risk-free rate - still need to call the synchronous version
         try:
-            risk_free_rate = get_risk_free_rate(start_date, end_date)
+            risk_free_rate = await run_in_threadpool(get_risk_free_rate, start_date, end_date)
         except Exception as e:
             logger.warning("Error fetching risk-free rate: %s. Using default 0.05", str(e))
             risk_free_rate = 0.05  # Default fallback
         
-        # Prepare data for optimization
+        # Prepare data for optimization - these are CPU-bound so use threadpool
         try:
+            # These operations are CPU-intensive, so run them in a threadpool
             returns = df.pct_change().dropna()
-            mu = expected_returns.mean_historical_return(df, frequency=252)
-            S = CovarianceShrinkage(df).ledoit_wolf()
-            cov_heatmap_b64 = generate_covariance_heatmap(S)
-            stock_yearly_returns = compute_yearly_returns_stocks(returns)
+            
+            # Define function wrappers to capture arguments properly
+            def calc_expected_returns():
+                return expected_returns.mean_historical_return(df, frequency=252)
+                
+            def calc_covariance():
+                return CovarianceShrinkage(df).ledoit_wolf()
+                
+            mu = await run_in_threadpool(calc_expected_returns)
+            S = await run_in_threadpool(calc_covariance)
+            
+            # Generate the covariance heatmap in a threadpool too
+            cov_heatmap_b64 = await run_in_threadpool(generate_covariance_heatmap, S)
+            
+            # Calculate yearly returns in a threadpool
+            stock_yearly_returns = await run_in_threadpool(compute_yearly_returns_stocks, returns)
         except Exception as e:
             logger.exception("Error preparing data for optimization")
             raise APIError(
@@ -1375,21 +1401,34 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
             cum_returns = None
             
             try:
+                # Run optimizations in threadpool since they're CPU-intensive
                 if method == OptimizationMethod.HRP:
                     # For HRP, use sample covariance matrix (returns.cov())
                     sample_cov = returns.cov()
-                    optimization_result, cum_returns = run_optimization_HRP(returns, sample_cov, benchmark_df, risk_free_rate)
+                    optimization_result, cum_returns = await run_in_threadpool(
+                        run_optimization_HRP, returns, sample_cov, benchmark_df, risk_free_rate
+                    )
                 elif method == OptimizationMethod.MIN_CVAR:
-                    optimization_result, cum_returns = run_optimization_MIN_CVAR(mu, returns, benchmark_df, risk_free_rate)
+                    optimization_result, cum_returns = await run_in_threadpool(
+                        run_optimization_MIN_CVAR, mu, returns, benchmark_df, risk_free_rate
+                    )
                 elif method == OptimizationMethod.MIN_CDAR:
-                    optimization_result, cum_returns = run_optimization_MIN_CDAR(mu, returns, benchmark_df, risk_free_rate)
+                    optimization_result, cum_returns = await run_in_threadpool(
+                        run_optimization_MIN_CDAR, mu, returns, benchmark_df, risk_free_rate
+                    )
                 elif method != OptimizationMethod.CRITICAL_LINE_ALGORITHM:
-                    optimization_result, cum_returns = run_optimization(method, mu, S, returns, benchmark_df, risk_free_rate)
+                    optimization_result, cum_returns = await run_in_threadpool(
+                        run_optimization, method, mu, S, returns, benchmark_df, risk_free_rate
+                    )
                 else:
                     # Handle CLA separately
                     if request.cla_method == CLAOptimizationMethod.BOTH:
-                        result_mvo, cum_returns_mvo = run_optimization_CLA("MVO", mu, S, returns, benchmark_df, risk_free_rate)
-                        result_min_vol, cum_returns_min_vol = run_optimization_CLA("MinVol", mu, S, returns, benchmark_df, risk_free_rate)
+                        result_mvo, cum_returns_mvo = await run_in_threadpool(
+                            run_optimization_CLA, "MVO", mu, S, returns, benchmark_df, risk_free_rate
+                        )
+                        result_min_vol, cum_returns_min_vol = await run_in_threadpool(
+                            run_optimization_CLA, "MinVol", mu, S, returns, benchmark_df, risk_free_rate
+                        )
                         
                         if result_mvo:
                             results["CriticalLineAlgorithm_MVO"] = result_mvo
@@ -1407,7 +1446,9 @@ def optimize_portfolio(request: TickerRequest = Body(...)):
                         continue
                     else:
                         sub_method = request.cla_method.value
-                        optimization_result, cum_returns = run_optimization_CLA(sub_method, mu, S, returns, benchmark_df, risk_free_rate)
+                        optimization_result, cum_returns = await run_in_threadpool(
+                            run_optimization_CLA, sub_method, mu, S, returns, benchmark_df, risk_free_rate
+                        )
                         if optimization_result:
                             results[f"CriticalLineAlgorithm_{sub_method}"] = optimization_result
                             cum_returns_df[f"CriticalLineAlgorithm_{sub_method}"] = cum_returns
@@ -1498,3 +1539,15 @@ def download_close_prices(ticker: str, start_date: datetime) -> pd.Series:
 def http_get(url: str):
     # wrapper around requests.get for easier mocking/testing
     return requests.get(url)
+
+async def async_http_get(url: str):
+    # Async version of http_get using httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=10.0)
+            # Create a requests-like response for compatibility
+            response.text = response.text
+            return response
+    except Exception:
+        # Fallback to synchronous version
+        return http_get(url)
