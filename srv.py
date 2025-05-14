@@ -1290,6 +1290,8 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         # Format tickers
         formatted_tickers = format_tickers(request.stocks)
         logger.info("Stock tickers chosen: %s", formatted_tickers)
+        # Log optimization methods chosen
+        logger.info("Optimization methods chosen: %s", [method.value for method in request.methods])
         if len(formatted_tickers) < 2:
             raise APIError(
                 code=ErrorCode.INSUFFICIENT_STOCKS,
