@@ -74,3 +74,19 @@ jobs:
           tags: |
             sprx7767/ind_portfolio_optimization-frontend:latest
             sprx7767/ind_portfolio_optimization-frontend:${{ github.sha }}
+
+      # Step 7: Deploy to EC2 instance
+      - name: Set up SSH
+        if: success()
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ec2-18-191-144-215.us-east-2.compute.amazonaws.com >> ~/.ssh/known_hosts
+
+      - name: Run deployment script
+        if: success()
+        run: ssh ec2-user@ec2-18-191-144-215.us-east-2.compute.amazonaws.com 'bash /home/ec2-user/clean_and_run.sh'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
