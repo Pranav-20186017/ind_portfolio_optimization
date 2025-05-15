@@ -1217,11 +1217,15 @@ const HomePage: React.FC = () => {
                             <TableRow>
                               <TableCell>
                                 <strong>Alpha (Jensen's)</strong>
-                                <Tooltip title="Alpha is the portfolio's excess return over what would be predicted by the Capital Asset Pricing Model (CAPM). It represents the portfolio manager's ability to generate returns through security selection rather than market movements. A positive alpha means the portfolio outperformed its benchmark on a risk-adjusted basis.">
+                                <Tooltip title="Alpha is the portfolio's excess return over what would be predicted by the Capital Asset Pricing Model (CAPM). It represents the portfolio manager's ability to generate returns through security selection rather than market movements. A positive alpha means the portfolio outperformed its benchmark on a risk-adjusted basis, while a negative alpha indicates underperformance.">
                                   <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
                                 </Tooltip>
                               </TableCell>
-                              <TableCell>{(perf.portfolio_alpha * 100).toFixed(4)}%</TableCell>
+                              <TableCell>
+                                {Math.abs(perf.portfolio_alpha) > 1
+                                  ? <>{(perf.portfolio_alpha * 100).toFixed(2)}%</>
+                                  : <>{(perf.portfolio_alpha * 100).toFixed(4)}%</>}
+                              </TableCell>
                             </TableRow>
                             <TableRow>
                               <TableCell>
@@ -1253,7 +1257,11 @@ const HomePage: React.FC = () => {
                                   <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
                                 </Tooltip>
                               </TableCell>
-                              <TableCell>{perf.treynor_ratio.toFixed(4)}</TableCell>
+                              <TableCell>
+                                {Math.abs(perf.treynor_ratio) > 10
+                                  ? <>{perf.treynor_ratio.toFixed(2)}</>
+                                  : <>{perf.treynor_ratio.toFixed(4)}</>}
+                              </TableCell>
                             </TableRow>
                             <TableRow>
                               <TableCell><strong>Blume Adjusted Beta</strong>

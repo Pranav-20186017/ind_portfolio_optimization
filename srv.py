@@ -156,6 +156,61 @@ def finalize_portfolio(
         v2_ratio=custom["v2_ratio"]
     )
     
+    # Log all metrics for this optimization method as a single structured object
+    metrics = {
+        "method": method,
+        "expected_return": {
+            "value": expected_return,
+            "percent": expected_return * 100
+        },
+        "volatility": {
+            "value": volatility,
+            "percent": volatility * 100
+        },
+        "sharpe_ratio": sharpe,
+        "sortino_ratio": custom["sortino"],
+        "max_drawdown": {
+            "value": custom["max_drawdown"],
+            "percent": custom["max_drawdown"] * 100
+        },
+        "romad": custom["romad"],
+        "cagr": {
+            "value": custom["cagr"],
+            "percent": custom["cagr"] * 100
+        },
+        "portfolio_beta": custom["portfolio_beta"],
+        "alpha": {
+            "value": custom["portfolio_alpha"],
+            "percent": custom["portfolio_alpha"] * 100
+        },
+        "r_squared": custom["r_squared"],
+        "beta_pvalue": custom["beta_pvalue"],
+        "treynor_ratio": custom["treynor_ratio"],
+        "omega_ratio": custom["omega_ratio"],
+        "calmar_ratio": None if np.isnan(custom["calmar_ratio"]) else custom["calmar_ratio"],
+        "ulcer_index": {
+            "value": custom["ulcer_index"],
+            "percent": custom["ulcer_index"] * 100
+        },
+        "evar_95": {
+            "value": custom["evar_95"],
+            "percent": custom["evar_95"] * 100
+        },
+        "dar_95": {
+            "value": custom["dar_95"],
+            "percent": custom["dar_95"] * 100
+        },
+        "cdar_95": {
+            "value": custom["cdar_95"],
+            "percent": custom["cdar_95"] * 100
+        },
+        "information_ratio": custom["information_ratio"],
+        "sterling_ratio": None if np.isnan(custom["sterling_ratio"]) else custom["sterling_ratio"],
+        "v2_ratio": None if np.isnan(custom["v2_ratio"]) else custom["v2_ratio"]
+    }
+    
+    logger.info(f"METRICS SUMMARY FOR {method} OPTIMIZATION", extra={"metrics": metrics})
+    
     # Create result object
     result = OptimizationResult(
         weights=weights,
@@ -1529,11 +1584,6 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
                 # Annualize alpha from daily to annual
                 portfolio_alpha = daily_alpha * ann_factor
                 
-                # Apply sanity check for alpha (cap at +/- 25%)
-                if abs(portfolio_alpha) > 0.25:
-                    portfolio_alpha = 0.25 * (1 if portfolio_alpha > 0 else -1)
-                    logger.warning(f"Alpha value was capped at {portfolio_alpha:.4f} due to unrealistic value")
-                
                 # Get p-value for beta and R-squared
                 beta_pvalue = results.pvalues[1]
                 r_squared = results.rsquared
@@ -1575,12 +1625,6 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
     annual_return = port_returns.mean() * ann_factor
     annual_excess = annual_return - risk_free_rate
     treynor_ratio = annual_excess / portfolio_beta if portfolio_beta != 0 else 0.0
-    
-    # Apply sanity checks to Treynor ratio
-    # Cap Treynor ratio at ±2 (which is already a very high value)
-    if abs(treynor_ratio) > 2:
-        treynor_ratio = 2 * (1 if treynor_ratio > 0 else -1)
-        logger.warning(f"Treynor ratio capped at {treynor_ratio:.4f} due to unrealistic value")
     
     skewness = port_returns.skew()
     kurtosis = port_returns.kurt()
