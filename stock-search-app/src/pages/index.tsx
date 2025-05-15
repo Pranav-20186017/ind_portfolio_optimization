@@ -1256,19 +1256,35 @@ const HomePage: React.FC = () => {
                               <TableCell>{perf.treynor_ratio.toFixed(4)}</TableCell>
                             </TableRow>
                             <TableRow>
-                              <TableCell><strong>Blume Adjusted Beta</strong></TableCell>
+                              <TableCell><strong>Blume Adjusted Beta</strong>
+                                <Tooltip title="Blume Adjusted Beta = 1 + 0.67·(β – 1), which shrinks beta toward 1 to account for historical mean reversion.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
                               <TableCell>{perf.blume_adjusted_beta.toFixed(4)}</TableCell>
                             </TableRow>
                             <TableRow>
-                              <TableCell><strong>Skewness</strong></TableCell>
+                              <TableCell><strong>Skewness</strong>
+                                <Tooltip title="Measures asymmetry of the returns distribution. Positive skew indicates a long right tail.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
                               <TableCell>{perf.skewness.toFixed(4)}</TableCell>
                             </TableRow>
                             <TableRow>
-                              <TableCell><strong>Kurtosis</strong></TableCell>
+                              <TableCell><strong>Kurtosis</strong>
+                                <Tooltip title="Measures tail heaviness. High kurtosis indicates fat tails (more extreme outcomes).">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
                               <TableCell>{perf.kurtosis.toFixed(4)}</TableCell>
                             </TableRow>
                             <TableRow>
-                              <TableCell><strong>Entropy</strong></TableCell>
+                              <TableCell><strong>Entropy</strong>
+                                <Tooltip title="Entropy quantifies the unpredictability of the returns distribution; higher entropy means more uniform dispersion across return bins.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
                               <TableCell>{perf.entropy.toFixed(4)}</TableCell>
                             </TableRow>
                             {/* New metrics */}
@@ -1302,7 +1318,7 @@ const HomePage: React.FC = () => {
                             <TableRow>
                               <TableCell>
                                 <strong>EVaR 95%</strong>
-                                <Tooltip title="Entropic Value at Risk (EVaR) is a coherent risk measure that captures the tail behavior of the portfolio returns distribution using exponential weighting. It provides a more conservative risk estimate than traditional VaR.">
+                                <Tooltip title="Entropic Value at Risk (EVaR) uses a Chernoff-bound formulation via the moment-generating function to bound tail losses more tightly than VaR/CVaR. It provides a more conservative risk estimate than traditional VaR measures.">
                                   <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
                                 </Tooltip>
                               </TableCell>
