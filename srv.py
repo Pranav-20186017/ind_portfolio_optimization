@@ -1,10 +1,9 @@
 from typing import List, Dict, Optional, Tuple, Union
 from fastapi import FastAPI, Body, BackgroundTasks
-from pydantic import BaseModel
-from enum import Enum, IntEnum
 import yfinance as yf
 import pandas as pd
 from scipy.stats import entropy
+from scipy.optimize import minimize_scalar
 from pypfopt.base_optimizer import BaseOptimizer
 from pypfopt import EfficientFrontier, expected_returns
 from pypfopt.efficient_frontier import EfficientCVaR
@@ -34,6 +33,13 @@ import uuid
 from io import StringIO
 from fastapi.concurrency import run_in_threadpool
 import seaborn as sns
+
+# Import data models and enums
+from data import (
+    ErrorCode, APIError, ExchangeEnum, OptimizationMethod, CLAOptimizationMethod,
+    BenchmarkName, Benchmarks, BenchmarkReturn, PortfolioPerformance,
+    OptimizationResult, PortfolioOptimizationResponse, StockItem, TickerRequest
+)
 
 ########################################
 # Helper Functions for Optimization
@@ -135,7 +141,19 @@ def finalize_portfolio(
         treynor_ratio=custom["treynor_ratio"],
         skewness=custom["skewness"],
         kurtosis=custom["kurtosis"],
-        entropy=custom["entropy"]
+        entropy=custom["entropy"],
+        omega_ratio=custom["omega_ratio"],
+        calmar_ratio=custom["calmar_ratio"],
+        ulcer_index=custom["ulcer_index"],
+        evar_95=custom["evar_95"],
+        gini_mean_difference=custom["gini_mean_difference"],
+        dar_95=custom["dar_95"],
+        cdar_95=custom["cdar_95"],
+        upside_potential_ratio=custom["upside_potential_ratio"],
+        modigliani_risk_adjusted_performance=custom["modigliani_risk_adjusted_performance"],
+        information_ratio=custom["information_ratio"],
+        sterling_ratio=custom["sterling_ratio"],
+        v2_ratio=custom["v2_ratio"]
     )
     
     # Create result object
@@ -217,32 +235,6 @@ def configure_mosek_license():
     
     logger.warning("MOSEK license not found. Optimization methods requiring MOSEK will use fallbacks.")
     return False
-
-# ---- Custom Error Handling ----
-class ErrorCode(IntEnum):
-    """Enumeration of API error codes for detailed error reporting"""
-    # Input validation errors (400 range)
-    INSUFFICIENT_STOCKS = 40001
-    NO_DATA_FOUND = 40002
-    INVALID_TICKER = 40003
-    INVALID_DATE_RANGE = 40004
-    INVALID_OPTIMIZATION_METHOD = 40005
-    
-    # Processing errors (500 range)
-    OPTIMIZATION_FAILED = 50001
-    DATA_FETCH_ERROR = 50002
-    RISK_FREE_RATE_ERROR = 50003
-    COVARIANCE_CALCULATION_ERROR = 50004
-    UNEXPECTED_ERROR = 50099
-
-class APIError(Exception):
-    """Custom API exception with error code, message, and HTTP status code"""
-    def __init__(self, code: ErrorCode, message: str, status_code: int = 400, details: Optional[Dict] = None):
-        self.code = code
-        self.message = message
-        self.status_code = status_code
-        self.details = details or {}
-        super().__init__(self.message)
 
 # ── Logger & Handlers Setup ───────────────────────────────────────────────────
 # Set up root logger first for all logs including FastAPI and Uvicorn
@@ -431,98 +423,6 @@ async def generic_exception_handler(request, exc: Exception):
             }
         }
     )
-
-########################################
-# Pydantic Models and Enums
-########################################
-
-class ExchangeEnum(str, Enum):
-    NSE = "NSE"
-    BSE = "BSE"
-
-class OptimizationMethod(str, Enum):
-    MVO = "MVO"
-    MIN_VOL = "MinVol"
-    MAX_QUADRATIC_UTILITY = "MaxQuadraticUtility"
-    EQUI_WEIGHTED = "EquiWeighted"
-    CRITICAL_LINE_ALGORITHM = "CriticalLineAlgorithm"
-    HRP = "HRP"  # New HRP optimization method
-    MIN_CVAR = "MinCVaR"
-    MIN_CDAR = "MinCDaR"
-
-# New enum for CLA sub-methods
-class CLAOptimizationMethod(str, Enum):
-    MVO = "MVO"
-    MIN_VOL = "MinVol"
-    BOTH = "Both"
-
-class BenchmarkName(str, Enum):
-    nifty      = "nifty"
-    sensex     = "sensex"
-    bank_nifty = "bank_nifty"
-
-# Add this after the BenchmarkName enum definition
-BENCHMARK_TICKERS = {
-    BenchmarkName.nifty: "^NSEI",
-    BenchmarkName.sensex: "^BSESN",
-    BenchmarkName.bank_nifty: "^NSEBANK"
-}
-
-class BenchmarkReturn(BaseModel):
-    name: BenchmarkName
-    returns: List[float]   
-class PortfolioPerformance(BaseModel):
-    # From PyPortfolioOpt
-    expected_return: float
-    volatility: float
-    sharpe: float
-    # Custom
-    sortino: float
-    max_drawdown: float
-    romad: float
-    var_95: float
-    cvar_95: float
-    var_90: float
-    cvar_90: float
-    cagr: float
-    portfolio_beta: float
-    portfolio_alpha: float = 0.0
-    beta_pvalue: float = 1.0
-    r_squared: float = 0.0
-    blume_adjusted_beta: float = 0.0
-    treynor_ratio: float = 0.0
-    skewness: float
-    kurtosis: float
-    entropy: float
-
-class OptimizationResult(BaseModel):
-    weights: Dict[str, float]
-    performance: PortfolioPerformance
-    returns_dist: Optional[str] = None
-    max_drawdown_plot: Optional[str] = None
-    rolling_betas: Optional[Dict[int, float]] = None
-
-class PortfolioOptimizationResponse(BaseModel):
-    results: Dict[str, Optional[OptimizationResult]]
-    start_date: datetime
-    end_date: datetime
-    cumulative_returns: Dict[str, List[Optional[float]]]
-    dates: List[datetime]
-    benchmark_returns: List[BenchmarkReturn]
-    stock_yearly_returns: Optional[Dict[str, Dict[str, float]]]
-    covariance_heatmap: Optional[str] = None
-    risk_free_rate : float
-
-class StockItem(BaseModel):
-    ticker: str
-    exchange: ExchangeEnum
-
-# Updated request to include an optional CLA sub-method field.
-class TickerRequest(BaseModel):
-    stocks: List[StockItem]
-    methods: List[OptimizationMethod] = [OptimizationMethod.MVO]
-    cla_method: Optional[CLAOptimizationMethod] = CLAOptimizationMethod.BOTH
-    benchmark: BenchmarkName = BenchmarkName.nifty  # Default to Nifty
 
 ########################################
 # Custom EquiWeighted Optimizer
@@ -1291,7 +1191,8 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         formatted_tickers = format_tickers(request.stocks)
         logger.info("Stock tickers chosen: %s", formatted_tickers)
         # Log optimization methods chosen
-        logger.info("Optimization methods chosen: %s", [method.value for method in request.methods])
+        method_values = [method.value for method in request.methods]
+        logger.info("OPTIMIZATION METHODS [%d]: %s", len(method_values), ", ".join(method_values))
         if len(formatted_tickers) < 2:
             raise APIError(
                 code=ErrorCode.INSUFFICIENT_STOCKS,
@@ -1300,7 +1201,7 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             )
         
         # Get benchmark ticker
-        benchmark_ticker = BENCHMARK_TICKERS[request.benchmark]
+        benchmark_ticker = Benchmarks.get_ticker(request.benchmark)
         logger.info("Using benchmark: %s (ticker: %s)", request.benchmark.value, benchmark_ticker)
         
         # Fetch & align data - run in threadpool because it's I/O and CPU intensive
@@ -1527,15 +1428,29 @@ async def async_http_get(url: str):
 def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, risk_free_rate: float = 0.05) -> Dict[str, float]:
     """
     Compute custom daily-return metrics:
-      - sortino
-      - max_drawdown
-      - romad
-      - var_95, cvar_95
-      - var_90, cvar_90
-      - cagr
-      - portfolio_beta (calculated using OLS regression)
+      - sortino (risk-adjusted metric using downside deviation)
+      - max_drawdown (maximum peak-to-trough decline)
+      - romad (return over maximum drawdown)
+      - var_95, cvar_95 (value at risk and conditional value at risk at 95% confidence)
+      - var_90, cvar_90 (value at risk and conditional value at risk at 90% confidence)
+      - cagr (compound annual growth rate)
+      - portfolio_beta (calculated using OLS regression against benchmark)
+      - plus extended metrics:
+        omega_ratio, calmar_ratio, ulcer_index, evar_95, gini_mean_difference,
+        dar_95, cdar_95, upside_potential_ratio, modigliani_risk_adjusted_performance,
+        information_ratio, sterling_ratio, v2_ratio
     """
     ann_factor = 252
+
+    # 1. Risk‐free daily return
+    r_daily = (1 + risk_free_rate) ** (1/ann_factor) - 1
+
+    # 2. Benchmark returns aligned
+    bench_ret = benchmark_df.pct_change().dropna()
+
+    # 3. Cumulative wealth series
+    cum_p = (1 + port_returns).cumprod()
+    cum_b = (1 + bench_ret).cumprod().reindex(cum_p.index).ffill()
 
     # Sortino
     downside_std = port_returns[port_returns < 0].std()
@@ -1545,14 +1460,13 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
         annual_ret = mean_daily * ann_factor
         sortino = (annual_ret - risk_free_rate) / (downside_std * np.sqrt(ann_factor))
 
-    # Drawdown stats
-    cum = (1 + port_returns).cumprod()
-    peak = cum.cummax()
-    drawdown = (cum - peak) / peak
+    # 4. Drawdowns for portfolio
+    peak = cum_p.cummax()
+    drawdown = (cum_p - peak) / peak  # ≤ 0
     max_dd = drawdown.min()  # negative
 
     # RoMaD
-    final_cum = cum.iloc[-1] - 1.0
+    final_cum = cum_p.iloc[-1] - 1.0
     romad = final_cum / abs(max_dd) if max_dd < 0 else 0.0
 
     # VaR / CVaR
@@ -1567,21 +1481,23 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
     # CAGR
     n_days = len(port_returns)
     if n_days > 1:
-        final_growth = cum.iloc[-1]
+        final_growth = cum_p.iloc[-1]
         cagr = final_growth ** (ann_factor / n_days) - 1.0
     else:
         cagr = 0.0
 
-    # Portfolio Beta using OLS regression
-    benchmark_ret = benchmark_df.pct_change().dropna()
+    # 5. Excess and active returns
+    excess = port_returns - r_daily
+    active = port_returns.reindex(bench_ret.index) - bench_ret
 
+    # Portfolio Beta using OLS regression
     # Get aligned risk-free rate series for both portfolio and benchmark
     rf_port = risk_free_rate_manager.get_aligned_series(port_returns.index, risk_free_rate)
-    rf_bench = risk_free_rate_manager.get_aligned_series(benchmark_ret.index, risk_free_rate)
+    rf_bench = risk_free_rate_manager.get_aligned_series(bench_ret.index, risk_free_rate)
 
     # Calculate excess returns (returns - risk-free rate)
     port_excess = port_returns - rf_port
-    bench_excess = benchmark_ret - rf_bench
+    bench_excess = bench_ret - rf_bench
     
     # Align the dates to ensure we only use common dates for regression
     common_dates = port_excess.index.intersection(bench_excess.index)
@@ -1597,32 +1513,39 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
     # Only perform regression if we have enough data points
     if len(port_excess) > 2:  # Need more than 2 points for meaningful regression
         try:
-            # Add constant for alpha calculation
-            X = sm.add_constant(bench_excess.values)
-            
-            # Fit the OLS model
-            model = sm.OLS(port_excess.values, X)
-            results = model.fit()
-            
-            # Extract results (alpha is constant, beta is the slope)
-            daily_alpha = results.params[0]  # This is the daily alpha
-            portfolio_beta = results.params[1]
-            
-            # Annualize alpha from daily to annual
-            portfolio_alpha = daily_alpha * ann_factor
-            
-            # Apply sanity check for alpha (cap at +/- 25%)
-            if abs(portfolio_alpha) > 0.25:
-                portfolio_alpha = 0.25 * (1 if portfolio_alpha > 0 else -1)
-                logger.warning(f"Alpha value was capped at {portfolio_alpha:.4f} due to unrealistic value")
-            
-            # Get p-value for beta and R-squared
-            beta_pvalue = results.pvalues[1]
-            r_squared = results.rsquared
-            
-            # Log some debugging information
-            logger.debug(f"OLS Beta: {portfolio_beta:.4f} (p-value: {beta_pvalue:.4f}, R²: {r_squared:.4f})")
-            
+            # Check if there's any variance in the dependent variable (port_excess)
+            if port_excess.var() > 1e-9:  # Only proceed if there's non-zero variance
+                # Add constant for alpha calculation
+                X = sm.add_constant(bench_excess.values)
+                
+                # Fit the OLS model
+                model = sm.OLS(port_excess.values, X)
+                results = model.fit()
+                
+                # Extract results (alpha is constant, beta is the slope)
+                daily_alpha = results.params[0]  # This is the daily alpha
+                portfolio_beta = results.params[1]
+                
+                # Annualize alpha from daily to annual
+                portfolio_alpha = daily_alpha * ann_factor
+                
+                # Apply sanity check for alpha (cap at +/- 25%)
+                if abs(portfolio_alpha) > 0.25:
+                    portfolio_alpha = 0.25 * (1 if portfolio_alpha > 0 else -1)
+                    logger.warning(f"Alpha value was capped at {portfolio_alpha:.4f} due to unrealistic value")
+                
+                # Get p-value for beta and R-squared
+                beta_pvalue = results.pvalues[1]
+                r_squared = results.rsquared
+                
+                # Log some debugging information
+                logger.debug(f"OLS Beta: {portfolio_beta:.4f} (p-value: {beta_pvalue:.4f}, R²: {r_squared:.4f})")
+            else:
+                logger.debug("No variance in portfolio excess returns, skipping OLS regression")
+                # If port_excess has no variance, beta is 0
+                portfolio_beta = 0.0
+                # R-squared is 0 when the dependent variable has no variance
+                r_squared = 0.0
         except Exception as e:
             # Fallback to covariance method if OLS fails
             logger.warning(f"OLS regression failed, falling back to covariance method: {str(e)}")
@@ -1671,6 +1594,92 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
     probs = counts / counts.sum()
     port_entropy = entropy(probs)
     
+    # —————————————————————————————————————————————————————————————————————————
+    # 1) Omega Ratio: Σ₍r>τ₎(r-τ) / Σ₍r<τ₎(τ-r), with τ = r_daily
+    diff = port_returns - r_daily
+    gain = diff[diff > 0].sum()
+    loss = (-diff[diff < 0]).sum()
+    omega_ratio = gain / loss if loss > 0 else np.inf
+
+    # 2) Calmar Ratio: CAGR / |MaxDrawdown|
+    years = len(port_returns) / ann_factor
+    final_wealth = cum_p.iloc[-1]
+    cagr_alt = final_wealth**(1/years) - 1 if years > 0 else 0.0
+    max_dd_abs = abs(max_dd)
+    calmar_ratio = cagr_alt / max_dd_abs if max_dd_abs > 0 else np.nan
+
+    # 3) Ulcer Index: sqrt( (1/N) Σ drawdown² )
+    ulcer_index = np.sqrt((drawdown ** 2).mean())
+
+    # 4) EVaR₀.₉₅: inf_{z>0} [ (1/z)·ln(E[e^{z·(−R)}] / 0.05 ) ]
+    losses = -port_returns.values
+    def _evar_obj(z):
+        mgf = np.mean(np.exp(z * losses))
+        return (1.0 / z) * np.log(mgf / 0.05)
+    
+    try:
+        z_opt = minimize_scalar(_evar_obj, bounds=(1e-6, 100), method="bounded").x
+        evar_95 = _evar_obj(z_opt)
+    except Exception as e:
+        logger.warning(f"EVaR calculation failed: {str(e)}")
+        evar_95 = var_95  # Fallback to VaR if optimization fails
+
+    # 5) Gini Mean Difference: 2/[n(n−1)] Σ_{i<j}|x_i−x_j|
+    x = port_returns.values
+    n = len(x)
+    if n > 1:
+        diffs = np.abs(x[:, None] - x[None, :])
+        gini_mean_difference = (2.0 / (n * (n - 1))) * np.sum(np.triu(diffs, 1))
+    else:
+        gini_mean_difference = 0.0
+
+    # 6) Drawdown at Risk (DaR_95): 95%-quantile of the drawdown distribution
+    dar_95 = abs(np.quantile(drawdown, 0.05))
+
+    # 7) Conditional Drawdown at Risk (CDaR_95): E[drawdown | drawdown ≤ −DaR_95]
+    tail = drawdown[drawdown <= -dar_95]
+    cdar_95 = abs(tail.mean()) if len(tail) > 0 else dar_95
+
+    # 8) Upside Potential Ratio: E[(R−τ)_+] / sqrt(E[(τ−R)_-²])
+    ups = np.maximum(port_returns - r_daily, 0)
+    downs = np.maximum(r_daily - port_returns, 0)
+    down_var = (downs ** 2).mean()
+    upside_potential_ratio = ups.mean() / np.sqrt(down_var) if down_var > 0 else np.inf
+
+    # 9) Modigliani Risk-Adjusted Performance (M²): S·σ_B + R_f, S=(μ_P−R_f)/σ_P
+    mu_p = port_returns.mean() * ann_factor
+    sigma_p = port_returns.std() * np.sqrt(ann_factor)
+    sigma_b = bench_ret.std() * np.sqrt(ann_factor)
+    sharpe_p = (mu_p - risk_free_rate) / sigma_p if sigma_p > 0 else 0.0
+    modigliani_risk_adjusted_performance = sharpe_p * sigma_b + risk_free_rate
+
+    # 10) Information Ratio: E[R_P−R_B] / σ(R_P−R_B)
+    information_ratio = active.mean() / active.std() if active.std() > 0 else 0.0
+
+    # 11) Sterling Ratio: CAGR / (AvgAnnualDD − 10%)
+    try:
+        annual_dd = (
+            cum_p
+            .groupby(port_returns.index.year)
+            .apply(lambda s: abs(((s / s.cummax()) - 1).min()))
+        )
+        avg_dd = annual_dd.mean()
+        sterling_ratio = cagr_alt / (avg_dd - 0.10) if avg_dd > 0.10 else np.nan
+    except Exception as e:
+        logger.warning(f"Sterling ratio calculation failed: {str(e)}")
+        sterling_ratio = np.nan
+
+    # 12) V2 Ratio: RelCAGR / sqrt(E[rel_drawdown²])
+    try:
+        v_rel = cum_p / cum_b
+        rel_cagr = v_rel.iloc[-1] ** (1/years) - 1 if years > 0 else 0.0
+        rel_dd = (v_rel - v_rel.cummax()) / v_rel.cummax()
+        rel_dd_var = (rel_dd ** 2).mean()
+        v2_ratio = rel_cagr / np.sqrt(rel_dd_var) if rel_dd_var > 0 else np.nan
+    except Exception as e:
+        logger.warning(f"V2 ratio calculation failed: {str(e)}")
+        v2_ratio = np.nan
+    
     return {
         "sortino": sortino,
         "max_drawdown": max_dd,
@@ -1688,7 +1697,20 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
         "treynor_ratio": float(treynor_ratio),  # Explicitly convert to float for test compatibility
         "skewness": skewness,
         "kurtosis": kurtosis,
-        "entropy": port_entropy
+        "entropy": port_entropy,
+        # New metrics
+        "omega_ratio": float(omega_ratio),
+        "calmar_ratio": calmar_ratio,  # Keep as np.nan if NaN
+        "ulcer_index": float(ulcer_index),
+        "evar_95": float(evar_95),
+        "gini_mean_difference": float(gini_mean_difference),
+        "dar_95": float(dar_95),
+        "cdar_95": float(cdar_95),
+        "upside_potential_ratio": upside_potential_ratio,  # Keep as np.nan if NaN
+        "modigliani_risk_adjusted_performance": float(modigliani_risk_adjusted_performance),
+        "information_ratio": float(information_ratio),
+        "sterling_ratio": sterling_ratio,  # Keep as np.nan if NaN
+        "v2_ratio": v2_ratio  # Keep as np.nan if NaN
     }
 
 # Define a function to maintain backward compatibility with existing code

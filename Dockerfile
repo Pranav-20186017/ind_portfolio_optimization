@@ -12,7 +12,7 @@ RUN pip install --upgrade pip && \
 RUN mkdir -p /app/mosek /app/outputs
 
 # Copy all application files at once (reducing layers)
-COPY srv.py settings.py test.py main.py ./
+COPY data.py srv.py settings.py test.py main.py ./
 
 # Create entrypoint script to handle MOSEK license
 RUN echo '#!/bin/bash\n\

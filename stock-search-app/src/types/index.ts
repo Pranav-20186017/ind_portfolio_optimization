@@ -47,7 +47,21 @@ export interface PortfolioPerformance {
     treynor_ratio: number;
     skewness: number;
     kurtosis: number;
-    entropy: number
+    entropy: number;
+    
+    // New metrics
+    omega_ratio: number;
+    calmar_ratio: number;
+    ulcer_index: number;
+    evar_95: number;
+    gini_mean_difference: number;
+    dar_95: number;
+    cdar_95: number;
+    upside_potential_ratio: number;
+    modigliani_risk_adjusted_performance: number;
+    information_ratio: number;
+    sterling_ratio: number;
+    v2_ratio: number;
 }
 
 // Extended optimization result, now including drawdown plot images

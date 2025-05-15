@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 from unittest.mock import patch, MagicMock, mock_open
 from pathlib import Path
+import math
 
 print("Starting test execution...")
 
@@ -38,7 +39,7 @@ from srv import (
     run_optimization_MIN_CDAR, get_risk_free_rate, compute_yearly_returns_stocks,
     generate_covariance_heatmap, file_to_base64, EquiWeightedOptimizer,
     OptimizationMethod, CLAOptimizationMethod, StockItem, ExchangeEnum,
-    APIError, BENCHMARK_TICKERS, BenchmarkName, BenchmarkReturn,
+    APIError, Benchmarks, BenchmarkName, BenchmarkReturn,
     TickerRequest, PortfolioOptimizationResponse, risk_free_rate_manager
 )
 
@@ -100,7 +101,8 @@ class TestPortfolioOptimization(unittest.TestCase):
         
         # Add benchmark data for different indices
         cls.benchmark_data = {}
-        for benchmark in ['^NSEI', '^BSESN', '^NSEBANK']:
+        benchmark_tickers = [Benchmarks.get_ticker(b) for b in BenchmarkName]
+        for benchmark in benchmark_tickers:
             drift = 0.0005
             prices = 10000 * np.cumprod(1 + np.random.normal(drift, 0.015, len(cls.dates)))
             cls.benchmark_data[benchmark] = pd.Series(prices, index=cls.dates)
@@ -798,15 +800,16 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertTrue(np.isfinite(sharpe))
 
     def test_benchmark_tickers_mapping(self):
-        """Test the BENCHMARK_TICKERS mapping."""
-        self.assertEqual(BENCHMARK_TICKERS[BenchmarkName.nifty], "^NSEI")
-        self.assertEqual(BENCHMARK_TICKERS[BenchmarkName.sensex], "^BSESN")
-        self.assertEqual(BENCHMARK_TICKERS[BenchmarkName.bank_nifty], "^NSEBANK")
+        """Test the Benchmarks class for ticker mapping."""
+        self.assertEqual(Benchmarks.get_ticker(BenchmarkName.nifty), "^NSEI")
+        self.assertEqual(Benchmarks.get_ticker(BenchmarkName.sensex), "^BSESN")
+        self.assertEqual(Benchmarks.get_ticker(BenchmarkName.bank_nifty), "^NSEBANK")
         
         # Test that all enum values are mapped
         for benchmark in BenchmarkName:
-            self.assertIn(benchmark, BENCHMARK_TICKERS)
-            self.assertIsInstance(BENCHMARK_TICKERS[benchmark], str)
+            ticker = Benchmarks.get_ticker(benchmark)
+            self.assertIsInstance(ticker, str)
+            self.assertTrue(len(ticker) > 0)
 
     def test_ticker_request_with_benchmarks(self):
         """Test TickerRequest with different benchmarks."""
@@ -832,7 +835,8 @@ class TestPortfolioOptimization(unittest.TestCase):
         mock_cached_yf_download.side_effect = lambda ticker, start_date: self.prices_data.get(ticker, pd.Series([]))
         
         # Test with each benchmark
-        for benchmark_ticker in BENCHMARK_TICKERS.values():
+        for benchmark in BenchmarkName:
+            benchmark_ticker = Benchmarks.get_ticker(benchmark)
             with patch('srv.download_close_prices') as mock_download_close_prices:
                 # Set the return value directly
                 mock_download_close_prices.return_value = self.benchmark_data[benchmark_ticker]
@@ -929,6 +933,68 @@ class TestPortfolioOptimization(unittest.TestCase):
             mock_download.assert_any_call(test_ticker, test_date)
             mock_download.assert_any_call(test_ticker + "_DIFFERENT", test_date)
             mock_download.assert_any_call(test_ticker, datetime(2021, 1, 1))
+
+    # Tests for new metrics added to compute_custom_metrics
+    def test_zero_variation_metrics(self):
+        """Test zero variation metrics with constant returns."""
+        # Create constant return series
+        idx = pd.date_range("2020-01-01", periods=10, freq="B")
+        pr = pd.Series(0.0, index=idx)
+        bench = pd.Series(100.0, index=idx)  # constant price series
+        
+        # Calculate metrics with zero risk-free rate
+        metrics = compute_custom_metrics(pr, bench, risk_free_rate=0.0)
+
+        # Gini Mean Difference of identical values = 0
+        self.assertAlmostEqual(metrics["gini_mean_difference"], 0.0)
+
+        # Drawdown at Risk and Conditional Drawdown at Risk = 0
+        self.assertAlmostEqual(metrics["dar_95"], 0.0)
+        self.assertAlmostEqual(metrics["cdar_95"], 0.0)
+
+        # Ulcer Index = 0
+        self.assertAlmostEqual(metrics["ulcer_index"], 0.0)
+
+        # Information Ratio = 0 (no active return volatility)
+        self.assertAlmostEqual(metrics["information_ratio"], 0.0)
+
+        # Modigliani (Sharpe=0, σ_B=0, RF=0) → 0
+        self.assertAlmostEqual(metrics["modigliani_risk_adjusted_performance"], 0.0)
+
+        # Calmar Ratio: 0/0 → nan
+        self.assertTrue(math.isnan(metrics["calmar_ratio"]))
+
+    def test_upside_potential_and_omega(self):
+        """Test upside potential and omega ratios with constant returns."""
+        # Create constant return series
+        idx = pd.date_range("2020-01-01", periods=10, freq="B")
+        pr = pd.Series(0.0, index=idx)
+        bench = pd.Series(100.0, index=idx)  # constant price series
+        
+        # Calculate metrics with zero risk-free rate
+        metrics = compute_custom_metrics(pr, bench, risk_free_rate=0.0)
+
+        # Upside Potential Ratio: no downside deviation → inf
+        self.assertTrue(math.isinf(metrics["upside_potential_ratio"]))
+
+        # Omega Ratio: no losses → inf
+        self.assertTrue(math.isinf(metrics["omega_ratio"]))
+
+    def test_v2_and_sterling_indices(self):
+        """Test V2 and Sterling ratios with constant returns."""
+        # Create constant return series
+        idx = pd.date_range("2020-01-01", periods=10, freq="B")
+        pr = pd.Series(0.0, index=idx)
+        bench = pd.Series(100.0, index=idx)  # constant price series
+        
+        # Calculate metrics with zero risk-free rate
+        metrics = compute_custom_metrics(pr, bench, risk_free_rate=0.0)
+
+        # V2 Ratio: rel_cagr=0, rel_dd=0 → 0/0 → nan
+        self.assertTrue(math.isnan(metrics["v2_ratio"]))
+
+        # Sterling Ratio: avg_dd=0 < 0.10 → nan (per spec)
+        self.assertTrue(math.isnan(metrics["sterling_ratio"]))
 
 if __name__ == '__main__':
     unittest.main() 

@@ -1239,7 +1239,12 @@ const HomePage: React.FC = () => {
                                   <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
                                 </Tooltip>
                               </TableCell>
-                              <TableCell>{perf.beta_pvalue.toFixed(4)}</TableCell>
+                              <TableCell>
+                                {perf.beta_pvalue < 0.001 
+                                  ? perf.beta_pvalue.toExponential(3)  // Scientific notation for very small values
+                                  : perf.beta_pvalue.toFixed(4)        // Regular notation for larger values
+                                }
+                              </TableCell>
                             </TableRow>
                             <TableRow>
                               <TableCell>
@@ -1265,6 +1270,115 @@ const HomePage: React.FC = () => {
                             <TableRow>
                               <TableCell><strong>Entropy</strong></TableCell>
                               <TableCell>{perf.entropy.toFixed(4)}</TableCell>
+                            </TableRow>
+                            {/* New metrics */}
+                            <TableRow>
+                              <TableCell>
+                                <strong>Omega Ratio</strong>
+                                <Tooltip title="The Omega Ratio measures the relationship between the probability of gains and losses relative to a threshold (typically the risk-free rate). It's the ratio of the area above the threshold to the area below it in the returns distribution. Higher values indicate better risk-return characteristics.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{Number.isFinite(perf.omega_ratio) ? perf.omega_ratio.toFixed(4) : '∞'}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Calmar Ratio</strong>
+                                <Tooltip title="The Calmar Ratio is the ratio of annualized return to maximum drawdown. It measures the return per unit of downside risk, with higher values indicating better risk-adjusted performance.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{Number.isNaN(perf.calmar_ratio) ? 'N/A' : perf.calmar_ratio.toFixed(4)}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Ulcer Index</strong>
+                                <Tooltip title="The Ulcer Index measures the depth and duration of drawdowns, providing a comprehensive view of downside risk. Lower values indicate less severe drawdowns.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{(perf.ulcer_index * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>EVaR 95%</strong>
+                                <Tooltip title="Entropic Value at Risk (EVaR) is a coherent risk measure that captures the tail behavior of the portfolio returns distribution using exponential weighting. It provides a more conservative risk estimate than traditional VaR.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{(perf.evar_95 * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Gini Mean Difference</strong>
+                                <Tooltip title="The Gini Mean Difference is a measure of dispersion in the returns distribution. It represents the expected absolute difference between two randomly selected returns. Higher values indicate more variability in the returns.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{(perf.gini_mean_difference * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Drawdown at Risk (DaR 95%)</strong>
+                                <Tooltip title="Drawdown at Risk (DaR) represents the drawdown that won't be exceeded with 95% confidence. It's similar to VaR but for drawdowns instead of returns.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{(perf.dar_95 * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Conditional Drawdown at Risk (CDaR 95%)</strong>
+                                <Tooltip title="Conditional Drawdown at Risk (CDaR) is the expected drawdown when the drawdown exceeds the DaR. It provides insight into the severity of extreme drawdowns.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{(perf.cdar_95 * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Upside Potential Ratio</strong>
+                                <Tooltip title="The Upside Potential Ratio measures the upside potential relative to the downside risk, both calculated with respect to a threshold (typically the risk-free rate). Higher values indicate better upside performance for the level of downside risk.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{Number.isFinite(perf.upside_potential_ratio) ? perf.upside_potential_ratio.toFixed(4) : '∞'}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Modigliani Risk-Adjusted Performance (M²)</strong>
+                                <Tooltip title="Modigliani Risk-Adjusted Performance (M²) adjusts the portfolio's return to match the volatility of the benchmark. It represents the return the portfolio would have earned if it had the same volatility as the benchmark. Higher values indicate better risk-adjusted performance.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{(perf.modigliani_risk_adjusted_performance * 100).toFixed(2)}%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Information Ratio</strong>
+                                <Tooltip title="The Information Ratio measures the active return divided by the active risk (tracking error). It quantifies the excess return per unit of risk taken relative to the benchmark. Higher values indicate better risk-adjusted active returns.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{perf.information_ratio.toFixed(4)}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Sterling Ratio</strong>
+                                <Tooltip title="The Sterling Ratio is a risk-adjusted performance measure that divides the average annual return by the average annual maximum drawdown minus 10%. It's designed to emphasize the impact of large drawdowns. Higher values indicate better risk-adjusted returns.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{Number.isNaN(perf.sterling_ratio) ? 'N/A' : perf.sterling_ratio.toFixed(4)}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>V2 Ratio</strong>
+                                <Tooltip title="The V2 Ratio measures the relative CAGR (compared to benchmark) divided by the standard deviation of relative drawdowns. It quantifies the excess growth rate per unit of relative risk. Higher values indicate better benchmark-relative performance.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{Number.isNaN(perf.v2_ratio) ? 'N/A' : perf.v2_ratio.toFixed(4)}</TableCell>
                             </TableRow>
                           </TableBody>
                         </Table>
