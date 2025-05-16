@@ -101,7 +101,7 @@ def finalize_portfolio(
     logger.info(f"Calculated yearly betas for {method}: {yearly_betas}")
     
     # Generate plots
-    dist_b64, dd_b64 = generate_plots(port_returns, method)
+    dist_b64, dd_b64 = generate_plots(port_returns, method, benchmark_df)
     
     # Get or calculate expected_return, volatility, sharpe
     if pfolio_perf is not None:
@@ -953,7 +953,7 @@ def generate_covariance_heatmap(
     # Return the base64-encoded image string using your existing utility function.
     return file_to_base64(filepath)
 
-def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
+def generate_plots(port_returns: pd.Series, method: str, benchmark_df: pd.Series = None) -> Tuple[str, str]:
     """Generate distribution and drawdown plots, return base64 encoded images"""
     # Configure matplotlib backend
     plt.switch_backend('Agg')
@@ -992,8 +992,22 @@ def generate_plots(port_returns: pd.Series, method: str) -> Tuple[str, str]:
     peak = cum.cummax()
     drawdown = (cum - peak) / peak
     plt.figure(figsize=(10, 6))
-    plt.plot(drawdown, color='red', label='Drawdown')
-    plt.title(f"Drawdown of {method} Portfolio")
+    plt.plot(drawdown, color='red', label='Portfolio Drawdown')
+    
+    # Add benchmark drawdown if available
+    if benchmark_df is not None:
+        # Calculate benchmark returns and drawdown
+        benchmark_ret = benchmark_df.pct_change().dropna()
+        # Align with portfolio returns
+        common_dates = drawdown.index.intersection(benchmark_ret.index)
+        if len(common_dates) > 0:
+            benchmark_ret = benchmark_ret.loc[common_dates]
+            cum_benchmark = (1 + benchmark_ret).cumprod()
+            peak_benchmark = cum_benchmark.cummax()
+            drawdown_benchmark = (cum_benchmark - peak_benchmark) / peak_benchmark
+            plt.plot(drawdown_benchmark, color='blue', label='Benchmark Drawdown')
+    
+    plt.title(f"Drawdown Comparison - {method} Portfolio")
     plt.xlabel("Date")
     plt.ylabel("Drawdown")
     plt.grid(True)
