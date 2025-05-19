@@ -71,6 +71,11 @@ def finalize_portfolio(
     Returns:
         Tuple: (OptimizationResult, cumulative_returns)
     """
+    # Log the portfolio weights for this optimization method
+    logger.info(f"Portfolio weights for {method} optimization:")
+    for ticker, weight in sorted(weights.items(), key=lambda x: x[1], reverse=True):
+        logger.info(f"  {ticker}: {weight:.4%}")
+    
     # Create Series from weights dictionary
     w_series = pd.Series(weights)
     
@@ -119,6 +124,12 @@ def finalize_portfolio(
         expected_return = port_returns.mean() * 252
         volatility = port_returns.std() * np.sqrt(252)
         sharpe = (expected_return - risk_free_rate) / volatility if volatility > 0 else 0.0
+    
+    # Log key performance metrics
+    logger.info(f"Performance metrics for {method}:")
+    logger.info(f"  Expected Return: {expected_return:.4%}")
+    logger.info(f"  Volatility: {volatility:.4%}")
+    logger.info(f"  Sharpe Ratio: {sharpe:.4f}")
     
     # Create performance object
     performance = PortfolioPerformance(
