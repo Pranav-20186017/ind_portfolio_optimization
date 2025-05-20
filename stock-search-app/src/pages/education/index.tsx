@@ -67,7 +67,7 @@ const EducationIndexPage: React.FC = () => {
     }
   ];
 
-    const financialConcepts = [    {      title: 'Capital Asset Pricing Model (CAPM)',      description: 'A model that describes the relationship between systematic risk and expected return for assets, particularly stocks.',      path: '/education/capm',      available: true    },    {      title: 'Modern Portfolio Theory',      description: 'A framework for constructing portfolios that maximize expected return for a given level of market risk.',      path: '/education/modern-portfolio-theory',      available: true    },    {      title: 'Efficient Frontier',      description: 'The set of optimal portfolios that offer the highest expected return for a defined level of risk.',      path: '/education/efficient-frontier',      available: false    },    {      title: 'Expected Returns',      description: 'The anticipated return on an investment based on historical data or forward-looking estimates.',      path: '/education/expected-returns',      available: false    },    {      title: 'Volatility (σ)',      description: 'A statistical measure of the dispersion of returns, usually measured using standard deviation.',      path: '/education/volatility',      available: false    }
+    const financialConcepts = [    {      title: 'Capital Asset Pricing Model (CAPM)',      description: 'A model that describes the relationship between systematic risk and expected return for assets, particularly stocks.',      path: '/education/capm',      available: true    },    {      title: 'Modern Portfolio Theory',      description: 'A framework for constructing portfolios that maximize expected return for a given level of market risk.',      path: '/education/modern-portfolio-theory',      available: true    },    {      title: 'Efficient Frontier',      description: 'The set of optimal portfolios that offer the highest expected return for a defined level of risk.',      path: '/education/efficient-frontier',      available: true    },    {      title: 'Expected Returns',      description: 'The anticipated return on an investment based on historical data or forward-looking estimates.',      path: '/education/expected-returns',      available: true    },    {      title: 'Volatility (σ)',      description: 'A statistical measure of the dispersion of returns, usually measured using standard deviation.',      path: '/education/volatility',      available: true    }
   ];
 
   const quantitativeMetrics = [
@@ -135,7 +135,7 @@ const EducationIndexPage: React.FC = () => {
       title: 'Blume Adjusted Beta',
       description: 'A modified beta calculation that adjusts for the tendency of betas to revert toward the market average over time.',
       path: '/education/blume-adjusted-beta',
-      available: false
+      available: true
     },
     {
       title: 'Entropy',

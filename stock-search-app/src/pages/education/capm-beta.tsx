@@ -483,6 +483,21 @@ const CAPMBetaPage: React.FC = () => {
             <Grid item xs={12} sm={6} md={4}>
               <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>
+                  Blume-Adjusted Beta
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  A modified beta calculation that adjusts for the tendency of betas to revert toward the market average over time.
+                </Typography>
+                <Link href="/education/blume-adjusted-beta" passHref>
+                  <Button variant="contained" color="primary">
+                    Learn More
+                  </Button>
+                </Link>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom>
                   Jensen's Alpha (α)
                 </Typography>
                 <Typography variant="body2" paragraph>

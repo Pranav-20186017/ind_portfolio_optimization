@@ -655,7 +655,11 @@ const CriticalLineAlgorithmPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   The set of optimal portfolios that offer the highest expected return for a defined level of risk.
                 </Typography>
-                <Button variant="outlined" color="primary" disabled>Coming Soon</Button>
+                <Link href="/education/efficient-frontier" passHref>
+                  <Button variant="contained" color="primary">
+                    Learn More
+                  </Button>
+                </Link>
               </Box>
             </Grid>
           </Grid>

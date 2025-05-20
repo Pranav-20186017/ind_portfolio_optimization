@@ -439,6 +439,118 @@ const MeanVarianceOptimizationPage: React.FC = () => {
           </Typography>
         </Paper>
         
+        {/* Advantages and Limitations */}
+        <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
+          <Typography variant="h5" component="h2" gutterBottom>
+            Advantages and Limitations
+          </Typography>
+          
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Advantages
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Pioneering Framework</strong>: Provides a mathematical foundation for portfolio construction that has stood the test of time, earning Markowitz a Nobel Prize.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Diversification Benefits</strong>: Quantifies the risk-reduction benefits of combining assets with imperfect correlations.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Risk-Return Trade-off</strong>: Explicitly models the relationship between risk and return, allowing investors to select portfolios that match their risk tolerance.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Intuitive Visualization</strong>: The Efficient Frontier provides a clear graphical representation of portfolio optimization choices.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="error">
+                  Limitations
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Input Sensitivity</strong>: Highly sensitive to estimation errors in expected returns, variances, and covariances, which can lead to unreliable results.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Concentrated Portfolios</strong>: Often produces extremely concentrated portfolios, sometimes placing large weights on assets with estimation errors.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Normal Distribution Assumption</strong>: Assumes asset returns follow a normal distribution, which fails to capture fat tails and skewness in actual market returns.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Single-Period Model</strong>: Does not account for time-varying risk and return parameters or multi-period investment horizons.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Transaction Costs</strong>: Basic implementation ignores transaction costs, taxes, and liquidity constraints that exist in real markets.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+          </Grid>
+        </Paper>
+        
+        {/* Practical Improvements */}
+        <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
+          <Typography variant="h5" component="h2" gutterBottom>
+            Practical Improvements to Basic MVO
+          </Typography>
+          <TableContainer component={Paper} elevation={0}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell><strong>Challenge</strong></TableCell>
+                  <TableCell><strong>Solution Approach</strong></TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                <TableRow>
+                  <TableCell>Input sensitivity</TableCell>
+                  <TableCell>Robust optimization; shrinkage estimators (James-Stein, Ledoit-Wolf); Bayesian approaches (Black-Litterman model)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell>Extreme weights</TableCell>
+                  <TableCell>Weight constraints; regularization penalties; portfolio resampling techniques</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell>Non-normal returns</TableCell>
+                  <TableCell>Higher-moment optimization; semi-variance optimization; historical simulation approaches</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell>Single-period limitation</TableCell>
+                  <TableCell>Multi-period optimization; dynamic programming approaches; rolling-window optimization</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell>Market frictions</TableCell>
+                  <TableCell>Transaction cost constraints; tax-aware optimization; turnover restrictions</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+        
         {/* References */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>
@@ -513,7 +625,11 @@ const MeanVarianceOptimizationPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   The broader theoretical framework that encompasses MVO and other portfolio optimization approaches.
                 </Typography>
-                <Button variant="outlined" color="primary" disabled>Coming Soon</Button>
+                <Link href="/education/modern-portfolio-theory" passHref>
+                  <Button variant="contained" color="primary">
+                    Learn More
+                  </Button>
+                </Link>
               </Box>
             </Grid>
           </Grid>
