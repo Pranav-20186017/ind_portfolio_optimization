@@ -720,7 +720,11 @@ const CapitalAssetPricingModelPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   The theoretical framework that underlies CAPM, focusing on how risk-averse investors can construct portfolios to maximize returns.
                 </Typography>
-                <Button variant="outlined" color="primary" disabled>Coming Soon</Button>
+                <Link href="/education/modern-portfolio-theory" passHref>
+                  <Button variant="contained" color="primary">
+                    Learn More
+                  </Button>
+                </Link>
               </Box>
             </Grid>
           </Grid>
