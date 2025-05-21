@@ -331,53 +331,66 @@ const ConditionalDrawdownAtRiskPage: React.FC = () => {
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>Advantages and Limitations</Typography>
           
-          <Typography variant="h6" gutterBottom>Advantages</Typography>
-          <ul>
-            <li>
-              <Typography paragraph>
-                <strong>Coherent Risk Measure:</strong> Unlike DaR, CDaR is a coherent risk measure, satisfying mathematical properties that ensure consistent risk assessment, particularly the sub-additivity property that captures diversification benefits.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Tail Risk Focus:</strong> CDaR provides detailed information about the severity of extreme drawdowns, offering deeper insight into tail risk than metrics that only capture the threshold (like DaR) or the average risk (like standard deviation).
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Path Dependency:</strong> By incorporating the temporal sequence of returns, CDaR captures dynamic risk aspects that point-in-time measures miss, making it more representative of the actual investor experience.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Optimization-Friendly:</strong> CDaR's convexity makes it suitable for efficient optimization algorithms, enabling practical implementation in portfolio construction processes.
-              </Typography>
-            </li>
-          </ul>
-          
-          <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>Limitations</Typography>
-          <ul>
-            <li>
-              <Typography paragraph>
-                <strong>Data Requirements:</strong> Accurate CDaR estimation requires extensive historical data or sophisticated simulation techniques to adequately capture the distribution of extreme drawdowns.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Computational Complexity:</strong> Computing CDaR for complex portfolios, especially when used in optimization procedures, can be computationally intensive and may require specialized algorithms.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Estimation Uncertainty:</strong> The estimation of CDaR is subject to significant uncertainty due to the limited number of extreme events in historical data, potentially leading to estimation errors.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Interpretation Challenges:</strong> CDaR may be less intuitive to non-technical stakeholders compared to simpler metrics like maximum drawdown, potentially requiring additional explanation and education.
-              </Typography>
-            </li>
-          </ul>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Advantages
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Coherent Risk Measure:</strong> Unlike DaR, CDaR is a coherent risk measure, satisfying mathematical properties that ensure consistent risk assessment, particularly the sub-additivity property that captures diversification benefits.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Tail Risk Focus:</strong> CDaR provides detailed information about the severity of extreme drawdowns, offering deeper insight into tail risk than metrics that only capture the threshold (like DaR) or the average risk (like standard deviation).
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Path Dependency:</strong> By incorporating the temporal sequence of returns, CDaR captures dynamic risk aspects that point-in-time measures miss, making it more representative of the actual investor experience.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Optimization-Friendly:</strong> CDaR's convexity makes it suitable for efficient optimization algorithms, enabling practical implementation in portfolio construction processes.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="error">
+                  Limitations
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Data Requirements:</strong> Accurate CDaR estimation requires extensive historical data or sophisticated simulation techniques to adequately capture the distribution of extreme drawdowns.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Computational Complexity:</strong> Computing CDaR for complex portfolios, especially when used in optimization procedures, can be computationally intensive and may require specialized algorithms.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Estimation Uncertainty:</strong> The estimation of CDaR is subject to significant uncertainty due to the limited number of extreme events in historical data, potentially leading to estimation errors.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Interpretation Challenges:</strong> CDaR may be less intuitive to non-technical stakeholders compared to simpler metrics like maximum drawdown, potentially requiring additional explanation and education.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+          </Grid>
         </Paper>
 
         {/* Related Metrics */}

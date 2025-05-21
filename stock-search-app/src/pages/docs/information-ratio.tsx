@@ -378,8 +378,8 @@ const InformationRatioPage: React.FC = () => {
           <Typography variant="h5" component="h2" gutterBottom>Advantages and Limitations</Typography>
           
           <Grid container spacing={3}>
-                        <Grid item xs={12} md={6}>              
-              <Box sx={{ p: 3 }}>                
+            <Grid item xs={12} md={6}>              
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>                
                 <Typography variant="h6" color="primary" gutterBottom>Advantages</Typography>                
                 <ul>                  
                   <li>                    
@@ -406,7 +406,7 @@ const InformationRatioPage: React.FC = () => {
               </Box>            
             </Grid>                        
             <Grid item xs={12} md={6}>              
-              <Box sx={{ p: 3 }}>                
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>                
                 <Typography variant="h6" color="error" gutterBottom>Limitations</Typography>                
                 <ul>                  
                   <li>                    

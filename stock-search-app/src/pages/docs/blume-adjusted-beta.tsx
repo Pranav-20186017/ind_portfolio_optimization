@@ -221,6 +221,84 @@ const BlumeAdjustedBetaPage: React.FC = () => {
           </TableContainer>
         </Paper>
         
+        {/* Advantages and Limitations */}
+        <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
+          <Typography variant="h5" component="h2" gutterBottom>
+            Advantages and Limitations
+          </Typography>
+          
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Advantages
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Forward-looking</strong> — Provides more realistic beta estimates for future periods based on observed mean-reversion patterns.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Improved accuracy</strong> — Reduces forecast errors in cost of capital calculations by correcting for statistical bias.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Simple implementation</strong> — Requires minimal computational overhead with a straightforward adjustment formula.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Empirically validated</strong> — Backed by decades of research showing the tendency of betas to revert toward the market mean.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Industry standard</strong> — Widely used by financial analysts and incorporated into professional data services.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="error">
+                  Limitations
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>One-size-fits-all approach</strong> — Uses the same adjustment factor across all securities regardless of industry or market cap.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Linear assumption</strong> — Assumes mean-reversion follows a simple linear pattern which may not always hold.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Time horizon sensitivity</strong> — The adjustment may be excessive for short-term strategies or insufficient for very long horizons.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Static shrinkage factor</strong> — The standard 0.67 factor doesn't adapt to changing market conditions or structural shifts.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Simplistic mean-reversion</strong> — Doesn't account for fundamental reasons why some stocks maintain persistently high or low betas.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+          </Grid>
+        </Paper>
+        
         {/* Limitations */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>

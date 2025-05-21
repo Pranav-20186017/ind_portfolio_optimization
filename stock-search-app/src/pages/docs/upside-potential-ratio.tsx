@@ -388,58 +388,71 @@ const UpsidePotentialRatioPage: React.FC = () => {
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>Advantages and Limitations</Typography>
           
-          <Typography variant="h6" gutterBottom>Advantages</Typography>
-          <ul>
-            <li>
-              <Typography paragraph>
-                <strong>Psychological Alignment:</strong> Better reflects investor preferences by distinguishing between favorable and unfavorable volatility, recognizing that investors desire upside potential while seeking to minimize downside risk.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Adaptable Threshold:</strong> The minimum acceptable return can be customized to match specific investment goals, allowing for personalized performance evaluation.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Non-Normal Distributions:</strong> More appropriate than traditional metrics for evaluating investments with skewed return distributions, such as those involving options, alternative investments, or asymmetric strategies.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Focus on Upside Capture:</strong> Explicitly rewards strategies that maximize gains above the threshold, not just those that minimize overall volatility.
-              </Typography>
-            </li>
-          </ul>
-          
-          <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>Limitations</Typography>
-          <ul>
-            <li>
-              <Typography paragraph>
-                <strong>Threshold Sensitivity:</strong> Results can be highly dependent on the chosen minimum acceptable return, requiring careful consideration when selecting this parameter.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Interpretation Complexity:</strong> Less intuitive than simpler metrics like the Sharpe ratio, potentially making it more difficult to explain to investors without a technical background.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Data Requirements:</strong> Requires sufficient historical data to reliably estimate upside potential and downside risk, which may not always be available for newer investment strategies.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Limited Standardization:</strong> Not as widely used or standardized as traditional metrics, making cross-industry comparisons more challenging.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Time Insensitivity:</strong> Like many risk-adjusted return measures, it does not account for the timing of returns or drawdowns, which can be important for investors with specific time horizons.
-              </Typography>
-            </li>
-          </ul>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Advantages
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Psychological Alignment:</strong> Better reflects investor preferences by distinguishing between favorable and unfavorable volatility, recognizing that investors desire upside potential while seeking to minimize downside risk.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Adaptable Threshold:</strong> The minimum acceptable return can be customized to match specific investment goals, allowing for personalized performance evaluation.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Non-Normal Distributions:</strong> More appropriate than traditional metrics for evaluating investments with skewed return distributions, such as those involving options, alternative investments, or asymmetric strategies.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Focus on Upside Capture:</strong> Explicitly rewards strategies that maximize gains above the threshold, not just those that minimize overall volatility.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="error">
+                  Limitations
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Threshold Sensitivity:</strong> Results can be highly dependent on the chosen minimum acceptable return, requiring careful consideration when selecting this parameter.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Interpretation Complexity:</strong> Less intuitive than simpler metrics like the Sharpe ratio, potentially making it more difficult to explain to investors without a technical background.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Data Requirements:</strong> Requires sufficient historical data to reliably estimate upside potential and downside risk, which may not always be available for newer investment strategies.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Limited Standardization:</strong> Not as widely used or standardized as traditional metrics, making cross-industry comparisons more challenging.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Time Insensitivity:</strong> Like many risk-adjusted return measures, it does not account for the timing of returns or drawdowns, which can be important for investors with specific time horizons.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+          </Grid>
         </Paper>
 
         {/* References */}
