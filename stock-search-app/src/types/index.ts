@@ -54,7 +54,7 @@ export interface PortfolioPerformance {
     semi_beta?: number;
     coskewness?: number;
     cokurtosis?: number;
-    garch_beta?: number;
+    // garch_beta?: number; // Commented out temporarily - computationally intensive
     
     // Other metrics
     omega_ratio: number;

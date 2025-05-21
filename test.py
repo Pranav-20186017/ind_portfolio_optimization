@@ -1062,8 +1062,10 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertIn('cokurtosis', metrics)
         self.assertFalse(math.isnan(metrics['cokurtosis']))
         
-        # Check GARCH beta is present (might be NaN if calculation fails)
+        # Check GARCH beta is present (should be NaN as it's currently commented out)
         self.assertIn('garch_beta', metrics)
+        # GARCH beta calculation is currently commented out - should be NaN
+        self.assertTrue(math.isnan(metrics['garch_beta']))
         
         # Check that we can handle missing values gracefully
         # Create very small dataset where calculations should fail

@@ -1453,13 +1453,14 @@ const HomePage: React.FC = () => {
                             <TableRow>
                               <TableCell>
                                 <strong>Cokurtosis</strong>
-                                <Tooltip title="Measures the relationship between portfolio returns and cubed market returns. Higher values indicate that the portfolio tends to experience extreme returns when the market experiences extreme movements.">
+                                <Tooltip title="Fourth cross-moment measuring the relationship between portfolio returns and extreme market returns. A high positive value indicates portfolio returns amplify extreme market movements.">
                                   <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
                                 </Tooltip>
                               </TableCell>
                               <TableCell>{Number.isNaN(perf.cokurtosis) ? 'N/A' : perf.cokurtosis?.toFixed(4)}</TableCell>
                             </TableRow>
 
+                            {/* GARCH Beta section temporarily commented out - computationally intensive
                             <TableRow>
                               <TableCell>
                                 <strong>GARCH Beta</strong>
@@ -1469,6 +1470,7 @@ const HomePage: React.FC = () => {
                               </TableCell>
                               <TableCell>{Number.isNaN(perf.garch_beta) ? 'N/A' : perf.garch_beta?.toFixed(4)}</TableCell>
                             </TableRow>
+                            */}
                           </TableBody>
                         </Table>
 

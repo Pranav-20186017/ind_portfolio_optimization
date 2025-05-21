@@ -126,6 +126,8 @@ def garch_beta(r_i: pd.Series, r_m: pd.Series) -> float:
     Returns:
         float: GARCH beta or NaN if model fails or conditional volatility is zero.
     """
+    # Commenting out GARCH beta calculation as it's time-intensive - will be implemented later
+    """
     try:
         # Fit univariate GARCH(1,1) on demeaned returns as a quick proxy
         am_i = arch_model(r_i*100, mean='Zero', vol='GARCH', p=1, q=1).fit(disp='off')
@@ -137,6 +139,9 @@ def garch_beta(r_i: pd.Series, r_m: pd.Series) -> float:
     except Exception as e:
         logger.warning(f"GARCH beta calculation failed: {str(e)}")
         return np.nan
+    """
+    # Return NaN for now
+    return np.nan
 
 ########################################
 # Helper Functions for Optimization
@@ -1709,11 +1714,16 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
         adv_metrics["cokurtosis"] = cokurtosis(port_excess, bench_excess)
         
         # GARCH beta is more computationally intensive, so we'll add error handling
+        # Commenting out GARCH beta calculation as it's time-intensive - will be implemented later
+        """
         try:
             adv_metrics["garch_beta"] = garch_beta(port_excess, bench_excess)
         except Exception as e:
             logger.warning(f"GARCH beta calculation failed: {str(e)}")
             adv_metrics["garch_beta"] = np.nan
+        """
+        # Set GARCH beta to NaN for now
+        adv_metrics["garch_beta"] = np.nan
     except Exception as e:
         logger.warning(f"Advanced metrics calculation failed: {str(e)}")
         adv_metrics = {
