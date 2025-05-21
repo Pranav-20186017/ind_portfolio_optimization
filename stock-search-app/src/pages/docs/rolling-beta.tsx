@@ -353,38 +353,112 @@ beta_y = df.groupby(df.index.year).apply(
           </Box>
         </Paper>
         
-        {/* Section 8: Key References */}
+        {/* Advantages and Limitations Section */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>
-            Key References
+            Advantages and Limitations
           </Typography>
-          <Box sx={{ pl: 3 }}>
-            <ol>
-              <li>
-                <Typography paragraph>
-                  <strong>Ferson, W. E., & Schadt, R. W. (1996)</strong> – <em>Measuring Fund Strategy and Performance in Changing Economic Conditions.</em> <strong>Journal of Finance</strong>, 51(2), 425-461.
+          
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Advantages
                 </Typography>
-              </li>
-              <li>
-                <Typography paragraph>
-                  <strong>Blitz, D. (2013)</strong> – <em>Benchmarking Low-Volatility Strategies.</em> <strong>Journal of Portfolio Management</strong>, 40(2), 89-100.
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Dynamic risk measurement:</strong> Captures time-varying market sensitivity that static beta measures miss completely.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Regime identification:</strong> Helps identify market regime changes and how investments respond differently across cycles.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Style drift detection:</strong> Reveals when investment managers deviate from their stated strategy or factor exposures change.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Intuitive visualization:</strong> Provides an accessible way to visualize risk evolution through time for non-technical stakeholders.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Forward-looking insights:</strong> Historical beta patterns during similar market conditions can inform future expectations.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="error">
+                  Limitations
                 </Typography>
-              </li>
-              <li>
-                <Typography paragraph>
-                  <strong>Bodie, Z., Kane, A., & Marcus, A.</strong> – <em>Investments</em> (12 ed.), Ch. 24: Performance Attribution.
-                </Typography>
-              </li>
-            </ol>
-          </Box>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Statistical noise:</strong> Shorter estimation windows increase responsiveness but reduce statistical reliability of beta estimates.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Lagging indicator:</strong> By definition, rolling beta looks backward and may not accurately predict future market sensitivity.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Window selection bias:</strong> Results depend heavily on the chosen window length and can differ significantly between implementations.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Single-factor limitation:</strong> Standard rolling beta only captures market risk, ignoring other systematic risk factors.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Benchmark dependency:</strong> Results are only meaningful relative to the specific benchmark used in the calculation.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+          </Grid>
         </Paper>
         
-        {/* References */}
+        {/* Conclusion */}
+        <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
+          <Typography paragraph sx={{ fontStyle: 'italic' }}>
+            Rolling Betas turn a single risk number into a <strong>movie</strong>—revealing how your strategy's market sensitivity morphs through cycles. Paired with your backend's automated yearly computation and interactive frontend chart, users get an immediate, intuitive feel for regime changes and hidden risks.
+          </Typography>
+        </Paper>
+        
+        {/* References - Combined section */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>
             References
           </Typography>
           <ul>
+            <li>
+              <Typography paragraph>
+                <strong>Ferson, W. E., & Schadt, R. W. (1996)</strong> – <em>Measuring Fund Strategy and Performance in Changing Economic Conditions.</em> <strong>Journal of Finance</strong>, 51(2), 425-461.
+              </Typography>
+            </li>
+            <li>
+              <Typography paragraph>
+                <strong>Blitz, D. (2013)</strong> – <em>Benchmarking Low-Volatility Strategies.</em> <strong>Journal of Portfolio Management</strong>, 40(2), 89-100.
+              </Typography>
+            </li>
+            <li>
+              <Typography paragraph>
+                <strong>Bodie, Z., Kane, A., & Marcus, A.</strong> – <em>Investments</em> (12 ed.), Ch. 24: Performance Attribution.
+              </Typography>
+            </li>
             <li>
               <Typography paragraph>
                 <strong>Brooks, R. D., Faff, R. W., & McKenzie, M. D. (1998)</strong>. "Time-varying beta risk of Australian industry portfolios: A comparison of modelling techniques." <em>Australian Journal of Management</em>, 23(1), 1-22.
@@ -406,13 +480,6 @@ beta_y = df.groupby(df.index.year).apply(
               </Typography>
             </li>
           </ul>
-        </Paper>
-        
-        {/* Conclusion */}
-        <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
-          <Typography paragraph sx={{ fontStyle: 'italic' }}>
-            Rolling Betas turn a single risk number into a <strong>movie</strong>—revealing how your strategy's market sensitivity morphs through cycles. Paired with your backend's automated yearly computation and interactive frontend chart, users get an immediate, intuitive feel for regime changes and hidden risks.
-          </Typography>
         </Paper>
         
         {/* Related Topics */}

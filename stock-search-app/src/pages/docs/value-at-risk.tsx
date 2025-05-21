@@ -364,6 +364,84 @@ cvar_90 = port_returns[port_returns <= var_90].mean()`}
           </TableContainer>
         </Paper>
         
+        {/* Advantages and Limitations Section */}
+        <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
+          <Typography variant="h5" component="h2" gutterBottom>
+            Advantages and Limitations
+          </Typography>
+          
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Advantages
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Simplicity and intuitiveness:</strong> Condenses complex risk distributions into a single, easy-to-understand number representing maximum expected loss.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Universal applicability:</strong> Can be applied to virtually any portfolio of assets regardless of asset class or complexity.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Confidence level flexibility:</strong> Can be adjusted (90%, 95%, 99%) based on risk tolerance and specific application needs.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Regulatory acceptance:</strong> Widely adopted by financial institutions and required by regulators as a standard risk measurement tool.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Comparative framework:</strong> Provides a consistent basis for comparing risk across different portfolios, strategies, or time periods.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="error">
+                  Limitations
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Tail blindness:</strong> Provides no information about the severity of losses beyond the VaR threshold, potentially masking catastrophic tail risks.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Non-coherent measure:</strong> Lacks mathematical subadditivity, meaning the VaR of a combined portfolio can be greater than the sum of individual VaRs.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Method sensitivity:</strong> Results can vary significantly depending on calculation approach (historical, parametric, Monte Carlo) and parameters.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Backward-looking bias:</strong> Historical VaR assumes the past distribution of returns accurately reflects future risks, which may not hold during regime changes.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Liquidity blindness:</strong> Standard VaR calculations don't account for market liquidity constraints that may amplify losses during stress periods.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+          </Grid>
+        </Paper>
+
         {/* References */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>

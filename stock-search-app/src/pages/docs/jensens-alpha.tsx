@@ -304,6 +304,84 @@ const JensensAlphaPage: React.FC = () => {
             </Table>
           </TableContainer>
         </Paper>
+
+        {/* Advantages and Limitations Section */}
+        <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
+          <Typography variant="h5" component="h2" gutterBottom>
+            Advantages and Limitations
+          </Typography>
+          
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Advantages
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Benchmark-adjusted assessment:</strong> Evaluates performance specifically relative to a relevant benchmark, not just in absolute terms.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Risk-adjustment:</strong> Accounts for the level of systematic risk taken, enabling fair comparison between strategies with different risk levels.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Statistical validation:</strong> Can be tested for statistical significance to determine if outperformance is likely skill-based or simply due to chance.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Skill identification:</strong> Provides a clear distinction between returns generated through manager skill versus those from general market exposure.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Academically robust:</strong> Based on established financial theory and supported by decades of empirical research in portfolio performance evaluation.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="error">
+                  Limitations
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>CAPM dependency:</strong> Inherits all limitations of the CAPM model, including assumptions about market efficiency and investor rationality.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Benchmark sensitivity:</strong> Results can vary dramatically based on which benchmark is chosen as the market proxy.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Single-factor limitation:</strong> Ignores other systematic risk factors that might explain returns beyond market risk alone.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Time period dependency:</strong> Alpha values can be highly sensitive to the specific time period used in the analysis.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Data requirements:</strong> Needs sufficient historical data to produce statistically meaningful results, potentially limiting usefulness for new strategies.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+          </Grid>
+        </Paper>
         
         {/* References */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>

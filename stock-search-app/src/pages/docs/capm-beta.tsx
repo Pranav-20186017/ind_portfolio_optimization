@@ -384,11 +384,89 @@ const CAPMBetaPage: React.FC = () => {
         {/* Limitations & Good Practice */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>
-            Limitations & Good Practice
+            Advantages vs Limitations
+          </Typography>
+          
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Advantages
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Intuitive interpretation</strong> — Clear representation of how an asset co-moves with the market.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Simple calculation</strong> — Can be computed from readily available return data.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Theoretical foundation</strong> — Firmly grounded in modern portfolio theory and CAPM.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Risk assessment</strong> — Identifies systematic risk that cannot be diversified away.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Performance attribution</strong> — Helps distinguish between market-driven returns and alpha.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="error">
+                  Limitations
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Non-stationarity</strong> — Beta values drift over time and are not constant.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Benchmark sensitivity</strong> — Results highly dependent on the market index chosen.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Historical bias</strong> — Past relationships may not predict future behavior.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Simplified model</strong> — Ignores other factors that affect returns (size, value, momentum).
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Assumes market efficiency</strong> — May not hold in markets with significant inefficiencies.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+          </Grid>
+        </Paper>
+        
+        {/* Good Practice */}
+        <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
+          <Typography variant="h5" component="h2" gutterBottom>
+            Good Practices
           </Typography>
           
           <Typography paragraph>
-            While beta is a valuable metric, it has several limitations that investors should be aware of:
+            To address the limitations of beta, consider these best practices:
           </Typography>
           
           <TableContainer component={Paper} elevation={0}>
@@ -503,7 +581,11 @@ const CAPMBetaPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   A risk-adjusted performance measure that represents the excess return of a portfolio over what CAPM predicts.
                 </Typography>
-                <Button variant="outlined" color="primary" disabled>Coming Soon</Button>
+                <Link href="/docs/jensens-alpha" passHref>
+                  <Button variant="contained" color="primary">
+                    Learn More
+                  </Button>
+                </Link>
               </Box>
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
@@ -514,7 +596,11 @@ const CAPMBetaPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   A time-series analysis of beta that shows how an asset's relationship with the market changes over different periods.
                 </Typography>
-                <Button variant="outlined" color="primary" disabled>Coming Soon</Button>
+                <Link href="/docs/rolling-beta" passHref>
+                  <Button variant="contained" color="primary">
+                    Learn More
+                  </Button>
+                </Link>
               </Box>
             </Grid>
           </Grid>

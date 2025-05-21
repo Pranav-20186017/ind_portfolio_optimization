@@ -579,7 +579,11 @@ const SortinoRatioPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   A performance metric that evaluates the probability-weighted ratio of gains to losses for a threshold return.
                 </Typography>
-                <Button variant="outlined" color="primary" disabled>Coming Soon</Button>
+                <Link href="/docs/omega-ratio" passHref>
+                  <Button variant="contained" color="primary">
+                    Learn More
+                  </Button>
+                </Link>
               </Box>
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
@@ -590,7 +594,11 @@ const SortinoRatioPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   A risk-adjusted performance measure that relates average annual compound returns to maximum drawdown.
                 </Typography>
-                <Button variant="outlined" color="primary" disabled>Coming Soon</Button>
+                <Link href="/docs/calmar-ratio" passHref>
+                  <Button variant="contained" color="primary">
+                    Learn More
+                  </Button>
+                </Link>
               </Box>
             </Grid>
           </Grid>

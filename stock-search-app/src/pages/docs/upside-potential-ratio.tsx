@@ -444,7 +444,7 @@ const UpsidePotentialRatioPage: React.FC = () => {
 
         {/* References */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
-          <Typography variant="h5" component="h2" gutterBottom>Academic References</Typography>
+          <Typography variant="h5" component="h2" gutterBottom>References</Typography>
           <ul>
             <li>
               <Typography paragraph>

@@ -194,49 +194,74 @@ const ConditionalValueAtRiskPage: React.FC = () => {
           </Box>
         </Paper>
         
-        {/* CVaR vs VaR */}
+        {/* CVaR vs VaR - REVISED SECTION */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>
-            CVaR vs VaR
+            Understanding CVaR vs VaR
           </Typography>
-          
-          <TableContainer component={Paper} elevation={0} sx={{ mb: 3 }}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell><strong>Property</strong></TableCell>
-                  <TableCell><strong>VaR</strong></TableCell>
-                  <TableCell><strong>CVaR</strong></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                <TableRow>
-                  <TableCell>Coherent (sub-additive)</TableCell>
-                  <TableCell>❌</TableCell>
-                  <TableCell>✅</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Captures tail magnitude</TableCell>
-                  <TableCell>❌</TableCell>
-                  <TableCell>✅</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Intuitive to novices</TableCell>
-                  <TableCell>✅</TableCell>
-                  <TableCell>➖ (needs explanation)</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Easy historical calculation</TableCell>
-                  <TableCell>✅</TableCell>
-                  <TableCell>✅</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </TableContainer>
           
           <Typography paragraph>
-            Hence risk desks often <strong>set limits on VaR</strong> but <strong>hedge and capital-plan on CVaR</strong>.
+            Think of VaR and CVaR as two complementary ways of understanding portfolio risk:
           </Typography>
+
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 3, border: '1px solid #e0e0e0', borderRadius: 2, height: '100%', bgcolor: '#f9f9f9' }}>
+                <Typography variant="h6" align="center" gutterBottom>
+                  Value at Risk (VaR)
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <Box>
+                    <Typography paragraph>
+                      <strong>What it tells you:</strong> "I am X% confident my losses won't exceed this threshold on a given day."
+                    </Typography>
+                    <Typography paragraph>
+                      <strong>Real-world analogy:</strong> Like a flood warning level on a river - it tells you when to start worrying, but not how bad the flooding might get.
+                    </Typography>
+                  </Box>
+                  <Box sx={{ mt: 2 }}>
+                    <Typography sx={{ bgcolor: '#f3f3f3', p: 1.5, borderRadius: 1 }}>
+                      <strong>Mathematical property:</strong> Not coherent (adding two portfolios can increase risk)
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 3, border: '1px solid #e0e0e0', borderRadius: 2, height: '100%', bgcolor: '#f9f9f9' }}>
+                <Typography variant="h6" align="center" gutterBottom>
+                  Conditional VaR (CVaR)
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <Box>
+                    <Typography paragraph>
+                      <strong>What it tells you:</strong> "When worst-case scenarios occur, this is the average loss I can expect."
+                    </Typography>
+                    <Typography paragraph>
+                      <strong>Real-world analogy:</strong> Like measuring the average depth of flooding after the river exceeds the warning level - it tells you how severe problems might be.
+                    </Typography>
+                  </Box>
+                  <Box sx={{ mt: 2 }}>
+                    <Typography sx={{ bgcolor: '#f3f3f3', p: 1.5, borderRadius: 1 }}>
+                      <strong>Mathematical property:</strong> Coherent (diversification always reduces risk)
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+            </Grid>
+          </Grid>
+          
+          <Box sx={{ mt: 3, p: 2, bgcolor: '#e3f2fd', borderRadius: 1 }}>
+            <Typography variant="subtitle1" gutterBottom>
+              <strong>Why you need both:</strong>
+            </Typography>
+            <Typography paragraph>
+              VaR is intuitive and answers "How often might I face significant losses?", while CVaR answers the follow-up question "How bad could those losses be?" Together, they provide a more complete picture of portfolio risk.
+            </Typography>
+            <Typography>
+              This is why modern risk management frameworks and regulations increasingly require both measures.
+            </Typography>
+          </Box>
         </Paper>
         
         {/* Mathematical Variants */}
@@ -418,8 +443,86 @@ const ConditionalValueAtRiskPage: React.FC = () => {
             making it computationally tractable even for large portfolios with many constraints.
           </Typography>
         </Paper>
+
+        {/* Advantages and Limitations Section */}
+        <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
+          <Typography variant="h5" component="h2" gutterBottom>
+            Advantages and Limitations
+          </Typography>
+          
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Advantages
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Coherent risk measure:</strong> Unlike VaR, CVaR satisfies the mathematical property of subadditivity, meaning diversification always reduces risk.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Tail sensitivity:</strong> Provides insight into the severity of extreme losses, not just their frequency, allowing for better worst-case scenario planning.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Regulatory alignment:</strong> Increasingly preferred by financial regulators (Basel Committee) for its more comprehensive risk assessment capabilities.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Optimization friendly:</strong> Can be formulated as a linear programming problem, making it tractable for complex portfolio optimization problems.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Distribution agnostic:</strong> Historical CVaR makes no assumptions about return distributions, capturing non-normal behavior common in financial markets.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="error">
+                  Limitations
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Complexity:</strong> Less intuitive for non-technical users compared to VaR, requiring additional explanation to communicate its meaning effectively.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Data requirements:</strong> Needs more historical data to estimate accurately, as it focuses on tail events which are, by definition, rare.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Estimation sensitivity:</strong> Highly sensitive to outliers in the historical dataset, as these directly affect the tail average calculation.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Computational intensity:</strong> Some advanced CVaR calculation methods (like Monte Carlo) require significantly more computational resources than simple VaR.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Over-conservatism:</strong> May lead to excessively conservative portfolio allocations when used as the sole optimization objective, potentially sacrificing returns.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+          </Grid>
+        </Paper>
         
-        {/* References - ADD NEW SECTION HERE */}
+        {/* References */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>
             References

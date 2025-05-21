@@ -339,58 +339,7 @@ const DrawdownAtRiskPage: React.FC = () => {
           </Typography>
         </Paper>
 
-        {/* Advantages and Limitations */}
-        <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
-          <Typography variant="h5" component="h2" gutterBottom>Advantages and Limitations</Typography>
-          
-          <Typography variant="h6" gutterBottom>Advantages</Typography>
-          <ul>
-            <li>
-              <Typography paragraph>
-                <strong>Investor-Centric:</strong> DaR directly addresses one of the most emotionally and financially significant aspects of investing—substantial losses from peak values.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Path Sensitive:</strong> Unlike point-in-time risk measures, DaR captures the sequence and cumulative effect of returns, which better reflects the investor experience.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Intuitive Interpretation:</strong> Expressed as a percentage loss, DaR is easier for non-technical stakeholders to understand than abstract statistical measures.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Comprehensive:</strong> DaR inherently accounts for serial correlation, fat tails, and other realistic market characteristics without requiring specific distribution assumptions.
-              </Typography>
-            </li>
-          </ul>
-          
-          <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>Limitations</Typography>
-          <ul>
-            <li>
-              <Typography paragraph>
-                <strong>Data Requirements:</strong> Accurate DaR estimation requires substantial historical data or advanced simulation techniques to capture extreme events.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Non-Coherence:</strong> Unlike CVaR, DaR is not mathematically a coherent risk measure, which means it doesn't always satisfy the sub-additivity property crucial for capturing diversification benefits.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Computational Complexity:</strong> Calculating DaR, especially for complex portfolios or using Monte Carlo simulations, can be computationally intensive.
-              </Typography>
-            </li>
-            <li>
-              <Typography paragraph>
-                <strong>Backward-Looking:</strong> Like many risk measures, DaR based on historical data may not fully capture future risks, particularly in changing market regimes.
-              </Typography>
-            </li>
-          </ul>
-        </Paper>
+                {/* Advantages and Limitations */}        <Paper elevation={2} sx={{ p: 4, mb: 4 }}>          <Typography variant="h5" component="h2" gutterBottom>Advantages and Limitations</Typography>                    <Grid container spacing={3}>            <Grid item xs={12} md={6}>              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>                <Typography variant="h6" gutterBottom color="primary">                  Advantages                </Typography>                <ul>                  <li>                    <Typography paragraph>                      <strong>Investor-Centric:</strong> DaR directly addresses one of the most emotionally and financially significant aspects of investing—substantial losses from peak values.                    </Typography>                  </li>                  <li>                    <Typography paragraph>                      <strong>Path Sensitive:</strong> Unlike point-in-time risk measures, DaR captures the sequence and cumulative effect of returns, which better reflects the investor experience.                    </Typography>                  </li>                  <li>                    <Typography paragraph>                      <strong>Intuitive Interpretation:</strong> Expressed as a percentage loss, DaR is easier for non-technical stakeholders to understand than abstract statistical measures.                    </Typography>                  </li>                  <li>                    <Typography paragraph>                      <strong>Comprehensive:</strong> DaR inherently accounts for serial correlation, fat tails, and other realistic market characteristics without requiring specific distribution assumptions.                    </Typography>                  </li>                </ul>              </Box>            </Grid>            <Grid item xs={12} md={6}>              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>                <Typography variant="h6" gutterBottom color="error">                  Limitations                </Typography>                <ul>                  <li>                    <Typography paragraph>                      <strong>Data Requirements:</strong> Accurate DaR estimation requires substantial historical data or advanced simulation techniques to capture extreme events.                    </Typography>                  </li>                  <li>                    <Typography paragraph>                      <strong>Non-Coherence:</strong> Unlike CVaR, DaR is not mathematically a coherent risk measure, which means it doesn't always satisfy the sub-additivity property crucial for capturing diversification benefits.                    </Typography>                  </li>                  <li>                    <Typography paragraph>                      <strong>Computational Complexity:</strong> Calculating DaR, especially for complex portfolios or using Monte Carlo simulations, can be computationally intensive.                    </Typography>                  </li>                  <li>                    <Typography paragraph>                      <strong>Backward-Looking:</strong> Like many risk measures, DaR based on historical data may not fully capture future risks, particularly in changing market regimes.                    </Typography>                  </li>                </ul>              </Box>            </Grid>          </Grid>        </Paper>
 
         {/* Related Metrics */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
@@ -422,9 +371,65 @@ const DrawdownAtRiskPage: React.FC = () => {
           </ul>
         </Paper>
 
+        {/* Related Topics */}
+        <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
+          <Typography variant="h5" component="h2" gutterBottom>
+            Related Topics
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6} md={4}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom>
+                  Conditional Drawdown at Risk (CDaR)
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  The expected value of drawdowns exceeding the DaR threshold, measuring the severity of tail drawdown events.
+                </Typography>
+                <Link href="/docs/cdar" passHref>
+                  <Button variant="contained" color="primary">
+                    Learn More
+                  </Button>
+                </Link>
+              </Box>
+            </Grid>
+
+            <Grid item xs={12} sm={6} md={4}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom>
+                  Maximum Drawdown
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  The largest peak-to-trough decline in portfolio value, measuring worst historical loss from a previous peak.
+                </Typography>
+                <Link href="/docs/maximum-drawdown" passHref>
+                  <Button variant="contained" color="primary">
+                    Learn More
+                  </Button>
+                </Link>
+              </Box>
+            </Grid>
+
+            <Grid item xs={12} sm={6} md={4}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom>
+                  Conditional Value at Risk (CVaR)
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  A risk measure that quantifies the expected loss in the worst scenarios beyond the VaR threshold.
+                </Typography>
+                <Link href="/docs/conditional-value-at-risk" passHref>
+                  <Button variant="contained" color="primary">
+                    Learn More
+                  </Button>
+                </Link>
+              </Box>
+            </Grid>
+          </Grid>
+        </Paper>
+
         {/* References */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
-          <Typography variant="h5" component="h2" gutterBottom>Academic References</Typography>
+          <Typography variant="h5" component="h2" gutterBottom>References</Typography>
           <ul>
             <li>
               <Typography paragraph>

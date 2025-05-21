@@ -207,19 +207,19 @@ const docsIndexPage: React.FC = () => {
       title: 'Information Ratio',
       description: 'A performance metric that evaluates active return per unit of risk relative to a benchmark index.',
       path: '/docs/information-ratio',
-      available: false
+      available: true
     },
     {
       title: 'Sterling Ratio',
       description: 'A risk-adjusted return metric similar to Calmar but using average annual drawdown minus 10% in the denominator.',
       path: '/docs/sterling-ratio',
-      available: false
+      available: true
     },
     {
       title: 'V2 Ratio',
       description: 'A performance measure that evaluates relative growth rate compared to benchmark divided by relative drawdown volatility.',
       path: '/docs/v2-ratio',
-      available: false
+      available: true
     }
   ];
 

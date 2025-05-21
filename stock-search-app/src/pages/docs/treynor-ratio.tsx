@@ -37,16 +37,12 @@ const TreynorRatioPage: React.FC = () => {
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation Buttons */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
-          <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">
-              ← Back to Education
-            </Button>
-          </Link>
-          <Link href="/" passHref>
-            <Button variant="outlined" color="secondary">
-              ← Back to Portfolio Optimizer
-            </Button>
-          </Link>
+          <Button variant="outlined" color="primary" component={Link} href="/docs">
+            ← Back to Education
+          </Button>
+          <Button variant="outlined" color="secondary" component={Link} href="/">
+            ← Back to Portfolio Optimizer
+          </Button>
         </Box>
         
         {/* Title Section */}
@@ -65,7 +61,7 @@ const TreynorRatioPage: React.FC = () => {
             What the Treynor Ratio Measures
           </Typography>
           <Typography paragraph>
-            <strong>Treynor Ratio</strong> (invented by Jack Treynor, 1965) gauges <em>how much excess return</em> a portfolio delivers <strong>per unit of systematic risk</strong> (<Link href="/docs/capm-beta" passHref><MuiLink>β</MuiLink></Link>).
+            <strong>Treynor Ratio</strong> (invented by Jack Treynor, 1965) gauges <em>how much excess return</em> a portfolio delivers <strong>per unit of systematic risk</strong> (<MuiLink component={Link} href="/docs/capm-beta">β</MuiLink>).
             It answers the question:
           </Typography>
           <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1, my: 2, borderLeft: '4px solid #3f51b5' }}>
@@ -108,7 +104,7 @@ const TreynorRatioPage: React.FC = () => {
                   <TableCell>
                     <InlineMath math="\beta_p" />
                   </TableCell>
-                  <TableCell>Portfolio <Link href="/docs/capm-beta" passHref><MuiLink>CAPM beta</MuiLink></Link> (relative volatility to market)</TableCell>
+                  <TableCell>Portfolio <MuiLink component={Link} href="/docs/capm-beta">CAPM beta</MuiLink> (relative volatility to market)</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
@@ -123,7 +119,7 @@ const TreynorRatioPage: React.FC = () => {
           
           <Box sx={{ p: 2, bgcolor: '#f8f9fa', borderRadius: 1, borderLeft: '4px solid #3f51b5', my: 2 }}>
             <Typography paragraph>
-              Contrast with <Link href="/docs/sharpe-ratio" passHref><MuiLink>Sharpe Ratio</MuiLink></Link>, which divides by <strong>total</strong> volatility (<InlineMath math="\sigma" />).
+              Contrast with <MuiLink component={Link} href="/docs/sharpe-ratio">Sharpe Ratio</MuiLink>, which divides by <strong>total</strong> volatility (<InlineMath math="\sigma" />).
               Treynor fits best when portfolio is well-diversified and unsystematic risk ≈ 0.
             </Typography>
           </Box>
@@ -135,7 +131,7 @@ const TreynorRatioPage: React.FC = () => {
             CAPM Link
           </Typography>
           <Typography paragraph>
-            From <Link href="/docs/capm" passHref><MuiLink>CAPM (Capital Asset Pricing Model)</MuiLink></Link>:
+            From <MuiLink component={Link} href="/docs/capm">CAPM (Capital Asset Pricing Model)</MuiLink>:
           </Typography>
           
           <Equation math="\mathbb{E}[R_p] - R_f = \beta_p \bigl(\mathbb{E}[R_m] - R_f\bigr)" />
@@ -147,7 +143,7 @@ const TreynorRatioPage: React.FC = () => {
           <Equation math="T_{\text{CAPM}} = \mathbb{E}[R_m]-R_f" />
           
           <Typography paragraph>
-            A <strong>higher</strong> <InlineMath math="T" /> implies positive <Link href="/docs/jensens-alpha" passHref><MuiLink>Jensen's Alpha</MuiLink></Link>; <strong>lower</strong> implies under-performance.
+            A <strong>higher</strong> <InlineMath math="T" /> implies positive <MuiLink component={Link} href="/docs/jensens-alpha">Jensen's Alpha</MuiLink>; <strong>lower</strong> implies under-performance.
           </Typography>
         </Paper>
         
@@ -178,7 +174,7 @@ const TreynorRatioPage: React.FC = () => {
               </li>
               <li>
                 <Typography component="div">
-                  <Link href="/docs/capm-beta" passHref><MuiLink>β</MuiLink></Link> comes from daily OLS regression against the chosen benchmark.
+                  <MuiLink component={Link} href="/docs/capm-beta">β</MuiLink> comes from daily OLS regression against the chosen benchmark.
                 </Typography>
               </li>
             </ul>
@@ -206,7 +202,7 @@ const TreynorRatioPage: React.FC = () => {
                 </TableRow>
                 <TableRow>
                   <TableCell><strong>≈ MRP</strong></TableCell>
-                  <TableCell>In-line with <Link href="/docs/capm" passHref><MuiLink>CAPM</MuiLink></Link> expectations</TableCell>
+                  <TableCell>In-line with <MuiLink component={Link} href="/docs/capm">CAPM</MuiLink> expectations</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell><strong>&lt; MRP</strong></TableCell>
@@ -224,33 +220,99 @@ const TreynorRatioPage: React.FC = () => {
         {/* Strengths & Limitations */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>
-            Strengths & Limitations
+            Advantages vs Limitations
           </Typography>
           
-          <TableContainer component={Paper} elevation={0}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell><strong>Strength</strong></TableCell>
-                  <TableCell><strong>Limitation</strong></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                <TableRow>
-                  <TableCell>Ignores diversifiable risk—ideal for well-diversified funds.</TableCell>
-                  <TableCell>Misleading if portfolio holds large idiosyncratic risk.</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Directly comparable across funds with different σ but similar β.</TableCell>
-                  <TableCell>Sensitive to β estimate instability; needs reliable benchmark.</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Aligns with CAPM theory and SML.</TableCell>
-                  <TableCell>Ignores downside vs. upside; Sharpe & Sortino may capture that nuance.</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Advantages
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Ignores diversifiable risk</strong> — Ideal for well-diversified funds and assessing systematic risk exposure.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Comparable across funds</strong> — Directly compare funds with different total volatility but similar beta exposure.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Theoretical foundation</strong> — Aligns with CAPM theory and Security Market Line concepts.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Asset class assessment</strong> — More appropriate for evaluating portfolios within a specific asset class.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Manager skill insight</strong> — Provides clear view of a manager's ability to generate excess returns per unit of systematic risk.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
+                <Typography variant="h6" gutterBottom color="error">
+                  Limitations
+                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Ignores idiosyncratic risk</strong> — Misleading if portfolio holds large non-systematic risk components.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Beta estimation sensitivity</strong> — Results highly dependent on beta calculation period and benchmark choice.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Risk asymmetry blindness</strong> — Ignores downside vs. upside risk differences that Sharpe & Sortino may capture.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Linear relationship assumption</strong> — Beta calculation assumes linear market relationship that may break during extreme conditions.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Backward-looking</strong> — Historical beta may not be representative of future systematic risk exposure.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Not ideal for standalone evaluation</strong> — Ignores total risk which matters to undiversified investors.
+                    </Typography>
+                  </li>
+                </ul>
+              </Box>
+            </Grid>
+          </Grid>
+          
+          <Box sx={{ mt: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+            <Typography variant="subtitle1" gutterBottom>
+              <strong>When to prefer Treynor Ratio:</strong>
+            </Typography>
+            <Typography paragraph>
+              1. Evaluating managers within the same market segment
+            </Typography>
+            <Typography paragraph>
+              2. Comparing funds that are components of a broader diversified portfolio
+            </Typography>
+            <Typography paragraph>
+              3. When systematic risk is the primary concern for the investor
+            </Typography>
+          </Box>
         </Paper>
         
         {/* Practical Use-Cases */}
@@ -363,11 +425,9 @@ const TreynorRatioPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   A measure of systematic risk that represents how an asset moves relative to the overall market.
                 </Typography>
-                <Link href="/docs/capm-beta" passHref>
-                  <Button variant="contained" color="primary">
-                    Learn More
-                  </Button>
-                </Link>
+                <Button variant="contained" color="primary" component={Link} href="/docs/capm-beta">
+                  Learn More
+                </Button>
               </Box>
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
@@ -378,11 +438,9 @@ const TreynorRatioPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   A risk-adjusted performance measure that represents the average return on a portfolio above or below CAPM predictions.
                 </Typography>
-                <Link href="/docs/jensens-alpha" passHref>
-                  <Button variant="contained" color="primary">
-                    Learn More
-                  </Button>
-                </Link>
+                <Button variant="contained" color="primary" component={Link} href="/docs/jensens-alpha">
+                  Learn More
+                </Button>
               </Box>
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
@@ -393,11 +451,9 @@ const TreynorRatioPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   A measure of risk-adjusted return that helps investors understand the return of an investment compared to its total risk.
                 </Typography>
-                <Link href="/docs/sharpe-ratio" passHref>
-                  <Button variant="contained" color="primary">
-                    Learn More
-                  </Button>
-                </Link>
+                <Button variant="contained" color="primary" component={Link} href="/docs/sharpe-ratio">
+                  Learn More
+                </Button>
               </Box>
             </Grid>
           </Grid>

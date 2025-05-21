@@ -311,41 +311,79 @@ const SharpeRatioPage: React.FC = () => {
           </Box>
         </Paper>
         
-        {/* Limitations */}
+        {/* Advantages and Limitations Section */}
         <Paper elevation={2} sx={{ p: 4, mb: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>
-            Limitations of the Sharpe Ratio
+            Advantages and Limitations
           </Typography>
           
           <Grid container spacing={3}>
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={6}>
               <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
-                <Typography variant="h6" gutterBottom color="error">
-                  Normality Assumption
+                <Typography variant="h6" gutterBottom color="primary">
+                  Advantages
                 </Typography>
-                <Typography variant="body2">
-                  Assumes returns follow a normal distribution, which might not hold true. Financial returns often have fat tails and skewness, making extreme events more likely than the normal distribution suggests.
-                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Simplicity and intuitiveness:</strong> Easy to calculate and interpret, making it accessible to a wide range of investors.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Universal application:</strong> Can be applied to virtually any investment type or strategy, facilitating comparisons across different asset classes.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Risk adjustment:</strong> Explicitly accounts for risk, promoting a more balanced assessment than looking at returns in isolation.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Theoretical foundation:</strong> Strongly grounded in modern portfolio theory and has stood the test of time since its introduction in 1966.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Industry standard:</strong> Widely recognized and used throughout the financial industry, facilitating communication about performance.
+                    </Typography>
+                  </li>
+                </ul>
               </Box>
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={6}>
               <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
                 <Typography variant="h6" gutterBottom color="error">
-                  Sensitive to Outliers
+                  Limitations
                 </Typography>
-                <Typography variant="body2">
-                  Extreme returns significantly affect the Sharpe Ratio. A single quarter of exceptional performance or poor performance can substantially alter the ratio, potentially masking the typical performance.
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
-                <Typography variant="h6" gutterBottom color="error">
-                  Symmetric View of Risk
-                </Typography>
-                <Typography variant="body2">
-                  Treats positive and negative volatility equally, though investors typically care more about downside volatility. This is why metrics like the Sortino Ratio were developed to focus specifically on downside risk.
-                </Typography>
+                <ul>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Normality assumption:</strong> Assumes returns follow a normal distribution, which often doesn't hold true in financial markets where extreme events occur more frequently.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Symmetric risk measure:</strong> Treats upside and downside volatility equally, though investors typically only worry about downside movements.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Sensitivity to time period:</strong> Results can vary significantly depending on the time frame chosen, potentially leading to inconsistent conclusions.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Risk-free rate dependence:</strong> Performance assessment varies based on the chosen risk-free rate, which may not be truly "risk-free" in all economic environments.
+                    </Typography>
+                  </li>
+                  <li>
+                    <Typography paragraph>
+                      <strong>Backward-looking nature:</strong> Calculated using historical data that may not be representative of future performance patterns or risks.
+                    </Typography>
+                  </li>
+                </ul>
               </Box>
             </Grid>
           </Grid>
@@ -424,7 +462,11 @@ const SharpeRatioPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   Similar to Sharpe but uses beta (systematic risk) instead of standard deviation, measuring excess return per unit of market risk.
                 </Typography>
-                <Button variant="outlined" color="primary" disabled>Coming Soon</Button>
+                <Link href="/docs/treynor-ratio" passHref>
+                  <Button variant="contained" color="primary">
+                    Learn More
+                  </Button>
+                </Link>
               </Box>
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
@@ -435,7 +477,11 @@ const SharpeRatioPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   Measures the risk-adjusted returns of a portfolio relative to a benchmark, useful for evaluating active management.
                 </Typography>
-                <Button variant="outlined" color="primary" disabled>Coming Soon</Button>
+                <Link href="/docs/information-ratio" passHref>
+                  <Button variant="contained" color="primary">
+                    Learn More
+                  </Button>
+                </Link>
               </Box>
             </Grid>
           </Grid>
