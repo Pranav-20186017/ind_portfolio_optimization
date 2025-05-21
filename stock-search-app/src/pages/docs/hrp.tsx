@@ -583,7 +583,9 @@ const HierarchicalRiskParityPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   The broader theoretical framework that encompasses different portfolio optimization approaches.
                 </Typography>
-                <Button variant="outlined" color="primary" disabled>Coming Soon</Button>
+                <Link href="/docs/modern-portfolio-theory" passHref>
+                  <Button variant="contained" color="primary">Learn More</Button>
+                </Link>
               </Box>
             </Grid>
           </Grid>

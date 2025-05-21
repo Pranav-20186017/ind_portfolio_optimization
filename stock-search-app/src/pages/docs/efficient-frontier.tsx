@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Typography,
   Container,
@@ -18,6 +18,7 @@ import Link from 'next/link';
 import Head from 'next/head';
 import 'katex/dist/katex.min.css';
 import { InlineMath, BlockMath } from 'react-katex';
+import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line, LineChart, ComposedChart, Legend } from 'recharts';
 
 // Reusable Equation component for consistent math rendering
 const Equation = ({ math }: { math: string }) => (
@@ -25,6 +26,127 @@ const Equation = ({ math }: { math: string }) => (
     <BlockMath math={math} />
   </Box>
 );
+
+// Efficient Frontier Chart Component
+const EfficientFrontierChart = () => {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch('/data/ef_cal_data.json');
+        const jsonData = await response.json();
+        setData(jsonData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (loading || !data) {
+    return <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Typography>Loading chart data...</Typography>
+    </Box>;
+  }
+
+  // Format data for Recharts
+  const frontierLower = data.frontier_lower.map((point: number[]) => ({
+    x: point[0] * 100, // Convert to percentage
+    y: point[1] * 100  // Convert to percentage
+  }));
+
+  const frontierUpper = data.frontier_upper.map((point: number[]) => ({
+    x: point[0] * 100, // Convert to percentage
+    y: point[1] * 100  // Convert to percentage
+  }));
+
+  const assetPoints = data.assets.map((point: number[]) => ({
+    x: point[0] * 100, // Convert to percentage
+    y: point[1] * 100  // Convert to percentage
+  }));
+
+  // Custom tooltip
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <Paper elevation={3} sx={{ p: 1, bgcolor: 'rgba(255, 255, 255, 0.9)' }}>
+          <Typography variant="body2">Risk: {payload[0].payload.x.toFixed(2)}%</Typography>
+          <Typography variant="body2">Return: {payload[0].payload.y.toFixed(2)}%</Typography>
+        </Paper>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <Box sx={{ width: '100%', height: 400 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis 
+            dataKey="x" 
+            type="number" 
+            label={{ value: 'Risk (σ) %', position: 'bottom', offset: 15 }} 
+            domain={['dataMin - 1', 'dataMax + 1']}
+            tickFormatter={(value) => value.toFixed(1)}
+            ticks={[15, 20, 25, 30, 35, 40, 45, 50]}
+          />
+          <YAxis 
+            dataKey="y" 
+            type="number" 
+            label={{ value: 'Return (μ) %', angle: -90, position: 'left' }} 
+            domain={['dataMin - 1', 'dataMax + 1']}
+            tickFormatter={(value) => value.toFixed(1)}
+            ticks={[5, 10, 15, 20, 25, 30]}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Legend verticalAlign="bottom" height={36} wrapperStyle={{ bottom: -10 }} />
+          
+          {/* Efficient Frontier - Upper part */}
+          <Line 
+            name="Efficient Frontier"
+            type="monotone" 
+            dataKey="y" 
+            data={frontierUpper} 
+            stroke="#3F51B5" 
+            dot={false} 
+            activeDot={false} 
+            isAnimationActive={false}
+            strokeWidth={3}
+          />
+          
+          {/* Efficient Frontier - Lower part */}
+          <Line 
+            name="Inefficient Frontier"
+            type="monotone" 
+            dataKey="y" 
+            data={frontierLower} 
+            stroke="#9FA8DA" 
+            dot={false} 
+            activeDot={false} 
+            isAnimationActive={false}
+            strokeWidth={2}
+            strokeDasharray="5 5"
+          />
+          
+          {/* Asset points */}
+          <Scatter 
+            name="Individual Assets" 
+            data={assetPoints} 
+            fill="#E91E63" 
+            shape="circle" 
+            legendType="square"
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </Box>
+  );
+};
 
 const EfficientFrontierPage: React.FC = () => {
   return (
@@ -96,23 +218,9 @@ const EfficientFrontierPage: React.FC = () => {
             Investors should always choose somewhere <strong>on</strong> the frontier; everything else wastes opportunity.
           </Typography>
           
-          {/* Placeholder for an image */}
+          {/* Efficient Frontier Chart */}
           <Box sx={{ textAlign: 'center', my: 3 }}>
-            <Paper 
-              elevation={0}
-              sx={{ 
-                width: '100%', 
-                height: 300, 
-                bgcolor: '#f0f0f0', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }}
-            >
-              <Typography variant="body2" color="text.secondary">
-                [Efficient Frontier Visualization]
-              </Typography>
-            </Paper>
+            <EfficientFrontierChart />
             <Typography variant="caption" display="block" sx={{ mt: 1 }}>
               The efficient frontier (blue curve) showing the optimal portfolios with highest return for each risk level
             </Typography>
@@ -255,10 +363,7 @@ const EfficientFrontierPage: React.FC = () => {
           <Typography variant="h5" component="h2" gutterBottom>
             Relationship to CAPM & CAL
           </Typography>
-          <Typography paragraph>
-            Adding a <strong>risk-free rate</strong> produces a straight <strong>Capital Allocation Line</strong> from <InlineMath math="R_f" /> tangent to the frontier.
-            That tangency point is the market (or optimal) portfolio under <Link href="/docs/capm" passHref><MuiLink>CAPM</MuiLink></Link> assumptions, and all investor choices become linear blends of <InlineMath math="R_f" /> and that portfolio.
-          </Typography>
+          <Typography paragraph>            Adding a <strong>risk-free rate</strong> produces a straight <strong>Capital Allocation Line</strong> from <InlineMath math="R_f" /> tangent to the frontier.            That tangency point is the market (or optimal) portfolio under <Link href="/docs/capm" passHref legacyBehavior><Button variant="text" sx={{ p: 0, minWidth: 'auto', textTransform: 'none' }}>CAPM</Button></Link> assumptions, and all investor choices become linear blends of <InlineMath math="R_f" /> and that portfolio.          </Typography>
         </Paper>
         
         {/* References */}
@@ -270,9 +375,7 @@ const EfficientFrontierPage: React.FC = () => {
             <li>
               <Typography paragraph>
                 <strong>Markowitz, H. (1952)</strong>. "Portfolio Selection." <em>The Journal of Finance</em>, 7(1), 77-91.
-                <MuiLink href="https://doi.org/10.1111/j.1540-6261.1952.tb01525.x" target="_blank" sx={{ ml: 1 }}>
-                  Access the paper
-                </MuiLink>
+                                <Button                   variant="text"                   component="a"                   href="https://doi.org/10.1111/j.1540-6261.1952.tb01525.x"                   target="_blank"                   sx={{ ml: 1, p: 0, minWidth: 'auto', textTransform: 'none' }}                >                  Access the paper                </Button>
               </Typography>
             </li>
           </ul>

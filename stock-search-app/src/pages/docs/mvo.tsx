@@ -603,18 +603,22 @@ const MeanVarianceOptimizationPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   A portfolio optimization approach that focuses solely on minimizing risk without a specific return target.
                 </Typography>
-                <Button variant="outlined" color="primary" disabled>Coming Soon</Button>
+                <Link href="/docs/min-vol" passHref>
+                  <Button variant="contained" color="primary">Learn More</Button>
+                </Link>
               </Box>
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
               <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>
-                  Maximum Sharpe Ratio
+                  Hierarchical Risk Parity
                 </Typography>
                 <Typography variant="body2" paragraph>
-                  Finding the portfolio that maximizes risk-adjusted returns using the Sharpe ratio.
+                  A machine learning approach that uses clustering techniques to create diversified portfolios without matrix inversion.
                 </Typography>
-                <Button variant="outlined" color="primary" disabled>Coming Soon</Button>
+                <Link href="/docs/hrp" passHref>
+                  <Button variant="contained" color="primary">Learn More</Button>
+                </Link>
               </Box>
             </Grid>
             <Grid item xs={12} sm={6} md={4}>

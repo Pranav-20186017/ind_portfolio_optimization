@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Typography,
   Container,
@@ -18,6 +18,31 @@ import Link from 'next/link';
 import Head from 'next/head';
 import 'katex/dist/katex.min.css';
 import { InlineMath, BlockMath } from 'react-katex';
+import { 
+  ComposedChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer, 
+  Scatter,
+  ReferenceLine
+} from 'recharts';
+
+// Define types for the JSON data
+interface EfficientFrontierData {
+  assets: [number, number][];
+  frontier_lower: [number, number][];
+  frontier_upper: [number, number][];
+  cal_line: [number, number][];
+  risk_free: [number, number];
+  tangency_point: [number, number];
+}
+
+// Remove the require statement that's causing the error
+// const efCalData: EfficientFrontierData = require('../../public/data/ef_cal_data.json');
 
 // Reusable Equation component for consistent math rendering
 const Equation = ({ math }: { math: string }) => (
@@ -26,7 +51,215 @@ const Equation = ({ math }: { math: string }) => (
   </Box>
 );
 
+// Efficient frontier (includes both halves of the Markowitz bullet)
+const efficientFrontier = [
+  // Left/inefficient half
+  { risk: 0.25, ret: 10.0 },
+  { risk: 0.20, ret: 10.5 },
+  { risk: 0.15, ret: 11.0 },
+  { risk: 0.12, ret: 11.2 },
+  { risk: 0.10, ret: 11.0 }, // minimum-variance point
+  // Right/efficient half, strictly monotone-up
+  { risk: 0.12, ret: 11.5 },
+  { risk: 0.15, ret: 12.5 },
+  { risk: 0.20, ret: 13.5 },
+  { risk: 0.25, ret: 14.0 },
+  { risk: 0.30, ret: 14.3 }
+];
+
+// Split for proper rendering
+const inefficientFrontier = efficientFrontier.slice(0, 5);
+const efficientCurve = efficientFrontier.slice(4); // Include minimum variance point in both
+
+// Risk-free rate
+const rf = 5.5;
+
+// Optimal tangency portfolio (point where CAL is tangent to efficient frontier)
+// This point mathematically maximizes the Sharpe ratio (ret-rf)/risk
+const tangency = { risk: 0.15, ret: 12.5, name: 'Market (Tangency) Portfolio' };
+
+// Capital Allocation Line (straight line from Rf through tangency point)
+const calData = [
+  { risk: 0, ret: rf },
+  { risk: tangency.risk, ret: tangency.ret },
+  // Extend the line beyond tangency point to show the full allocation line
+  { risk: 0.35, ret: rf + (tangency.ret - rf) * (0.35 / tangency.risk) }
+];
+
+// Special points to mark
+const scatterPoints = [
+  { name: "Risk-free Rate", risk: 0, ret: rf },
+  { name: "Minimum Variance", risk: 0.10, ret: 11.0 },
+  { name: tangency.name, risk: tangency.risk, ret: tangency.ret }
+];
+
+// Color scheme
+const colors = {
+  efficientFrontier: '#3366CC', // Blue
+  inefficientFrontier: '#88AADD', // Lighter blue for inefficient side
+  cal: '#666666',               // Gray
+  minVariance: '#0000FF',       // Blue
+  tangency: '#FFCC00',          // Yellow/Gold
+  riskFree: '#666666'           // Gray
+};
+
 const ModernPortfolioTheoryPage: React.FC = () => {
+  // State to hold the data after fetching
+  const [efData, setEfData] = useState<EfficientFrontierData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch the data when the component mounts
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch('/data/ef_cal_data.json');
+        const data = await response.json();
+        setEfData(data);
+      } catch (error) {
+        console.error('Error loading efficient frontier data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Process the data for the chart if it's available
+  let chartComponents = null;
+  
+  if (efData) {
+    // Extract the data
+    const {
+      assets: rawAssets,
+      frontier_lower: rawLower,
+      frontier_upper: rawUpper,
+      cal_line: rawCal,
+      risk_free: rawRf,
+      tangency_point: rawTan,
+    } = efData;
+
+    // Convert arrays of [x,y] pairs into { risk, ret } objects
+    const assetsData = rawAssets.map(([risk, ret]: [number, number]) => ({ risk, ret }));
+    const lowerFrontier = rawLower.map(([risk, ret]: [number, number]) => ({ risk, ret }));
+    const upperFrontier = rawUpper.map(([risk, ret]: [number, number]) => ({ risk, ret }));
+    const calLineData = rawCal.map(([risk, ret]: [number, number]) => ({ risk, ret }));
+    const riskFreeData = [{ risk: rawRf[0], ret: rawRf[1] }];
+    const tangencyData = [{ risk: rawTan[0], ret: rawTan[1] }];
+
+    // Define the chart components
+    chartComponents = (
+      <ResponsiveContainer>
+        <ComposedChart
+          margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" />
+
+          <XAxis
+            dataKey="risk"
+            type="number"
+            domain={[0, 'dataMax']}
+            tickCount={10}
+            tickFormatter={v => `${(v*100).toFixed(1)}%`}
+            label={{ value: 'Standard Deviation', position: 'insideBottom', offset: -10 }}
+          />
+
+          <YAxis
+            dataKey="ret"
+            type="number"
+            domain={[0, 'dataMax']}
+            tickCount={12}
+            tickFormatter={v => `${(v*100).toFixed(1)}%`}
+            label={{ value: 'Expected Return', angle: -90, position: 'insideLeft', offset: 0 }}
+          />
+
+          <Tooltip
+            formatter={(value: number) => `${(value*100).toFixed(2)}%`}
+            labelFormatter={label => `Risk: ${(label*100).toFixed(2)}%`}
+          />
+
+          <Legend verticalAlign="top" />
+
+          {/* Inefficient (lower) branch */}
+          <Line
+            data={lowerFrontier}
+            dataKey="ret"
+            name="Inefficient Frontier"
+            stroke="#888888"
+            dot={false}
+            isAnimationActive={false}
+          />
+
+          {/* Efficient (upper) frontier */}
+          <Line
+            data={upperFrontier}
+            dataKey="ret"
+            name="Efficient Frontier"
+            stroke="#3366CC"
+            strokeWidth={2}
+            dot={false}
+            isAnimationActive={false}
+          />
+
+          {/* CAL */}
+          <Line
+            data={calLineData}
+            dataKey="ret"
+            name="CAL"
+            stroke="#FF3333"
+            strokeDasharray="5 5"
+            dot={false}
+            isAnimationActive={false}
+          />
+
+          {/* Individual assets */}
+          <Scatter
+            data={assetsData}
+            dataKey="ret"
+            name="Assets"
+            fill="#FFCC00"
+            line={{ stroke: 'none' }}
+          />
+
+          {/* Risk-free point */}
+          <Scatter
+            data={riskFreeData}
+            dataKey="ret"
+            name="Risk-Free Rate"
+            fill="#008800"
+            shape="circle"
+            r={6}
+          >
+            {/* Custom label for risk-free rate */}
+            {riskFreeData.map((entry, index) => (
+              <text 
+                key={`rf-label-${index}`}
+                x={0} 
+                y={entry.ret} 
+                dx={-10} 
+                dy={4} 
+                fill="#008800" 
+                fontSize={12} 
+                textAnchor="end"
+              >
+                {`${(entry.ret * 100).toFixed(1)}%`}
+              </text>
+            ))}
+          </Scatter>
+
+          {/* Tangency portfolio */}
+          <Scatter
+            data={tangencyData}
+            dataKey="ret"
+            name="Tangency Port."
+            fill="#CC0000"
+            shape="circle"
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    );
+  }
+
   return (
     <>
       <Head>
@@ -152,24 +385,35 @@ const ModernPortfolioTheoryPage: React.FC = () => {
           </Typography>
           
           <Box sx={{ textAlign: 'center', my: 3 }}>
-            {/* Placeholder for an image - in production, replace with actual image */}
             <Paper 
-              elevation={0}
+              elevation={1}
               sx={{ 
                 width: '100%', 
-                height: 300, 
-                bgcolor: '#f0f0f0', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
+                height: 400, 
+                p: 3,
+                bgcolor: '#f8f9fa', 
+                border: '1px solid #ddd', 
+                borderRadius: 2
               }}
             >
-              <Typography variant="body2" color="text.secondary">
-                [Efficient Frontier and Capital Allocation Line Visualization]
-              </Typography>
+              <Box sx={{ width: '100%', height: 350 }}>
+                {isLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                    <Typography>Loading chart data...</Typography>
+                  </Box>
+                ) : !efData ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                    <Typography color="error">Error loading chart data. Please try again.</Typography>
+                  </Box>
+                ) : (
+                  chartComponents
+                )}
+              </Box>
             </Paper>
             <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-              The efficient frontier (blue curve) and capital allocation line (red line) with the tangency portfolio
+              The efficient frontier (blue curve) shows portfolios with optimal risk-return tradeoffs. 
+              The capital allocation line (red dashed) represents combinations of the risk-free asset and the tangency portfolio,
+              which maximizes the Sharpe ratio. Individual assets (yellow) typically lie below the frontier.
             </Typography>
           </Box>
         </Paper>

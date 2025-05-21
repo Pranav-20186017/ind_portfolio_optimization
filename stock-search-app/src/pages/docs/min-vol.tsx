@@ -444,7 +444,9 @@ const MinimumVolatilityPage: React.FC = () => {
                 <Typography variant="body2" paragraph>
                   An alternative approach that equalizes the risk contribution from each asset in the portfolio.
                 </Typography>
-                <Button variant="outlined" color="primary" disabled>Coming Soon</Button>
+                <Link href="/docs/hrp" passHref>
+                  <Button variant="contained" color="primary">Learn More</Button>
+                </Link>
               </Box>
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
