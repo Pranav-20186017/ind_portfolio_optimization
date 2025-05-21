@@ -48,7 +48,8 @@ from data import (
 
 def welch_beta(r_i: pd.Series, r_m: pd.Series) -> float:
     """
-    Calculate Welch's beta (winsorized OLS beta).
+    Welch (2021) robust beta:
+    Clip r_i elementwise to [-2·r_m, 4·r_m], then cov/var.
     
     Parameters:
         r_i (pd.Series): Portfolio excess returns.
@@ -57,15 +58,14 @@ def welch_beta(r_i: pd.Series, r_m: pd.Series) -> float:
     Returns:
         float: Welch's beta or NaN if variance is zero.
     """
-    # Use standard winsorization instead of benchmark-dependent clipping
-    # Winsorize at 5% and 95% percentiles of portfolio returns
-    lower_bound = np.percentile(r_i, 5)
-    upper_bound = np.percentile(r_i, 95)
+    # Clip returns relative to market returns, not using fixed percentiles
+    lower, upper = -2 * r_m, 4 * r_m
+    r_w = pd.Series(
+        np.minimum(upper.values, np.maximum(lower.values, r_i.values)),
+        index=r_i.index
+    )
     
-    # Clip portfolio returns to reduce impact of outliers
-    r_w = np.clip(r_i, lower_bound, upper_bound)
-    
-    # Standard beta calculation with winsorized returns
+    # Standard beta calculation with clipped returns
     cov = ((r_w - r_w.mean()) * (r_m - r_m.mean())).sum()
     var = ((r_m - r_m.mean())**2).sum()
     return float(cov/var) if var>0 else np.nan
@@ -100,7 +100,7 @@ def coskewness(r_i: pd.Series, r_m: pd.Series) -> float:
     Returns:
         float: Coskewness or NaN if standard deviation is zero.
     """
-    σm = r_m.std(ddof=0)
+    σm = r_m.std(ddof=1)  # Use sample std (ddof=1) for consistency with pandas' skew()
     if σm==0: return np.nan
     return float(((r_i - r_i.mean()) * (r_m - r_m.mean())**2).mean() / σm**3)
 
@@ -115,7 +115,7 @@ def cokurtosis(r_i: pd.Series, r_m: pd.Series) -> float:
     Returns:
         float: Cokurtosis or NaN if standard deviation is zero.
     """
-    σm = r_m.std(ddof=0)
+    σm = r_m.std(ddof=1)  # Use sample std (ddof=1) for consistency with pandas' kurt()
     if σm==0: return np.nan
     return float(((r_i - r_i.mean()) * (r_m - r_m.mean())**3).mean() / σm**4)
 
@@ -172,10 +172,6 @@ def finalize_portfolio(
     Returns:
         Tuple: (OptimizationResult, cumulative_returns)
     """
-    # Log the portfolio weights for this optimization method in a single statement
-    weights_str = ", ".join(f"{ticker}: {weight:.4%}" for ticker, weight in sorted(weights.items(), key=lambda x: x[1], reverse=True))
-    logger.info(f"Portfolio weights for {method} optimization: {weights_str}")
-    
     # Create Series from weights dictionary
     w_series = pd.Series(weights)
     
@@ -203,7 +199,6 @@ def finalize_portfolio(
 
     # Compute yearly rolling betas
     yearly_betas = compute_yearly_betas(port_excess, bench_excess)
-    logger.info(f"Calculated yearly betas for {method}: {yearly_betas}")
     
     # Generate plots
     dist_b64, dd_b64 = generate_plots(port_returns, method, benchmark_df)
@@ -224,9 +219,6 @@ def finalize_portfolio(
         expected_return = port_returns.mean() * 252
         volatility = port_returns.std() * np.sqrt(252)
         sharpe = (expected_return - risk_free_rate) / volatility if volatility > 0 else 0.0
-    
-    # Log key performance metrics in a single statement
-    logger.info(f"Performance metrics for {method}: Expected Return: {expected_return:.4%}, Volatility: {volatility:.4%}, Sharpe Ratio: {sharpe:.4f}")
     
     # Create performance object
     performance = PortfolioPerformance(
@@ -271,67 +263,17 @@ def finalize_portfolio(
         v2_ratio=custom["v2_ratio"]
     )
     
-    # Log all metrics for this optimization method as a single structured object
-    metrics = {
+    # Log comprehensive portfolio data as JSON for this optimization method
+    portfolio_data = {
         "method": method,
-        "expected_return": {
-            "value": expected_return,
-            "percent": expected_return * 100
-        },
-        "volatility": {
-            "value": volatility,
-            "percent": volatility * 100
-        },
-        "sharpe_ratio": sharpe,
-        "sortino_ratio": custom["sortino"],
-        "max_drawdown": {
-            "value": custom["max_drawdown"],
-            "percent": custom["max_drawdown"] * 100
-        },
-        "romad": custom["romad"],
-        "cagr": {
-            "value": custom["cagr"],
-            "percent": custom["cagr"] * 100
-        },
-        "portfolio_beta": custom["portfolio_beta"],
-        "alpha": {
-            "value": custom["portfolio_alpha"],
-            "percent": custom["portfolio_alpha"] * 100
-        },
-        "r_squared": custom["r_squared"],
-        "beta_pvalue": custom["beta_pvalue"],
-        "treynor_ratio": custom["treynor_ratio"],
-        # Advanced beta and cross-moment metrics
-        "welch_beta": None if np.isnan(custom["welch_beta"]) else custom["welch_beta"],
-        "semi_beta": None if np.isnan(custom["semi_beta"]) else custom["semi_beta"],
-        "coskewness": None if np.isnan(custom["coskewness"]) else custom["coskewness"],
-        "cokurtosis": None if np.isnan(custom["cokurtosis"]) else custom["cokurtosis"],
-        "garch_beta": None if np.isnan(custom["garch_beta"]) else custom["garch_beta"],
-        # Other metrics
-        "omega_ratio": custom["omega_ratio"],
-        "calmar_ratio": None if np.isnan(custom["calmar_ratio"]) else custom["calmar_ratio"],
-        "ulcer_index": {
-            "value": custom["ulcer_index"],
-            "percent": custom["ulcer_index"] * 100
-        },
-        "evar_95": {
-            "value": custom["evar_95"],
-            "percent": custom["evar_95"] * 100
-        },
-        "dar_95": {
-            "value": custom["dar_95"],
-            "percent": custom["dar_95"] * 100
-        },
-        "cdar_95": {
-            "value": custom["cdar_95"],
-            "percent": custom["cdar_95"] * 100
-        },
-        "information_ratio": custom["information_ratio"],
-        "sterling_ratio": None if np.isnan(custom["sterling_ratio"]) else custom["sterling_ratio"],
-        "v2_ratio": None if np.isnan(custom["v2_ratio"]) else custom["v2_ratio"]
+        "weights": {k: float(v) for k, v in sorted(weights.items(), key=lambda x: x[1], reverse=True)},
+        "performance": jsonable_encoder(performance),
+        "yearly_betas": {str(k): float(v) for k, v in yearly_betas.items()},
+        "total_weight": float(sum(weights.values())),
+        "timestamp": datetime.now().isoformat()
     }
     
-    logger.info(f"METRICS SUMMARY FOR {method} OPTIMIZATION", extra={"metrics": metrics})
+    logger.info(f"PORTFOLIO OPTIMIZATION RESULT: {method}", extra={"portfolio_data": portfolio_data})
     
     # Create result object
     result = OptimizationResult(
@@ -1766,7 +1708,7 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
     adv_metrics = {}
     try:
         adv_metrics["welch_beta"] = welch_beta(port_excess, bench_excess)
-        adv_metrics["semi_beta"] = semi_beta(port_excess, bench_excess)
+        adv_metrics["semi_beta"] = semi_beta(port_excess, bench_excess, thresh=0.0)
         adv_metrics["coskewness"] = coskewness(port_excess, bench_excess)
         adv_metrics["cokurtosis"] = cokurtosis(port_excess, bench_excess)
         
