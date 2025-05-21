@@ -801,7 +801,7 @@ const HomePage: React.FC = () => {
     MinCDaR: 'rgba(199, 99, 132, 1)'
   };
 
-      return (      <div className="p-8 max-w-5xl mx-auto">        <Typography variant="h3" align="center" gutterBottom>          Indian Stock Portfolio Optimization        </Typography>                {/* Educational Resources Link */}        <div className="text-center mb-4">          <Link href="/education" passHref>            <Button variant="outlined" color="primary">              Learn About Portfolio Optimization Methods            </Button>          </Link>        </div>                {/* Exchange Selection Section */}        <div className="mb-6">
+      return (      <div className="p-8 max-w-5xl mx-auto">        <Typography variant="h3" align="center" gutterBottom>          Indian Stock Portfolio Optimization        </Typography>                {/* Educational Resources Link */}        <div className="text-center mb-4">          <Link href="/docs" passHref>            <Button variant="outlined" color="primary">              Learn About Portfolio Optimization Methods            </Button>          </Link>        </div>                {/* Exchange Selection Section */}        <div className="mb-6">
         <Typography variant="h5" gutterBottom>
           Select Exchange
         </Typography>
