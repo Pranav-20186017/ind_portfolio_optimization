@@ -33,6 +33,7 @@ import uuid
 from io import StringIO
 from fastapi.concurrency import run_in_threadpool
 import seaborn as sns
+from arch import arch_model
 
 # Import data models and enums
 from data import (
@@ -40,6 +41,106 @@ from data import (
     BenchmarkName, Benchmarks, BenchmarkReturn, PortfolioPerformance,
     OptimizationResult, PortfolioOptimizationResponse, StockItem, TickerRequest
 )
+
+########################################
+# Advanced Beta and Cross-Moment Metrics
+########################################
+
+def welch_beta(r_i: pd.Series, r_m: pd.Series) -> float:
+    """
+    Calculate Welch's beta (winsorized OLS beta).
+    
+    Parameters:
+        r_i (pd.Series): Portfolio excess returns.
+        r_m (pd.Series): Benchmark excess returns.
+        
+    Returns:
+        float: Welch's beta or NaN if variance is zero.
+    """
+    # Use standard winsorization instead of benchmark-dependent clipping
+    # Winsorize at 5% and 95% percentiles of portfolio returns
+    lower_bound = np.percentile(r_i, 5)
+    upper_bound = np.percentile(r_i, 95)
+    
+    # Clip portfolio returns to reduce impact of outliers
+    r_w = np.clip(r_i, lower_bound, upper_bound)
+    
+    # Standard beta calculation with winsorized returns
+    cov = ((r_w - r_w.mean()) * (r_m - r_m.mean())).sum()
+    var = ((r_m - r_m.mean())**2).sum()
+    return float(cov/var) if var>0 else np.nan
+
+def semi_beta(r_i: pd.Series, r_m: pd.Series, thresh: float = 0.0) -> float:
+    """
+    Calculate semi-beta (downside beta).
+    
+    Parameters:
+        r_i (pd.Series): Portfolio excess returns.
+        r_m (pd.Series): Benchmark excess returns.
+        thresh (float): Threshold for determining downside (default: 0.0).
+        
+    Returns:
+        float: Semi-beta or NaN if no downside observations or zero variance.
+    """
+    mask = r_m < thresh
+    if not mask.any(): return np.nan
+    r_i_d, r_m_d = r_i[mask], r_m[mask]
+    cov = ((r_i_d - r_i_d.mean()) * (r_m_d - r_m_d.mean())).sum()
+    var = ((r_m_d - r_m_d.mean())**2).sum()
+    return float(cov/var) if var>0 else np.nan
+
+def coskewness(r_i: pd.Series, r_m: pd.Series) -> float:
+    """
+    Calculate coskewness (3rd cross-moment).
+    
+    Parameters:
+        r_i (pd.Series): Portfolio excess returns.
+        r_m (pd.Series): Benchmark excess returns.
+        
+    Returns:
+        float: Coskewness or NaN if standard deviation is zero.
+    """
+    σm = r_m.std(ddof=0)
+    if σm==0: return np.nan
+    return float(((r_i - r_i.mean()) * (r_m - r_m.mean())**2).mean() / σm**3)
+
+def cokurtosis(r_i: pd.Series, r_m: pd.Series) -> float:
+    """
+    Calculate cokurtosis (4th cross-moment).
+    
+    Parameters:
+        r_i (pd.Series): Portfolio excess returns.
+        r_m (pd.Series): Benchmark excess returns.
+        
+    Returns:
+        float: Cokurtosis or NaN if standard deviation is zero.
+    """
+    σm = r_m.std(ddof=0)
+    if σm==0: return np.nan
+    return float(((r_i - r_i.mean()) * (r_m - r_m.mean())**3).mean() / σm**4)
+
+def garch_beta(r_i: pd.Series, r_m: pd.Series) -> float:
+    """
+    Calculate GARCH beta (time-varying beta using GARCH model).
+    
+    Parameters:
+        r_i (pd.Series): Portfolio excess returns.
+        r_m (pd.Series): Benchmark excess returns.
+        
+    Returns:
+        float: GARCH beta or NaN if model fails or conditional volatility is zero.
+    """
+    try:
+        # Fit univariate GARCH(1,1) on demeaned returns as a quick proxy
+        am_i = arch_model(r_i*100, mean='Zero', vol='GARCH', p=1, q=1).fit(disp='off')
+        am_m = arch_model(r_m*100, mean='Zero', vol='GARCH', p=1, q=1).fit(disp='off')
+        hi, hm = am_i.conditional_volatility/100, am_m.conditional_volatility/100
+        # last-day correlation as proxy
+        ρ = r_i.rolling(60).corr(r_m).iloc[-1]
+        return float(ρ * hi.iloc[-1] / hm.iloc[-1]) if hm.iloc[-1]>0 else np.nan
+    except Exception as e:
+        logger.warning(f"GARCH beta calculation failed: {str(e)}")
+        return np.nan
 
 ########################################
 # Helper Functions for Optimization
@@ -149,6 +250,13 @@ def finalize_portfolio(
         skewness=custom["skewness"],
         kurtosis=custom["kurtosis"],
         entropy=custom["entropy"],
+        # Advanced beta and cross-moment metrics
+        welch_beta=custom["welch_beta"],
+        semi_beta=custom["semi_beta"],
+        coskewness=custom["coskewness"],
+        cokurtosis=custom["cokurtosis"],
+        garch_beta=custom["garch_beta"],
+        # Other metrics
         omega_ratio=custom["omega_ratio"],
         calmar_ratio=custom["calmar_ratio"],
         ulcer_index=custom["ulcer_index"],
@@ -193,6 +301,13 @@ def finalize_portfolio(
         "r_squared": custom["r_squared"],
         "beta_pvalue": custom["beta_pvalue"],
         "treynor_ratio": custom["treynor_ratio"],
+        # Advanced beta and cross-moment metrics
+        "welch_beta": None if np.isnan(custom["welch_beta"]) else custom["welch_beta"],
+        "semi_beta": None if np.isnan(custom["semi_beta"]) else custom["semi_beta"],
+        "coskewness": None if np.isnan(custom["coskewness"]) else custom["coskewness"],
+        "cokurtosis": None if np.isnan(custom["cokurtosis"]) else custom["cokurtosis"],
+        "garch_beta": None if np.isnan(custom["garch_beta"]) else custom["garch_beta"],
+        # Other metrics
         "omega_ratio": custom["omega_ratio"],
         "calmar_ratio": None if np.isnan(custom["calmar_ratio"]) else custom["calmar_ratio"],
         "ulcer_index": {
@@ -1647,6 +1762,30 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
     annual_excess = annual_return - risk_free_rate
     treynor_ratio = annual_excess / portfolio_beta if portfolio_beta != 0 else 0.0
     
+    # Advanced beta and cross-moment metrics
+    adv_metrics = {}
+    try:
+        adv_metrics["welch_beta"] = welch_beta(port_excess, bench_excess)
+        adv_metrics["semi_beta"] = semi_beta(port_excess, bench_excess)
+        adv_metrics["coskewness"] = coskewness(port_excess, bench_excess)
+        adv_metrics["cokurtosis"] = cokurtosis(port_excess, bench_excess)
+        
+        # GARCH beta is more computationally intensive, so we'll add error handling
+        try:
+            adv_metrics["garch_beta"] = garch_beta(port_excess, bench_excess)
+        except Exception as e:
+            logger.warning(f"GARCH beta calculation failed: {str(e)}")
+            adv_metrics["garch_beta"] = np.nan
+    except Exception as e:
+        logger.warning(f"Advanced metrics calculation failed: {str(e)}")
+        adv_metrics = {
+            "welch_beta": np.nan,
+            "semi_beta": np.nan,
+            "coskewness": np.nan,
+            "cokurtosis": np.nan,
+            "garch_beta": np.nan
+        }
+    
     skewness = port_returns.skew()
     kurtosis = port_returns.kurt()
     
@@ -1763,7 +1902,13 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
         "skewness": skewness,
         "kurtosis": kurtosis,
         "entropy": port_entropy,
-        # New metrics
+        # Advanced beta and cross-moment metrics
+        "welch_beta": adv_metrics["welch_beta"],
+        "semi_beta": adv_metrics["semi_beta"],
+        "coskewness": adv_metrics["coskewness"],
+        "cokurtosis": adv_metrics["cokurtosis"],
+        "garch_beta": adv_metrics["garch_beta"],
+        # Other metrics
         "omega_ratio": float(omega_ratio),
         "calmar_ratio": calmar_ratio,  # Keep as np.nan if NaN
         "ulcer_index": float(ulcer_index),

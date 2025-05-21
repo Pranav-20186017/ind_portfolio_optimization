@@ -107,6 +107,13 @@ class PortfolioPerformance(BaseModel):
     skewness: float
     kurtosis: float
     entropy: float
+    # Additional beta and cross-moment metrics
+    welch_beta: Optional[float] = None
+    semi_beta: Optional[float] = None
+    coskewness: Optional[float] = None
+    cokurtosis: Optional[float] = None
+    garch_beta: Optional[float] = None
+    # Other metrics
     omega_ratio: float
     calmar_ratio: float
     ulcer_index: float

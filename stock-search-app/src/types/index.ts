@@ -49,7 +49,14 @@ export interface PortfolioPerformance {
     kurtosis: number;
     entropy: number;
     
-    // New metrics
+    // Advanced beta and cross-moment metrics
+    welch_beta?: number;
+    semi_beta?: number;
+    coskewness?: number;
+    cokurtosis?: number;
+    garch_beta?: number;
+    
+    // Other metrics
     omega_ratio: number;
     calmar_ratio: number;
     ulcer_index: number;

@@ -1398,6 +1398,77 @@ const HomePage: React.FC = () => {
                               </TableCell>
                               <TableCell>{Number.isNaN(perf.v2_ratio) ? 'N/A' : perf.v2_ratio.toFixed(4)}</TableCell>
                             </TableRow>
+
+                            {/* Advanced Beta and Cross-Moment Metrics Section */}
+                            <TableRow>
+                              <TableCell colSpan={2} style={{ backgroundColor: '#f5f5f5' }}>
+                                <Typography variant="subtitle1" style={{ fontWeight: 'bold' }}>
+                                  Advanced Beta and Cross-Moment Metrics
+                                  <span style={{ 
+                                    backgroundColor: '#4caf50', 
+                                    color: 'white', 
+                                    padding: '2px 6px', 
+                                    borderRadius: '4px', 
+                                    fontSize: '0.7rem', 
+                                    marginLeft: '8px',
+                                    fontWeight: 'bold',
+                                    verticalAlign: 'middle'
+                                  }}>
+                                    NEW
+                                  </span>
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+
+                            <TableRow>
+                              <TableCell>
+                                <strong>Welch Beta</strong>
+                                <Tooltip title="A robust alternative to traditional beta that uses winsorization to reduce the impact of extreme returns. It provides a more stable measure of market sensitivity that is less affected by outliers.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{Number.isNaN(perf.welch_beta) ? 'N/A' : perf.welch_beta?.toFixed(4)}</TableCell>
+                            </TableRow>
+
+                            <TableRow>
+                              <TableCell>
+                                <strong>Semi Beta</strong>
+                                <Tooltip title="A downside beta that measures the portfolio's sensitivity to the benchmark only during down markets. Higher values indicate greater correlation with the benchmark during market declines.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{Number.isNaN(perf.semi_beta) ? 'N/A' : perf.semi_beta?.toFixed(4)}</TableCell>
+                            </TableRow>
+
+                            <TableRow>
+                              <TableCell>
+                                <strong>Coskewness</strong>
+                                <Tooltip title="Measures the relationship between portfolio returns and squared market returns. Negative values suggest the portfolio tends to have negative returns when market volatility increases.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{Number.isNaN(perf.coskewness) ? 'N/A' : perf.coskewness?.toFixed(4)}</TableCell>
+                            </TableRow>
+
+                            <TableRow>
+                              <TableCell>
+                                <strong>Cokurtosis</strong>
+                                <Tooltip title="Measures the relationship between portfolio returns and cubed market returns. Higher values indicate that the portfolio tends to experience extreme returns when the market experiences extreme movements.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{Number.isNaN(perf.cokurtosis) ? 'N/A' : perf.cokurtosis?.toFixed(4)}</TableCell>
+                            </TableRow>
+
+                            <TableRow>
+                              <TableCell>
+                                <strong>GARCH Beta</strong>
+                                <Tooltip title="A time-varying measure of portfolio beta that accounts for volatility clustering using GARCH models. This beta better captures market sensitivity during periods of changing volatility.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>{Number.isNaN(perf.garch_beta) ? 'N/A' : perf.garch_beta?.toFixed(4)}</TableCell>
+                            </TableRow>
                           </TableBody>
                         </Table>
 
