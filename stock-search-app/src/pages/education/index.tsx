@@ -132,6 +132,12 @@ const EducationIndexPage: React.FC = () => {
       available: true
     },
     {
+      title: 'Maximum Drawdown',
+      description: 'A measure of the largest peak-to-trough decline in a portfolio\'s value, representing the worst-case scenario for an investment.',
+      path: '/education/maximum-drawdown',
+      available: true
+    },
+    {
       title: 'Blume Adjusted Beta',
       description: 'A modified beta calculation that adjusts for the tendency of betas to revert toward the market average over time.',
       path: '/education/blume-adjusted-beta',
@@ -141,61 +147,61 @@ const EducationIndexPage: React.FC = () => {
       title: 'Entropy',
       description: 'A measure of uncertainty or randomness in portfolio returns, indicating the level of unpredictability in the system.',
       path: '/education/entropy',
-      available: false
+      available: true
     },
     {
       title: 'Omega Ratio (Ω)',
       description: 'A performance measure that evaluates the probability-weighted ratio of gains versus losses for a threshold return.',
       path: '/education/omega-ratio',
-      available: false
+      available: true
     },
     {
       title: 'Calmar Ratio',
       description: 'A performance measurement that uses the ratio of average annual compound rate of return to maximum drawdown.',
       path: '/education/calmar-ratio',
-      available: false
+      available: true
     },
     {
       title: 'Ulcer Index',
       description: 'A volatility measure that captures the depth and duration of drawdowns, focusing on downside movement.',
       path: '/education/ulcer-index',
-      available: false
+      available: true
     },
     {
       title: 'Entropic Value at Risk (EVaR)',
       description: 'A coherent risk measure that provides tighter bounds on tail risk than traditional VaR or CVaR.',
       path: '/education/evar',
-      available: false
+      available: true
     },
     {
       title: 'Gini Mean Difference',
       description: 'A measure of dispersion in returns that evaluates the average absolute difference between all pairs of observations.',
       path: '/education/gini-mean-difference',
-      available: false
+      available: true
     },
     {
       title: 'Drawdown at Risk (DaR)',
       description: 'A risk metric representing the maximum expected drawdown that won\'t be exceeded with a certain confidence level.',
       path: '/education/dar',
-      available: false
+      available: true
     },
     {
       title: 'Conditional Drawdown at Risk (CDaR)',
       description: 'The expected value of drawdown when exceeding the Drawdown at Risk threshold, measuring tail drawdown risk.',
       path: '/education/cdar',
-      available: false
+      available: true
     },
     {
       title: 'Upside Potential Ratio',
       description: 'A performance metric that evaluates upside potential relative to downside risk, focusing on beneficial asymmetry.',
       path: '/education/upside-potential-ratio',
-      available: false
+      available: true
     },
     {
       title: 'Modigliani Risk-Adjusted Performance (M²)',
       description: 'A measure that adjusts portfolio returns to match market volatility, allowing direct comparison with benchmark returns.',
       path: '/education/modigliani-risk-adjusted',
-      available: false
+      available: true
     },
     {
       title: 'Information Ratio',
