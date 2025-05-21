@@ -58,21 +58,17 @@ def welch_beta(r_i: pd.Series, r_m: pd.Series) -> float:
     Returns:
         float: Welch's beta or NaN if variance is zero.
     """
-    # Clip returns relative to market returns, not using fixed percentiles
-    lower, upper = -2 * r_m, 4 * r_m
-    r_w = pd.Series(
-        np.minimum(upper.values, np.maximum(lower.values, r_i.values)),
-        index=r_i.index
-    )
+    # Clip returns relative to market returns - more idiomatic with Series.clip
+    r_w = r_i.clip(lower=-2*r_m, upper=4*r_m)
     
     # Standard beta calculation with clipped returns
     cov = ((r_w - r_w.mean()) * (r_m - r_m.mean())).sum()
     var = ((r_m - r_m.mean())**2).sum()
-    return float(cov/var) if var>0 else np.nan
+    return float(cov/var) if var > 1e-9 else np.nan
 
 def semi_beta(r_i: pd.Series, r_m: pd.Series, thresh: float = 0.0) -> float:
     """
-    Calculate semi-beta (downside beta).
+    Calculate semi beta (downside beta using only negative benchmark returns).
     
     Parameters:
         r_i (pd.Series): Portfolio excess returns.
@@ -87,7 +83,7 @@ def semi_beta(r_i: pd.Series, r_m: pd.Series, thresh: float = 0.0) -> float:
     r_i_d, r_m_d = r_i[mask], r_m[mask]
     cov = ((r_i_d - r_i_d.mean()) * (r_m_d - r_m_d.mean())).sum()
     var = ((r_m_d - r_m_d.mean())**2).sum()
-    return float(cov/var) if var>0 else np.nan
+    return float(cov/var) if var > 1e-9 else np.nan
 
 def coskewness(r_i: pd.Series, r_m: pd.Series) -> float:
     """
@@ -101,7 +97,7 @@ def coskewness(r_i: pd.Series, r_m: pd.Series) -> float:
         float: Coskewness or NaN if standard deviation is zero.
     """
     σm = r_m.std(ddof=1)  # Use sample std (ddof=1) for consistency with pandas' skew()
-    if σm==0: return np.nan
+    if σm < 1e-9: return np.nan
     return float(((r_i - r_i.mean()) * (r_m - r_m.mean())**2).mean() / σm**3)
 
 def cokurtosis(r_i: pd.Series, r_m: pd.Series) -> float:
@@ -116,7 +112,7 @@ def cokurtosis(r_i: pd.Series, r_m: pd.Series) -> float:
         float: Cokurtosis or NaN if standard deviation is zero.
     """
     σm = r_m.std(ddof=1)  # Use sample std (ddof=1) for consistency with pandas' kurt()
-    if σm==0: return np.nan
+    if σm < 1e-9: return np.nan
     return float(((r_i - r_i.mean()) * (r_m - r_m.mean())**3).mean() / σm**4)
 
 def garch_beta(r_i: pd.Series, r_m: pd.Series) -> float:
@@ -137,7 +133,7 @@ def garch_beta(r_i: pd.Series, r_m: pd.Series) -> float:
         hi, hm = am_i.conditional_volatility/100, am_m.conditional_volatility/100
         # last-day correlation as proxy
         ρ = r_i.rolling(60).corr(r_m).iloc[-1]
-        return float(ρ * hi.iloc[-1] / hm.iloc[-1]) if hm.iloc[-1]>0 else np.nan
+        return float(ρ * hi.iloc[-1] / hm.iloc[-1]) if hm.iloc[-1] > 1e-9 else np.nan
     except Exception as e:
         logger.warning(f"GARCH beta calculation failed: {str(e)}")
         return np.nan
