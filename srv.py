@@ -417,19 +417,29 @@ def sanitize_bse_prices(
     - Forward- then back-fill remaining NaNs
     - Leave price series ready for later log-returns & clipping
     """
+    print(f"BSE SANITIZE START: shape={prices.shape}, memory={prices.memory_usage().sum() / 1024 / 1024:.2f}MB")
+    print(f"BSE SANITIZE: zero_count={(prices == 0).sum().sum()}, nan_count={prices.isna().sum().sum()}")
+    
     df = prices.copy()
     if zero_to_nan:
         df = df.replace(0, np.nan)
+        print(f"BSE SANITIZE AFTER ZERO→NAN: nan_count={df.isna().sum().sum()}")
 
     # Drop illiquid tickers
     frac_nan = df.isna().mean()
-    to_drop  = frac_nan[frac_nan > nan_threshold].index
+    to_drop = frac_nan[frac_nan > nan_threshold].index
     if len(to_drop):
+        print(f"BSE SANITIZE DROPPING {len(to_drop)} ILLIQUID TICKERS: {to_drop.tolist()}")
         df = df.drop(columns=to_drop)
 
     # Fill holes
+    print(f"BSE SANITIZE BEFORE FILL: shape={df.shape}, nan_count={df.isna().sum().sum()}")
     df = df.fillna(method='ffill').fillna(method='bfill')
-
+    print(f"BSE SANITIZE AFTER FILL: nan_count={df.isna().sum().sum()}")
+    
+    # Final output stats
+    print(f"BSE SANITIZE END: shape={df.shape}, memory={df.memory_usage().sum() / 1024 / 1024:.2f}MB")
+    
     return df
 
 ########################################
@@ -651,10 +661,13 @@ def fetch_and_align_data(
     Download & align data for each ticker, plus benchmark index.
     Returns (combined_df, benchmark_close).
     """
+    print(f"FETCH_ALIGN START: tickers={len(tickers)}, sanitize_bse={sanitize_bse}")
+    
     # Split into BSE vs NSE if we need special handling
     if sanitize_bse:
         bse_tickers = [t for t in tickers if t.endswith(".BO")]
         nse_tickers = [t for t in tickers if not t.endswith(".BO")]
+        print(f"FETCH_ALIGN: split into BSE ({len(bse_tickers)}) vs NSE ({len(nse_tickers)})")
     else:
         bse_tickers, nse_tickers = [], tickers
     
@@ -679,6 +692,7 @@ def fetch_and_align_data(
     
     # Process BSE tickers with auto_adjust=False if sanitize_bse is True
     if sanitize_bse and bse_tickers:
+        print(f"FETCH_ALIGN: starting BSE download for {len(bse_tickers)} tickers with auto_adjust=False")
         try:
             # Direct call to yf.download for BSE tickers with auto_adjust=False
             df_bo = yf.download(
@@ -689,22 +703,52 @@ def fetch_and_align_data(
                 multi_level_index=False
             )["Close"]
             
+            print(f"FETCH_ALIGN: BSE raw download shape={df_bo.shape}")
+            if isinstance(df_bo, pd.Series):
+                print(f"FETCH_ALIGN: single BSE ticker, series info: len={len(df_bo)}, dtype={df_bo.dtype}")
+            else:
+                print(f"FETCH_ALIGN: BSE dataframe columns={df_bo.columns.tolist()}")
+                print(f"FETCH_ALIGN: BSE zero values count={(df_bo == 0).sum().sum()}")
+                print(f"FETCH_ALIGN: BSE NaN values count={df_bo.isna().sum().sum()}")
+                
+                # Check for any potential infinity values from division by zero
+                try:
+                    inf_count = np.isinf(df_bo).sum().sum()
+                    print(f"FETCH_ALIGN: BSE infinity values count={inf_count}")
+                except:
+                    print("FETCH_ALIGN: Could not check for infinity values")
+                
+                # Check for extreme values
+                try:
+                    max_val = df_bo.max().max()
+                    min_val = df_bo.min().min()
+                    print(f"FETCH_ALIGN: BSE value range: min={min_val}, max={max_val}")
+                except:
+                    print("FETCH_ALIGN: Could not check min/max values")
+                
             # Apply sanitizer to BSE data
             if isinstance(df_bo, pd.Series):
                 # If only one BSE ticker, it returns a Series
                 ticker = bse_tickers[0]
                 data[ticker] = df_bo
+                print(f"FETCH_ALIGN: added single BSE ticker {ticker} to data")
             else:
                 # For multiple BSE tickers
+                print(f"FETCH_ALIGN: applying sanitize_bse_prices to shape={df_bo.shape}")
                 df_bo_clean = sanitize_bse_prices(df_bo)
+                print(f"FETCH_ALIGN: after sanitize, shape={df_bo_clean.shape}")
                 # Add each BSE ticker to our data dict
                 for ticker in df_bo_clean.columns:
                     data[ticker] = df_bo_clean[ticker]
+                    print(f"FETCH_ALIGN: added BSE ticker {ticker} to data, len={len(data[ticker])}")
         except Exception as e:
-            logger.exception("Error fetching BSE data: %s", str(e))
+            error_message = str(e)
+            print(f"FETCH_ALIGN: BSE fetch error: {error_message}")
+            logger.exception("Error fetching BSE data: %s", error_message)
             failed_tickers.extend(bse_tickers)
 
     if not data:
+        print("FETCH_ALIGN: No valid data available")
         logger.warning("No valid data available for the provided tickers")
         details = {"failed_tickers": failed_tickers}
         if failed_tickers:
@@ -716,22 +760,30 @@ def fetch_and_align_data(
             details=details
         )
 
+    print(f"FETCH_ALIGN: {len(data)} tickers collected, finding min date")
     # Align all tickers to the latest min_date among them
     min_date = max(df.index.min() for df in data.values())
     filtered_data = {t: df[df.index >= min_date] for t, df in data.items()}
 
     # Combine into multi-index DataFrame
+    print(f"FETCH_ALIGN: concatenating {len(filtered_data)} tickers")
     combined_df = pd.concat(filtered_data.values(), axis=1, keys=filtered_data.keys())
+    print(f"FETCH_ALIGN: concat shape={combined_df.shape}")
     combined_df.dropna(inplace=True)
+    print(f"FETCH_ALIGN: after dropna shape={combined_df.shape}")
     
     # Fetch benchmark data
     try:
+        print(f"FETCH_ALIGN: downloading benchmark {benchmark_ticker}")
         benchmark_df = (
             download_close_prices(benchmark_ticker, min_date)
             .dropna()
         )
+        print(f"FETCH_ALIGN: benchmark shape={benchmark_df.shape}")
     except Exception as e:
-        logger.exception("Error fetching benchmark index: %s", str(e))
+        error_message = str(e)
+        print(f"FETCH_ALIGN: benchmark fetch error: {error_message}")
+        logger.exception("Error fetching benchmark index: %s", error_message)
         raise APIError(
             code=ErrorCode.DATA_FETCH_ERROR,
             message="Error fetching market index data",
@@ -740,6 +792,7 @@ def fetch_and_align_data(
         )
     
     if benchmark_df.empty:
+        print("FETCH_ALIGN: benchmark is empty")
         raise APIError(
             code=ErrorCode.NO_DATA_FOUND,
             message="No data available for benchmark index",
@@ -748,7 +801,9 @@ def fetch_and_align_data(
     
     # Align with market index
     common_dates = combined_df.index.intersection(benchmark_df.index)
+    print(f"FETCH_ALIGN: found {len(common_dates)} common dates")
     if len(common_dates) == 0:
+        print("FETCH_ALIGN: no overlapping dates")
         raise APIError(
             code=ErrorCode.INVALID_DATE_RANGE,
             message="No overlapping dates between stock data and market index",
@@ -761,11 +816,20 @@ def fetch_and_align_data(
         
     combined_df = combined_df.loc[common_dates]
     benchmark_df = benchmark_df.loc[common_dates]
+    print(f"FETCH_ALIGN: final aligned shapes: stocks={combined_df.shape}, benchmark={benchmark_df.shape}")
     
     # Add warning if some tickers failed
     if failed_tickers:
+        print(f"FETCH_ALIGN: {len(failed_tickers)} tickers failed")
         logger.warning("Some tickers failed to fetch data: %s", failed_tickers)
     
+    # Final memory check
+    try:
+        combined_mem_mb = combined_df.memory_usage().sum() / 1024 / 1024
+        print(f"FETCH_ALIGN END: combined_df memory usage: {combined_mem_mb:.2f}MB")
+    except Exception as e:
+        print(f"FETCH_ALIGN: couldn't calculate memory: {str(e)}")
+        
     return combined_df, benchmark_df
 
 def freedman_diaconis_bins(port_returns: pd.Series) -> int:
@@ -1392,11 +1456,13 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
     try:
         # Format tickers
         formatted_tickers = format_tickers(request.stocks)
+        print(f"OPTIMIZE: Starting with {len(formatted_tickers)} formatted tickers")
         logger.info("Stock tickers chosen: %s", formatted_tickers)
         # Log optimization methods chosen
         method_values = [method.value for method in request.methods]
         logger.info("OPTIMIZATION METHODS [%d]: %s", len(method_values), ", ".join(method_values))
         if len(formatted_tickers) < 2:
+            print(f"OPTIMIZE: Insufficient stocks: {len(formatted_tickers)}")
             raise APIError(
                 code=ErrorCode.INSUFFICIENT_STOCKS,
                 message="Minimum of 2 stocks required for portfolio optimization",
@@ -1405,21 +1471,26 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         
         # Get benchmark ticker
         benchmark_ticker = Benchmarks.get_ticker(request.benchmark)
+        print(f"OPTIMIZE: Using benchmark {benchmark_ticker}")
         logger.info("Using benchmark: %s (ticker: %s)", request.benchmark.value, benchmark_ticker)
         
         # Determine whether we need to sanitize BSE names
         sanitize_bse = any(s.exchange == ExchangeEnum.BSE for s in request.stocks)
+        print(f"OPTIMIZE: sanitize_bse={sanitize_bse}")
         
         # Fetch & align data (with optional BSE sanitization)
         try:
+            print("OPTIMIZE: Calling fetch_and_align_data")
             df, benchmark_df = await run_in_threadpool(
                 fetch_and_align_data,
                 formatted_tickers,
                 benchmark_ticker,
                 sanitize_bse
             )
+            print(f"OPTIMIZE: fetch_and_align complete, df shape={df.shape}")
         except ValueError as e:
             if "No valid data available" in str(e):
+                print(f"OPTIMIZE: No valid data available error: {str(e)}")
                 raise APIError(
                     code=ErrorCode.NO_DATA_FOUND,
                     message="No valid data available for the provided tickers",
@@ -1428,6 +1499,7 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             raise  # Re-raise if it's a different ValueError
             
         if df.empty:
+            print("OPTIMIZE: Empty dataframe returned")
             raise APIError(
                 code=ErrorCode.NO_DATA_FOUND,
                 message="No data found for the given tickers",
@@ -1437,41 +1509,76 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         # Start/end date
         start_date = df.index.min().date()
         end_date = df.index.max().date()
+        print(f"OPTIMIZE: Date range = {start_date} to {end_date}")
 
         # Get risk-free rate - still need to call the synchronous version
         try:
+            print("OPTIMIZE: Fetching risk-free rate")
             risk_free_rate = await run_in_threadpool(risk_free_rate_manager.fetch_and_set, start_date, end_date)
+            print(f"OPTIMIZE: risk_free_rate = {risk_free_rate:.4f}")
         except Exception as e:
+            print(f"OPTIMIZE: Error fetching risk-free rate: {str(e)}")
             logger.warning("Error fetching risk-free rate: %s. Using default 0.05", str(e))
             risk_free_rate = 0.05  # Default fallback
         
         # Prepare data for optimization - these are CPU-bound so use threadpool
         try:
+            print("OPTIMIZE: Preparing returns data")
             # These operations are CPU-intensive, so run them in a threadpool
             returns = df.pct_change().dropna()
+            print(f"OPTIMIZE: returns shape={returns.shape}")
+            
+            # Check for any potential problems in returns
+            print(f"OPTIMIZE: returns stats - isna count={returns.isna().sum().sum()}, inf count={np.isinf(returns).sum().sum() if hasattr(returns, 'sum') else 'N/A'}")
+            try:
+                max_ret = returns.max().max()
+                min_ret = returns.min().min()
+                print(f"OPTIMIZE: returns range: min={min_ret:.6f}, max={max_ret:.6f}")
+            except Exception as e:
+                print(f"OPTIMIZE: Error computing returns range: {str(e)}")
             
             # Define function wrappers to capture arguments properly
             def calc_expected_returns():
-                return expected_returns.mean_historical_return(df, frequency=252)
+                print("OPTIMIZE: Calculating expected returns (mean_historical_return)")
+                er = expected_returns.mean_historical_return(df, frequency=252)
+                print(f"OPTIMIZE: expected returns shape={er.shape}, min={er.min():.6f}, max={er.max():.6f}")
+                return er
                 
             def calc_covariance():
-                return CovarianceShrinkage(df).ledoit_wolf()
+                print("OPTIMIZE: Calculating covariance matrix (ledoit_wolf)")
+                cov = CovarianceShrinkage(df).ledoit_wolf()
+                
+                # Check if covariance matrix is positive definite
+                try:
+                    eigenvalues = np.linalg.eigvals(cov)
+                    min_eig = min(eigenvalues)
+                    print(f"OPTIMIZE: Covariance min eigenvalue={min_eig:.6e}")
+                    if min_eig <= 0:
+                        print(f"WARNING: Covariance matrix is not positive definite! min eigenvalue={min_eig:.6e}")
+                except Exception as e:
+                    print(f"OPTIMIZE: Error checking covariance eigenvalues: {str(e)}")
+                    
+                return cov
                 
             mu = await run_in_threadpool(calc_expected_returns)
             S = await run_in_threadpool(calc_covariance)
             
             # Generate the covariance heatmap in a threadpool too
+            print("OPTIMIZE: Generating covariance heatmap")
             cov_heatmap_b64 = await run_in_threadpool(generate_covariance_heatmap, S)
             
             # Calculate yearly returns in a threadpool
+            print("OPTIMIZE: Computing yearly returns")
             stock_yearly_returns = await run_in_threadpool(compute_yearly_returns_stocks, returns)
         except Exception as e:
+            error_message = str(e)
+            print(f"OPTIMIZE: Error preparing data: {error_message}")
             logger.exception("Error preparing data for optimization")
             raise APIError(
                 code=ErrorCode.DATA_FETCH_ERROR,
                 message="Error preparing data for optimization",
                 status_code=500,
-                details={"error": str(e)}
+                details={"error": error_message}
             )
         
         # Initialize dictionaries to hold results and cumulative returns
@@ -1479,7 +1586,9 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         cum_returns_df = pd.DataFrame(index=returns.index)
         failed_methods = []
         
+        print(f"OPTIMIZE: Running {len(request.methods)} optimization methods")
         for method in request.methods:
+            print(f"OPTIMIZE: Starting method {method.value}")
             optimization_result = None
             cum_returns = None
             
@@ -1488,24 +1597,29 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                 if method == OptimizationMethod.HRP:
                     # For HRP, use sample covariance matrix (returns.cov())
                     sample_cov = returns.cov()
+                    print(f"OPTIMIZE: Running HRP with sample_cov shape={sample_cov.shape}")
                     optimization_result, cum_returns = await run_in_threadpool(
                         run_optimization_HRP, returns, sample_cov, benchmark_df, risk_free_rate
                     )
                 elif method == OptimizationMethod.MIN_CVAR:
+                    print("OPTIMIZE: Running MIN_CVAR")
                     optimization_result, cum_returns = await run_in_threadpool(
                         run_optimization_MIN_CVAR, mu, returns, benchmark_df, risk_free_rate
                     )
                 elif method == OptimizationMethod.MIN_CDAR:
+                    print("OPTIMIZE: Running MIN_CDAR")
                     optimization_result, cum_returns = await run_in_threadpool(
                         run_optimization_MIN_CDAR, mu, returns, benchmark_df, risk_free_rate
                     )
                 elif method != OptimizationMethod.CRITICAL_LINE_ALGORITHM:
+                    print(f"OPTIMIZE: Running standard method: {method.value}")
                     optimization_result, cum_returns = await run_in_threadpool(
                         run_optimization, method, mu, S, returns, benchmark_df, risk_free_rate
                     )
                 else:
                     # Handle CLA separately
                     if request.cla_method == CLAOptimizationMethod.BOTH:
+                        print("OPTIMIZE: Running CLA with BOTH methods")
                         result_mvo, cum_returns_mvo = await run_in_threadpool(
                             run_optimization_CLA, "MVO", mu, S, returns, benchmark_df, risk_free_rate
                         )
@@ -1514,44 +1628,56 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                         )
                         
                         if result_mvo:
+                            print("OPTIMIZE: CLA_MVO succeeded")
                             results["CriticalLineAlgorithm_MVO"] = result_mvo
                             cum_returns_df["CriticalLineAlgorithm_MVO"] = cum_returns_mvo
                         else:
+                            print("OPTIMIZE: CLA_MVO failed")
                             failed_methods.append("CriticalLineAlgorithm_MVO")
                             
                         if result_min_vol:
+                            print("OPTIMIZE: CLA_MinVol succeeded")
                             results["CriticalLineAlgorithm_MinVol"] = result_min_vol
                             cum_returns_df["CriticalLineAlgorithm_MinVol"] = cum_returns_min_vol
                         else:
+                            print("OPTIMIZE: CLA_MinVol failed")
                             failed_methods.append("CriticalLineAlgorithm_MinVol")
                         
                         # Continue to next method since we've handled CLA specially
                         continue
                     else:
                         sub_method = request.cla_method.value
+                        print(f"OPTIMIZE: Running CLA with {sub_method}")
                         optimization_result, cum_returns = await run_in_threadpool(
                             run_optimization_CLA, sub_method, mu, S, returns, benchmark_df, risk_free_rate
                         )
                         if optimization_result:
+                            print(f"OPTIMIZE: CLA_{sub_method} succeeded")
                             results[f"CriticalLineAlgorithm_{sub_method}"] = optimization_result
                             cum_returns_df[f"CriticalLineAlgorithm_{sub_method}"] = cum_returns
                         else:
+                            print(f"OPTIMIZE: CLA_{sub_method} failed")
                             failed_methods.append(f"CriticalLineAlgorithm_{sub_method}")
                         continue
             
             except Exception as e:
-                logger.exception("Error in optimization method %s: %s", method.value, str(e))
+                error_message = str(e)
+                print(f"OPTIMIZE: Error in {method.value}: {error_message}")
+                logger.exception("Error in optimization method %s: %s", method.value, error_message)
                 failed_methods.append(method.value)
                 continue  # Skip to next method
                 
             if optimization_result:
+                print(f"OPTIMIZE: {method.value} succeeded")
                 results[method.value] = optimization_result
                 cum_returns_df[method.value] = cum_returns
             else:
+                print(f"OPTIMIZE: {method.value} failed")
                 failed_methods.append(method.value)
         
         # If all methods failed, return an error
         if len(results) == 0:
+            print(f"OPTIMIZE: All {len(request.methods)} methods failed")
             raise APIError(
                 code=ErrorCode.OPTIMIZATION_FAILED,
                 message="All optimization methods failed",
@@ -1560,15 +1686,18 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             )
         
         # Calculate benchmark returns
+        print("OPTIMIZE: Calculating benchmark returns")
         benchmark_ret = benchmark_df.pct_change().dropna()
         cum_benchmark = (1 + benchmark_ret).cumprod()
         
         # Align with benchmark
         common_dates = cum_returns_df.index.intersection(cum_benchmark.index)
+        print(f"OPTIMIZE: Found {len(common_dates)} common dates for benchmark alignment")
         cum_returns_df = cum_returns_df.loc[common_dates]
         cum_benchmark = cum_benchmark.loc[common_dates]
         
         # Build response
+        print("OPTIMIZE: Building final response")
         cumulative_returns = {key: cum_returns_df[key].tolist() for key in cum_returns_df.columns}
         response = PortfolioOptimizationResponse(
             results=results,
@@ -1585,28 +1714,35 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         # Include a warning in the response if some methods failed
         response_data = jsonable_encoder(response)
         if failed_methods:
+            print(f"OPTIMIZE: Some methods failed: {failed_methods}")
             response_data["warnings"] = {
                 "failed_methods": failed_methods,
                 "message": "Some optimization methods failed to complete"
             }
         
+        print("OPTIMIZE: Successfully completed portfolio optimization")
         return response_data
     
     except APIError:
+        print("OPTIMIZE: API Error caught, re-raising")
         # Let our custom exception handler deal with this
         raise
     except ValueError as e:
+        error_message = str(e)
+        print(f"OPTIMIZE: ValueError: {error_message}")
         # Handle validation errors with a 422 status code
-        logger.warning("Validation error in optimize_portfolio: %s", str(e), exc_info=True)
+        logger.warning("Validation error in optimize_portfolio: %s", error_message, exc_info=True)
         raise APIError(
             code=ErrorCode.INVALID_TICKER,
-            message=str(e),
+            message=error_message,
             status_code=422  # Changed from 400 to 422 for validation errors
         )
     except Exception as e:
+        error_message = str(e)
+        print(f"OPTIMIZE: Unexpected error: {error_message}")
         # Let our generic exception handler deal with unexpected errors
         # But include more detailed logging with stack trace
-        logger.exception("Unexpected error in optimize_portfolio: %s", str(e))
+        logger.exception("Unexpected error in optimize_portfolio: %s", error_message)
         raise
 
 # ==== Dependency Injection Wrappers ====
