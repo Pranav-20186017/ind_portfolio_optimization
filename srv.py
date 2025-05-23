@@ -405,6 +405,33 @@ logger.propagate = False
 from io import StringIO
 warnings.filterwarnings("ignore")
 
+def sanitize_bse_prices(
+    prices: pd.DataFrame,
+    zero_to_nan: bool = True,
+    nan_threshold: float = 0.4,
+    clip_pct: float = 0.3
+) -> pd.DataFrame:
+    """
+    - Replace exact 0.0 closes with NaN
+    - Drop tickers with > nan_threshold fraction of NaNs
+    - Forward- then back-fill remaining NaNs
+    - Leave price series ready for later log-returns & clipping
+    """
+    df = prices.copy()
+    if zero_to_nan:
+        df = df.replace(0, np.nan)
+
+    # Drop illiquid tickers
+    frac_nan = df.isna().mean()
+    to_drop  = frac_nan[frac_nan > nan_threshold].index
+    if len(to_drop):
+        df = df.drop(columns=to_drop)
+
+    # Fill holes
+    df = df.fillna(method='ffill').fillna(method='bfill')
+
+    return df
+
 ########################################
 # Ensure output directory
 ########################################
@@ -615,17 +642,32 @@ def format_tickers(stocks: List[StockItem]) -> List[str]:
             raise ValueError(f"Invalid exchange: {stock.exchange}")
     return formatted_tickers
 
-def fetch_and_align_data(tickers: List[str], benchmark_ticker: str) -> Tuple[pd.DataFrame, pd.Series]:
+def fetch_and_align_data(
+    tickers: List[str],
+    benchmark_ticker: str,
+    sanitize_bse: bool = False
+) -> Tuple[pd.DataFrame, pd.Series]:
     """
     Download & align data for each ticker, plus benchmark index.
     Returns (combined_df, benchmark_close).
     """
+    # Split into BSE vs NSE if we need special handling
+    if sanitize_bse:
+        bse_tickers = [t for t in tickers if t.endswith(".BO")]
+        nse_tickers = [t for t in tickers if not t.endswith(".BO")]
+    else:
+        bse_tickers, nse_tickers = [], tickers
+    
     data = {}
     failed_tickers = []
     
-    for ticker in tickers:
+    # Start date is set to a common date for all tickers
+    start_date = datetime(1990, 1, 1)
+    
+    # Process NSE tickers with auto_adjust=True
+    for ticker in nse_tickers:
         try:
-            df = cached_yf_download(ticker, datetime(1990, 1, 1))
+            df = cached_yf_download(ticker, start_date)
             if not df.empty:
                 data[ticker] = df
             else:
@@ -634,6 +676,33 @@ def fetch_and_align_data(tickers: List[str], benchmark_ticker: str) -> Tuple[pd.
         except Exception as e:
             logger.exception("Error fetching data for %s: %s", ticker, str(e))
             failed_tickers.append(ticker)
+    
+    # Process BSE tickers with auto_adjust=False if sanitize_bse is True
+    if sanitize_bse and bse_tickers:
+        try:
+            # Direct call to yf.download for BSE tickers with auto_adjust=False
+            df_bo = yf.download(
+                bse_tickers,
+                start=start_date,
+                progress=False,
+                auto_adjust=False,
+                multi_level_index=False
+            )["Close"]
+            
+            # Apply sanitizer to BSE data
+            if isinstance(df_bo, pd.Series):
+                # If only one BSE ticker, it returns a Series
+                ticker = bse_tickers[0]
+                data[ticker] = df_bo
+            else:
+                # For multiple BSE tickers
+                df_bo_clean = sanitize_bse_prices(df_bo)
+                # Add each BSE ticker to our data dict
+                for ticker in df_bo_clean.columns:
+                    data[ticker] = df_bo_clean[ticker]
+        except Exception as e:
+            logger.exception("Error fetching BSE data: %s", str(e))
+            failed_tickers.extend(bse_tickers)
 
     if not data:
         logger.warning("No valid data available for the provided tickers")
@@ -654,7 +723,7 @@ def fetch_and_align_data(tickers: List[str], benchmark_ticker: str) -> Tuple[pd.
     # Combine into multi-index DataFrame
     combined_df = pd.concat(filtered_data.values(), axis=1, keys=filtered_data.keys())
     combined_df.dropna(inplace=True)
-
+    
     # Fetch benchmark data
     try:
         benchmark_df = (
@@ -1338,9 +1407,17 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         benchmark_ticker = Benchmarks.get_ticker(request.benchmark)
         logger.info("Using benchmark: %s (ticker: %s)", request.benchmark.value, benchmark_ticker)
         
-        # Fetch & align data - run in threadpool because it's I/O and CPU intensive
+        # Determine whether we need to sanitize BSE names
+        sanitize_bse = any(s.exchange == ExchangeEnum.BSE for s in request.stocks)
+        
+        # Fetch & align data (with optional BSE sanitization)
         try:
-            df, benchmark_df = await run_in_threadpool(fetch_and_align_data, formatted_tickers, benchmark_ticker)
+            df, benchmark_df = await run_in_threadpool(
+                fetch_and_align_data,
+                formatted_tickers,
+                benchmark_ticker,
+                sanitize_bse
+            )
         except ValueError as e:
             if "No valid data available" in str(e):
                 raise APIError(
