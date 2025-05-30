@@ -1468,18 +1468,23 @@ def run_optimization_NCO(returns: pd.DataFrame, benchmark_df: pd.Series, risk_fr
         logger.exception("Error in NCO optimization: %s", str(e))
         return None, None
 
-def run_optimization_HERC2(returns: pd.DataFrame, benchmark_df: pd.Series, risk_free_rate=0.05, linkage="ward", rm="MV", method_mu="hist", method_cov="hist"):
+def run_optimization_HERC2(returns: pd.DataFrame, benchmark_df: pd.Series, risk_free_rate=0.05, linkage="complete", rm="CVaR", method_mu="hist", method_cov="hist", codependence="spearman", max_k=15):
     """
     Run HERC2 (Hierarchical Equal Risk Contribution 2) optimization using riskfolio-lib
+    
+    HERC2 uses hierarchical clustering but splits weights equally within clusters.
+    We use different parameters from HERC to encourage better cluster formation.
     
     Parameters:
         returns: DataFrame of historical returns
         benchmark_df: Benchmark prices series
         risk_free_rate: Risk-free rate (default: 0.05)
-        linkage: Linkage method for hierarchical clustering (default: "ward")
-        rm: Risk measure used to optimize the portfolio ("MV", "MAD", "MSV", etc.) (default: "MV")
+        linkage: Linkage method for hierarchical clustering (default: "complete")
+        rm: Risk measure used to optimize the portfolio (default: "CVaR")
         method_mu: Method used to estimate expected returns (default: "hist")
         method_cov: Method used to estimate the covariance matrix (default: "hist")
+        codependence: Correlation method for clustering (default: "spearman")
+        max_k: Maximum number of clusters to consider (default: 15)
         
     Returns:
         Tuple of (OptimizationResult, cumulative_returns)
@@ -1488,21 +1493,27 @@ def run_optimization_HERC2(returns: pd.DataFrame, benchmark_df: pd.Series, risk_
         # Create riskfolio portfolio object
         port = rp.HCPortfolio(returns=returns)
         
-        # Calculate optimal HERC2 weights
+        # Calculate optimal HERC2 weights with parameters designed to create better clusters
         weights = port.optimization(
             model="HERC2",  # Using HERC2 model from riskfolio-lib
-            codependence="pearson",
-            rm=rm,
+            codependence=codependence,  # Use Spearman for better non-linear correlation detection
+            rm=rm,  # Use CVaR for better risk differentiation
             rf=risk_free_rate,
-            linkage=linkage,
-            max_k=10,
+            linkage=linkage,  # Use complete linkage for more balanced clusters
+            max_k=max_k,  # Allow more clusters to be considered
             method_mu=method_mu,
             method_cov=method_cov,
-            leaf_order=True
+            leaf_order=True,
+            opt_k_method="twodiff"  # Explicitly set cluster optimization method
         )
         
         # Convert weights to dictionary format expected by finalize_portfolio
         weights_dict = weights.squeeze().to_dict()
+        
+        # Log cluster information for debugging
+        logger.info(f"HERC2 weights distribution: {weights_dict}")
+        weight_values = list(weights_dict.values())
+        logger.info(f"HERC2 weight stats: min={min(weight_values):.4f}, max={max(weight_values):.4f}, std={np.std(weight_values):.4f}")
         
         # Calculate portfolio performance metrics
         result, cum_returns = finalize_portfolio(
@@ -1518,7 +1529,74 @@ def run_optimization_HERC2(returns: pd.DataFrame, benchmark_df: pd.Series, risk_
     except Exception as e:
         logger.exception("Error in HERC2 optimization: %s", str(e))
         return None, None
-    
+
+def debug_herc2_clustering(returns: pd.DataFrame, linkage="complete", codependence="spearman", max_k=15):
+    """
+    Debug function to analyze HERC2 clustering behavior.
+    This helps understand why HERC2 might be producing equal weights.
+    """
+    try:
+        import riskfolio as rp
+        from scipy.cluster.hierarchy import dendrogram, linkage as scipy_linkage
+        from scipy.spatial.distance import squareform
+        
+        logger.info(f"HERC2 Debug: Testing clustering with {len(returns.columns)} assets")
+        logger.info(f"HERC2 Debug: Linkage={linkage}, Codependence={codependence}, Max_k={max_k}")
+        
+        # Create portfolio object
+        port = rp.HCPortfolio(returns=returns)
+        
+        # Calculate correlation matrix
+        if codependence == "spearman":
+            corr_matrix = returns.corr(method='spearman')
+        elif codependence == "kendall":
+            corr_matrix = returns.corr(method='kendall')
+        else:
+            corr_matrix = returns.corr(method='pearson')
+            
+        logger.info(f"HERC2 Debug: Correlation matrix shape: {corr_matrix.shape}")
+        logger.info(f"HERC2 Debug: Correlation range: [{corr_matrix.min().min():.3f}, {corr_matrix.max().max():.3f}]")
+        
+        # Calculate distance matrix
+        distance_matrix = np.sqrt(0.5 * (1 - corr_matrix))
+        logger.info(f"HERC2 Debug: Distance range: [{distance_matrix.min().min():.3f}, {distance_matrix.max().max():.3f}]")
+        
+        # Perform hierarchical clustering
+        distance_array = squareform(distance_matrix, checks=False)
+        linkage_matrix = scipy_linkage(distance_array, method=linkage)
+        
+        logger.info(f"HERC2 Debug: Linkage matrix shape: {linkage_matrix.shape}")
+        
+        # Try HERC2 optimization with debugging
+        weights = port.optimization(
+            model="HERC2",
+            codependence=codependence,
+            rm="CVaR",
+            linkage=linkage,
+            max_k=max_k,
+            method_mu="hist",
+            method_cov="hist",
+            leaf_order=True,
+            opt_k_method="twodiff"
+        )
+        
+        weights_dict = weights.squeeze().to_dict()
+        weight_values = list(weights_dict.values())
+        
+        logger.info(f"HERC2 Debug: Final weights: {weights_dict}")
+        logger.info(f"HERC2 Debug: Weight stats - Min: {min(weight_values):.4f}, Max: {max(weight_values):.4f}, Std: {np.std(weight_values):.4f}")
+        
+        # Check if weights are essentially equal
+        weight_std = np.std(weight_values)
+        if weight_std < 1e-6:
+            logger.warning("HERC2 Debug: Weights are essentially equal (std < 1e-6). This suggests all assets are in one cluster.")
+        
+        return weights_dict
+        
+    except Exception as e:
+        logger.exception("Error in HERC2 debugging: %s", str(e))
+        return None
+
 def run_optimization_MIN_CVAR(mu, returns, benchmark_df, risk_free_rate=0.05):
     try:
         # Check if the MOSEK license is configured
@@ -1804,7 +1882,9 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                 elif method == OptimizationMethod.HERC2:
                     print("OPTIMIZE: Running HERC2")
                     optimization_result, cum_returns = await run_in_threadpool(
-                        _original_run_optimization_HERC2, returns, benchmark_df, risk_free_rate
+                        _original_run_optimization_HERC2, returns, benchmark_df, risk_free_rate,
+                        linkage="complete", rm="CVaR", method_mu="hist", method_cov="hist", 
+                        codependence="spearman", max_k=15
                     )
                 elif method == OptimizationMethod.MIN_CVAR:
                     print("OPTIMIZE: Running MIN_CVAR")

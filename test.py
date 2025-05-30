@@ -810,11 +810,13 @@ class TestPortfolioOptimization(unittest.TestCase):
         port_mock.optimization.assert_called_once()
         call_args = port_mock.optimization.call_args[1]
         self.assertEqual(call_args['model'], 'HERC2')  # This is the key difference for HERC2
-        self.assertEqual(call_args['codependence'], 'pearson')
-        self.assertEqual(call_args['rm'], 'MV')
-        self.assertEqual(call_args['linkage'], 'ward')
+        self.assertEqual(call_args['codependence'], 'spearman')  # Updated to spearman
+        self.assertEqual(call_args['rm'], 'CVaR')  # Updated to CVaR
+        self.assertEqual(call_args['linkage'], 'complete')  # Updated to complete
         self.assertEqual(call_args['method_cov'], 'hist')  # Check the new parameter
         self.assertEqual(call_args['method_mu'], 'hist')  # Check the new parameter
+        self.assertEqual(call_args['max_k'], 15)  # Updated to 15
+        self.assertEqual(call_args['opt_k_method'], 'twodiff')  # New parameter
         
         # Check result is not None
         self.assertIsNotNone(result)
@@ -1448,8 +1450,14 @@ class TestPortfolioOptimization(unittest.TestCase):
                         break
                 self.assertTrue(nco_found, "NCO optimization function was not called")
                 
-                # HERC2: (returns, benchmark_df, risk_free_rate)
-                mock_run.assert_any_call(_original_run_optimization_HERC2, ANY, ANY, ANY)
+                # HERC2: (returns, benchmark_df, risk_free_rate) + keyword args (linkage, rm, method_mu, method_cov, codependence, max_k)
+                # Check if HERC2 was called (might be positional + keyword args)
+                herc2_found = False
+                for call in mock_run.call_args_list:
+                    if call[0][0] is _original_run_optimization_HERC2:
+                        herc2_found = True
+                        break
+                self.assertTrue(herc2_found, "HERC2 optimization function was not called")
 
 if __name__ == '__main__':
     unittest.main() 
