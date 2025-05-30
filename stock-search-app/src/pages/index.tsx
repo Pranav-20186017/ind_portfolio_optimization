@@ -1319,6 +1319,98 @@ const HomePage: React.FC = () => {
                                     {(methodData.performance.portfolio_alpha * 100).toFixed(2)}%
                                   </TableCell>
                                 </TableRow>
+                                <TableRow>
+                                  <TableCell>Blume Adjusted Beta</TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.blume_adjusted_beta.toFixed(3)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Treynor Ratio</TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.treynor_ratio.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Information Ratio</TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.information_ratio.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>R²</TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.r_squared.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>VaR (95%)</TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.var_95)}>
+                                    {(methodData.performance.var_95 * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>CVaR (95%)</TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.cvar_95)}>
+                                    {(methodData.performance.cvar_95 * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Calmar Ratio</TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.calmar_ratio.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Omega Ratio</TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.omega_ratio.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Skewness</TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.skewness.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Kurtosis</TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.kurtosis.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                {methodData.performance.welch_beta !== undefined && (
+                                  <TableRow>
+                                    <TableCell>Welch Beta</TableCell>
+                                    <TableCell align="right">
+                                      {methodData.performance.welch_beta.toFixed(4)}
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                                {methodData.performance.semi_beta !== undefined && (
+                                  <TableRow>
+                                    <TableCell>Semi Beta</TableCell>
+                                    <TableCell align="right">
+                                      {methodData.performance.semi_beta.toFixed(4)}
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                                {methodData.performance.coskewness !== undefined && (
+                                  <TableRow>
+                                    <TableCell>Coskewness</TableCell>
+                                    <TableCell align="right">
+                                      {methodData.performance.coskewness.toFixed(4)}
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                                {methodData.performance.cokurtosis !== undefined && (
+                                  <TableRow>
+                                    <TableCell>Cokurtosis</TableCell>
+                                    <TableCell align="right">
+                                      {methodData.performance.cokurtosis.toFixed(4)}
+                                    </TableCell>
+                                  </TableRow>
+                                )}
                               </>
                             )}
                           </TableBody>
@@ -1326,33 +1418,71 @@ const HomePage: React.FC = () => {
                       </Grid>
                     </Grid>
                     
+                    {/* Additional Visualizations Grid */}
+                    <Grid container spacing={3} sx={{ mt: 2 }}>
+                      {/* Returns Distribution Plot */}
+                      {methodData.returns_dist && (
+                        <Grid item xs={12} md={6}>
+                          <Box>
+                            <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                              Returns Distribution
+                            </Typography>
+                            <ImageComponent base64String={methodData.returns_dist} altText="Returns Distribution" />
+                          </Box>
+                        </Grid>
+                      )}
+                      
+                      {/* Maximum Drawdown Plot */}
+                      {methodData.max_drawdown_plot && (
+                        <Grid item xs={12} md={6}>
+                          <Box>
+                            <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                              Maximum Drawdown
+                            </Typography>
+                            <ImageComponent base64String={methodData.max_drawdown_plot} altText="Maximum Drawdown" />
+                          </Box>
+                        </Grid>
+                      )}
+                    </Grid>
+                    
                     {/* Portfolio Visualizations */}
-                    {methodData.efficient_frontier_img && (
-                      <Box mt={4}>
-                        <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                          Efficient Frontier
-                        </Typography>
-                        <ImageComponent base64String={methodData.efficient_frontier_img} altText="Efficient Frontier" />
-                      </Box>
-                    )}
-                    
-                    {methodData.weights_plot && (
-                      <Box mt={4}>
-                        <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                          Portfolio Weights Visualization
-                        </Typography>
-                        <ImageComponent base64String={methodData.weights_plot} altText="Portfolio Weights" />
-                      </Box>
-                    )}
-                    
-                    {methodData.dendrogram_plot && (
-                      <Box mt={4}>
-                        <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                          Hierarchical Clustering Dendrogram
-                        </Typography>
-                        <ImageComponent base64String={methodData.dendrogram_plot} altText="Hierarchical Clustering" />
-                      </Box>
-                    )}
+                    <Grid container spacing={3} sx={{ mt: 2 }}>
+                      {/* Efficient Frontier */}
+                      {methodData.efficient_frontier_img && (
+                        <Grid item xs={12} md={6}>
+                          <Box>
+                            <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                              Efficient Frontier
+                            </Typography>
+                            <ImageComponent base64String={methodData.efficient_frontier_img} altText="Efficient Frontier" />
+                          </Box>
+                        </Grid>
+                      )}
+                      
+                      {/* Weights Plot */}
+                      {methodData.weights_plot && (
+                        <Grid item xs={12} md={6}>
+                          <Box>
+                            <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                              Portfolio Weights Visualization
+                            </Typography>
+                            <ImageComponent base64String={methodData.weights_plot} altText="Portfolio Weights" />
+                          </Box>
+                        </Grid>
+                      )}
+                      
+                      {/* Dendrogram Plot */}
+                      {methodData.dendrogram_plot && (
+                        <Grid item xs={12} md={6}>
+                          <Box>
+                            <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                              Hierarchical Clustering Dendrogram
+                            </Typography>
+                            <ImageComponent base64String={methodData.dendrogram_plot} altText="Hierarchical Clustering" />
+                          </Box>
+                        </Grid>
+                      )}
+                    </Grid>
                   </CardContent>
                 </Card>
               );
@@ -1415,45 +1545,82 @@ const HomePage: React.FC = () => {
               </div>
             )}
             
-            {/* Rolling Betas */}
+            {/* Rolling Betas Visualization */}
             {optimizationResult.results && Object.values(optimizationResult.results).some(method => method && method.rolling_betas) && (
               <div style={{ marginTop: '2rem' }}>
                 <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
                   Rolling Betas by Year
                 </Typography>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Method</TableCell>
-                      {getAllYears(optimizationResult).map(year => (
-                        <TableCell key={year} align="right">{year}</TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {Object.entries(optimizationResult.results).map(([methodKey, methodData]) => {
-                      if (!methodData || !methodData.rolling_betas) return null;
-                      
-                      return (
-                        <TableRow key={methodKey}>
-                          <TableCell>{algoDisplayNames[methodKey] || methodKey}</TableCell>
-                          {getAllYears(optimizationResult).map(year => {
-                            // We already checked that methodData.rolling_betas exists
-                            const beta = methodData.rolling_betas?.[year];
-                            return (
-                              <TableCell 
-                                key={`${methodKey}-${year}`} 
-                                align="right"
-                              >
-                                {beta !== undefined ? beta.toFixed(3) : 'N/A'}
-                              </TableCell>
-                            );
-                          })}
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                <div style={{ height: '400px' }}>
+                  <Line 
+                    data={{
+                      labels: getAllYears(optimizationResult).map(year => year.toString()),
+                      datasets: Object.entries(optimizationResult.results)
+                        .filter(([_, methodData]) => methodData && methodData.rolling_betas)
+                        .map(([methodKey, methodData]) => ({
+                          label: algoDisplayNames[methodKey] || methodKey,
+                          data: getAllYears(optimizationResult).map(year => 
+                            methodData?.rolling_betas ? methodData.rolling_betas[year] || null : null
+                          ),
+                          borderColor: colors[methodKey as keyof typeof colors] || '#000000',
+                          fill: false,
+                          pointRadius: 3,
+                          borderWidth: 2
+                        }))
+                    }}
+                    options={{
+                      responsive: true,
+                      plugins: {
+                        legend: { position: 'top' as const },
+                        tooltip: { mode: 'index' as const, intersect: false },
+                      },
+                      scales: {
+                        x: { display: true, title: { display: true, text: 'Year' } },
+                        y: { display: true, title: { display: true, text: 'Beta' } },
+                      },
+                    }}
+                    height={undefined}
+                    width={undefined}
+                  />
+                </div>
+                
+                {/* Also include tabular data for reference */}
+                <div style={{ marginTop: '1rem', overflowX: 'auto' }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Method</TableCell>
+                        {getAllYears(optimizationResult).map(year => (
+                          <TableCell key={year} align="right">{year}</TableCell>
+                        ))}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {Object.entries(optimizationResult.results).map(([methodKey, methodData]) => {
+                        if (!methodData || !methodData.rolling_betas) return null;
+                        
+                        return (
+                          <TableRow key={methodKey}>
+                            <TableCell>{algoDisplayNames[methodKey] || methodKey}</TableCell>
+                            {getAllYears(optimizationResult).map(year => {
+                              // We already checked that methodData.rolling_betas exists above,
+                              // but TypeScript still needs the optional chaining operator
+                              const beta = methodData.rolling_betas?.[year];
+                              return (
+                                <TableCell 
+                                  key={`${methodKey}-${year}`} 
+                                  align="right"
+                                >
+                                  {beta !== undefined ? beta.toFixed(3) : 'N/A'}
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             )}
             
