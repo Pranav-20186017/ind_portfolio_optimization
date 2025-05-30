@@ -263,8 +263,12 @@ const ModernPortfolioTheoryPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Modern Portfolio Theory (MPT) | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Modern Portfolio Theory (MPT), a framework for constructing portfolios that maximize expected return for a given level of risk." />
+        <title>Modern Portfolio Theory for Indian Markets | QuantPort India Docs</title>
+        <meta name="description" content="Learn how to apply Modern Portfolio Theory (MPT) to Indian stocks. Optimize NSE/BSE portfolios using diversification principles, efficient frontiers, and risk-return analysis." />
+        <meta property="og:title" content="Modern Portfolio Theory for Indian Markets | QuantPort India Docs" />
+        <meta property="og:description" content="Learn how to apply Modern Portfolio Theory (MPT) to Indian stocks. Optimize NSE/BSE portfolios using diversification principles, efficient frontiers, and risk-return analysis." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/modern-portfolio-theory" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -272,7 +276,7 @@ const ModernPortfolioTheoryPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

@@ -31,8 +31,12 @@ const MeanVarianceOptimizationPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Mean-Variance Optimization (MVO) | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Mean-Variance Optimization (MVO), a cornerstone of Modern Portfolio Theory that helps investors construct optimal portfolios." />
+        <title>Mean-Variance Optimization for Indian Stocks | QuantPort India Docs</title>
+        <meta name="description" content="Learn how to use Mean-Variance Optimization (MVO) for constructing optimal Indian stock portfolios using NSE/BSE data, risk management, and advanced quant models." />
+        <meta property="og:title" content="Mean-Variance Optimization for Indian Stocks | QuantPort India Docs" />
+        <meta property="og:description" content="Learn how to use Mean-Variance Optimization (MVO) for constructing optimal Indian stock portfolios using NSE/BSE data, risk management, and advanced quant models." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/mvo" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -40,7 +44,7 @@ const MeanVarianceOptimizationPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>
@@ -594,7 +598,7 @@ const MeanVarianceOptimizationPage: React.FC = () => {
             Related Topics
           </Typography>
           <Grid container spacing={2}>
-            {/* These would link to other educational pages once created */}
+            {/* These would link to other Docsal pages once created */}
             <Grid item xs={12} sm={6} md={4}>
               <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>

@@ -31,8 +31,12 @@ const KurtosisPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Kurtosis | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Kurtosis, a measure of the 'tailedness' of return distributions that helps identify strategies with higher probability of extreme events." />
+        <title>Kurtosis for Indian Stock Returns | QuantPort India Docs</title>
+        <meta name="description" content="Analyze tail risk in Indian equity portfolios with Kurtosis. Identify NSE/BSE investments with higher probability of extreme events by measuring the 'tailedness' of return distributions." />
+        <meta property="og:title" content="Kurtosis for Indian Stock Returns | QuantPort India Docs" />
+        <meta property="og:description" content="Analyze tail risk in Indian equity portfolios with Kurtosis. Identify NSE/BSE investments with higher probability of extreme events by measuring the 'tailedness' of return distributions." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/kurtosis" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -40,7 +44,7 @@ const KurtosisPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

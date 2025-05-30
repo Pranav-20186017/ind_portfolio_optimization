@@ -25,8 +25,12 @@ const CriticalLineAlgorithmPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Critical Line Algorithm (CLA) | Portfolio Optimization</title>
-        <meta name="description" content="Learn about the Critical Line Algorithm (CLA), a classic and foundational method developed by Harry Markowitz for tracing the full efficient frontier in portfolio optimization." />
+        <title>Critical Line Algorithm for Indian Markets | QuantPort India Docs</title>
+        <meta name="description" content="Master the Critical Line Algorithm (CLA) for optimizing Indian stock portfolios. Learn Markowitz's exact approach for tracing efficient frontiers of NSE/BSE securities." />
+        <meta property="og:title" content="Critical Line Algorithm for Indian Markets | QuantPort India Docs" />
+        <meta property="og:description" content="Master the Critical Line Algorithm (CLA) for optimizing Indian stock portfolios. Learn Markowitz's exact approach for tracing efficient frontiers of NSE/BSE securities." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/cla" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -34,7 +38,7 @@ const CriticalLineAlgorithmPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

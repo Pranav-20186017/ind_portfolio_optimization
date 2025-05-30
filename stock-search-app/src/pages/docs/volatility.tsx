@@ -30,8 +30,12 @@ const VolatilityPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Volatility | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Volatility, a measure of how widely returns disperse around their average." />
+        <title>Volatility in Indian Stock Markets | QuantPort India Docs</title>
+        <meta name="description" content="Understand volatility measurements for Indian equity portfolios. Learn how to assess and manage the dispersion of returns in NSE/BSE investments for better risk management." />
+        <meta property="og:title" content="Volatility in Indian Stock Markets | QuantPort India Docs" />
+        <meta property="og:description" content="Understand volatility measurements for Indian equity portfolios. Learn how to assess and manage the dispersion of returns in NSE/BSE investments for better risk management." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/volatility" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -39,7 +43,7 @@ const VolatilityPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

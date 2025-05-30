@@ -24,18 +24,22 @@ const UpsidePotentialRatioPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Upside Potential Ratio | Portfolio Optimization</title>
+        <title>Upside Potential Ratio for Indian Portfolios | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn about Upside Potential Ratio, a performance metric that evaluates upside potential relative to downside risk, focusing on beneficial asymmetry."
+          content="Optimize Indian stock portfolios using the Upside Potential Ratio. Evaluate NSE/BSE investments by balancing upside opportunity with downside protection in volatile markets."
         />
+        <meta property="og:title" content="Upside Potential Ratio for Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Optimize Indian stock portfolios using the Upside Potential Ratio. Evaluate NSE/BSE investments by balancing upside opportunity with downside protection in volatile markets." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/upside-potential-ratio" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>

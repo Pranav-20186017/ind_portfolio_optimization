@@ -31,8 +31,12 @@ const SkewnessPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Skewness | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Skewness, a measure of asymmetry in return distributions that helps identify strategies with large gains or large losses." />
+        <title>Skewness for Indian Portfolios | QuantPort India Docs</title>
+        <meta name="description" content="Measure asymmetry in Indian stock return distributions with Skewness. Identify NSE/BSE investments prone to large gains or losses to build more robust portfolios." />
+        <meta property="og:title" content="Skewness for Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Measure asymmetry in Indian stock return distributions with Skewness. Identify NSE/BSE investments prone to large gains or losses to build more robust portfolios." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/skewness" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -40,7 +44,7 @@ const SkewnessPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

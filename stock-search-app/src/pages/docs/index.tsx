@@ -279,8 +279,12 @@ const docsIndexPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Portfolio Optimization docs | Learn About Financial Optimization</title>
-        <meta name="description" content="Learn about portfolio optimization methods, financial metrics, and modern investment techniques." />
+        <title>Documentation | QuantPort India - Indian Portfolio Optimization Methods</title>
+        <meta name="description" content="Full documentation for QuantPort India. Explore advanced portfolio optimization methods, metrics, and tutorials for Indian equities: NSE, BSE, MVO, CVaR, HERC, NCO, and more." />
+        <meta property="og:title" content="Documentation | QuantPort India - Indian Portfolio Optimization Methods" />
+        <meta property="og:description" content="Full documentation for QuantPort India. Explore advanced portfolio optimization methods, metrics, and tutorials for Indian equities: NSE, BSE, MVO, CVaR, HERC, NCO, and more." />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>

@@ -30,8 +30,12 @@ const ConditionalValueAtRiskPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Conditional Value-at-Risk (CVaR) | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Conditional Value-at-Risk (CVaR), also known as Expected Shortfall (ES), which measures the expected loss in the worst-case scenarios beyond the VaR threshold." />
+        <title>CVaR for Indian Portfolios | QuantPort India Docs</title>
+        <meta name="description" content="A guide to Conditional Value at Risk (CVaR) for Indian stock portfolios. Learn CVaR optimization using NSE/BSE stocks, manage tail risk, and improve portfolio resilience." />
+        <meta property="og:title" content="CVaR for Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="A guide to Conditional Value at Risk (CVaR) for Indian stock portfolios. Learn CVaR optimization using NSE/BSE stocks, manage tail risk, and improve portfolio resilience." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/conditional-value-at-risk" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -39,7 +43,7 @@ const ConditionalValueAtRiskPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

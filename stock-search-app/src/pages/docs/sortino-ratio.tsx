@@ -25,8 +25,12 @@ const SortinoRatioPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Sortino Ratio | Portfolio Optimization</title>
-        <meta name="description" content="Learn about the Sortino Ratio, a modification of the Sharpe ratio that only penalizes returns falling below a specified target or required rate of return." />
+        <title>Sortino Ratio for Indian Markets | QuantPort India Docs</title>
+        <meta name="description" content="Evaluate downside risk in your Indian stock portfolio with the Sortino Ratio. Learn how this metric helps measure risk-adjusted returns for NSE/BSE investments while focusing only on harmful volatility." />
+        <meta property="og:title" content="Sortino Ratio for Indian Markets | QuantPort India Docs" />
+        <meta property="og:description" content="Evaluate downside risk in your Indian stock portfolio with the Sortino Ratio. Learn how this metric helps measure risk-adjusted returns for NSE/BSE investments while focusing only on harmful volatility." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/sortino-ratio" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -34,7 +38,7 @@ const SortinoRatioPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

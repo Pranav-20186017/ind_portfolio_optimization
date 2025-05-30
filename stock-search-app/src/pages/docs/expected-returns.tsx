@@ -30,8 +30,12 @@ const ExpectedReturnsPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Expected Return | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Expected Return, the weighted-average outcome you anticipate earning on an asset or portfolio over a stated horizon." />
+        <title>Expected Returns for Indian Stocks | QuantPort India Docs</title>
+        <meta name="description" content="Understand expected returns modeling for Indian equity portfolios. Learn techniques to forecast potential NSE/BSE securities performance for more informed investment decisions." />
+        <meta property="og:title" content="Expected Returns for Indian Stocks | QuantPort India Docs" />
+        <meta property="og:description" content="Understand expected returns modeling for Indian equity portfolios. Learn techniques to forecast potential NSE/BSE securities performance for more informed investment decisions." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/expected-returns" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -39,7 +43,7 @@ const ExpectedReturnsPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

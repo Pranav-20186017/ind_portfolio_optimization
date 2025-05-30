@@ -30,8 +30,12 @@ const BlumeAdjustedBetaPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Blume-Adjusted Beta | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Blume-Adjusted Beta, a modified beta calculation that adjusts for the tendency of betas to revert toward the market average over time." />
+        <title>Blume-Adjusted Beta for Indian Markets | QuantPort India Docs</title>
+        <meta name="description" content="Learn about Blume-Adjusted Beta for Indian equity portfolios. Improve beta estimation accuracy for NSE/BSE stocks with this systematic risk adjustment technique." />
+        <meta property="og:title" content="Blume-Adjusted Beta for Indian Markets | QuantPort India Docs" />
+        <meta property="og:description" content="Learn about Blume-Adjusted Beta for Indian equity portfolios. Improve beta estimation accuracy for NSE/BSE stocks with this systematic risk adjustment technique." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/blume-adjusted-beta" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -39,7 +43,7 @@ const BlumeAdjustedBetaPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

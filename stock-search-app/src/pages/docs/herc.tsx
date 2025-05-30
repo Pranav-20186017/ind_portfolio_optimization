@@ -25,8 +25,12 @@ const HierarchicalEqualRiskContributionPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Hierarchical Equal Risk Contribution (HERC) | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Hierarchical Equal Risk Contribution (HERC), an advanced portfolio optimization method that combines clustering with equal risk contribution principles." />
+        <title>HERC Optimization for Indian Stocks | QuantPort India Docs</title>
+        <meta name="description" content="Understand and apply Hierarchical Equal Risk Contribution (HERC) for building diversified Indian stock portfolios. Tailor risk allocation for NSE/BSE equities with QuantPort India." />
+        <meta property="og:title" content="HERC Optimization for Indian Stocks | QuantPort India Docs" />
+        <meta property="og:description" content="Understand and apply Hierarchical Equal Risk Contribution (HERC) for building diversified Indian stock portfolios. Tailor risk allocation for NSE/BSE equities with QuantPort India." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/herc" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -34,7 +38,7 @@ const HierarchicalEqualRiskContributionPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

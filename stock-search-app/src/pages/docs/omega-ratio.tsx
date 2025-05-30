@@ -24,18 +24,22 @@ const OmegaRatioPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Omega Ratio (Ω) | Portfolio Optimization</title>
+        <title>Omega Ratio (Ω) for Indian Portfolios | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn about the Omega Ratio (Ω), a performance measure that evaluates the probability-weighted ratio of gains versus losses for a threshold return."
+          content="Measure gains versus losses in Indian equity portfolios with the Omega Ratio. Evaluate NSE/BSE investments using this comprehensive metric that captures the entire return distribution."
         />
+        <meta property="og:title" content="Omega Ratio (Ω) for Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Measure gains versus losses in Indian equity portfolios with the Omega Ratio. Evaluate NSE/BSE investments using this comprehensive metric that captures the entire return distribution." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/omega-ratio" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>

@@ -24,18 +24,22 @@ const CalmarRatioPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Calmar Ratio | Portfolio Optimization</title>
+        <title>Calmar Ratio for Indian Portfolios | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn about the Calmar Ratio, a performance measurement that uses the ratio of average annual compound rate of return to maximum drawdown."
+          content="Learn about the Calmar Ratio for evaluating Indian equity portfolios. Measure risk-adjusted returns of NSE/BSE investments by comparing annualized returns to maximum drawdowns."
         />
+        <meta property="og:title" content="Calmar Ratio for Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Learn about the Calmar Ratio for evaluating Indian equity portfolios. Measure risk-adjusted returns of NSE/BSE investments by comparing annualized returns to maximum drawdowns." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/calmar-ratio" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>

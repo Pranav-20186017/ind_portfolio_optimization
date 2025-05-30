@@ -24,18 +24,22 @@ const SterlingRatioPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Sterling Ratio | Portfolio Optimization</title>
+        <title>Sterling Ratio for Indian Investments | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn about the Sterling Ratio, a risk-adjusted return metric similar to Calmar but using average annual drawdown minus 10% in the denominator."
+          content="Evaluate Indian equity portfolios using the Sterling Ratio. Assess risk-adjusted returns of NSE/BSE securities by analyzing average drawdowns with this specialized metric for Indian markets."
         />
+        <meta property="og:title" content="Sterling Ratio for Indian Investments | QuantPort India Docs" />
+        <meta property="og:description" content="Evaluate Indian equity portfolios using the Sterling Ratio. Assess risk-adjusted returns of NSE/BSE securities by analyzing average drawdowns with this specialized metric for Indian markets." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/sterling-ratio" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>

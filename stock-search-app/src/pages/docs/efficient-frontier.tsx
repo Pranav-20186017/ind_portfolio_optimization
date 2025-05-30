@@ -152,8 +152,12 @@ const EfficientFrontierPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Efficient Frontier | Portfolio Optimization</title>
-        <meta name="description" content="Learn about the Efficient Frontier, a visual frontier of optimal portfolios that deliver the highest expected return for every attainable level of risk." />
+        <title>Efficient Frontier for Indian Markets | QuantPort India Docs</title>
+        <meta name="description" content="Optimize Indian stock portfolios with the Efficient Frontier. Find the optimal balance between risk and return for your NSE/BSE investments across various risk levels." />
+        <meta property="og:title" content="Efficient Frontier for Indian Markets | QuantPort India Docs" />
+        <meta property="og:description" content="Optimize Indian stock portfolios with the Efficient Frontier. Find the optimal balance between risk and return for your NSE/BSE investments across various risk levels." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/efficient-frontier" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -161,7 +165,7 @@ const EfficientFrontierPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

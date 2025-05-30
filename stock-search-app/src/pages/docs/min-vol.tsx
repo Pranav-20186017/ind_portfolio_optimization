@@ -31,8 +31,12 @@ const MinimumVolatilityPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Minimum Volatility Optimization | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Minimum Volatility optimization, a quantitative method within Modern Portfolio Theory aimed at constructing portfolios that minimize risk." />
+        <title>Minimum Volatility for Indian Stocks | QuantPort India Docs</title>
+        <meta name="description" content="Build lower-risk Indian equity portfolios with Minimum Volatility optimization. Discover how to reduce NSE/BSE stock portfolio volatility while maintaining reasonable returns." />
+        <meta property="og:title" content="Minimum Volatility for Indian Stocks | QuantPort India Docs" />
+        <meta property="og:description" content="Build lower-risk Indian equity portfolios with Minimum Volatility optimization. Discover how to reduce NSE/BSE stock portfolio volatility while maintaining reasonable returns." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/min-vol" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -40,7 +44,7 @@ const MinimumVolatilityPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

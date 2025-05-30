@@ -30,8 +30,12 @@ const CAPMBetaPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>CAPM Beta (β) | Portfolio Optimization</title>
-        <meta name="description" content="Learn about CAPM Beta (β), a key measure of systematic risk that quantifies how sensitive a security or portfolio is to broad market movements." />
+        <title>CAPM Beta (β) for Indian Markets | QuantPort India Docs</title>
+        <meta name="description" content="Understand CAPM Beta (β) for Indian equity portfolios. Learn how to measure systematic risk of NSE/BSE stocks and their sensitivity to the Indian market's movements." />
+        <meta property="og:title" content="CAPM Beta (β) for Indian Markets | QuantPort India Docs" />
+        <meta property="og:description" content="Understand CAPM Beta (β) for Indian equity portfolios. Learn how to measure systematic risk of NSE/BSE stocks and their sensitivity to the Indian market's movements." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/capm-beta" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -39,7 +43,7 @@ const CAPMBetaPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

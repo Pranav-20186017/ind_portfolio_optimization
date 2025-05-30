@@ -25,8 +25,12 @@ const SharpeRatioPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Sharpe Ratio | Portfolio Optimization</title>
-        <meta name="description" content="Learn about the Sharpe Ratio, a measure of risk-adjusted return that helps investors understand the return of an investment compared to its risk." />
+        <title>Sharpe Ratio for Indian Markets | QuantPort India Docs</title>
+        <meta name="description" content="Optimize Indian stock portfolios with Sharpe Ratio analysis. Learn how to evaluate risk-adjusted returns for NSE/BSE stocks, manage portfolio volatility, and improve investment efficiency." />
+        <meta property="og:title" content="Sharpe Ratio for Indian Markets | QuantPort India Docs" />
+        <meta property="og:description" content="Optimize Indian stock portfolios with Sharpe Ratio analysis. Learn how to evaluate risk-adjusted returns for NSE/BSE stocks, manage portfolio volatility, and improve investment efficiency." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/sharpe-ratio" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -34,7 +38,7 @@ const SharpeRatioPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

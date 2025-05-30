@@ -30,8 +30,12 @@ const JensensAlphaPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Jensen's Alpha (α) | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Jensen's Alpha (α), a risk-adjusted performance measure that calculates excess return relative to the CAPM model." />
+        <title>Jensen's Alpha for Indian Portfolios | QuantPort India Docs</title>
+        <meta name="description" content="Measure risk-adjusted outperformance of Indian stock portfolios with Jensen's Alpha. Evaluate NSE/BSE investment managers and strategies by quantifying returns beyond market exposure." />
+        <meta property="og:title" content="Jensen's Alpha for Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Measure risk-adjusted outperformance of Indian stock portfolios with Jensen's Alpha. Evaluate NSE/BSE investment managers and strategies by quantifying returns beyond market exposure." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/jensens-alpha" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -39,7 +43,7 @@ const JensensAlphaPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

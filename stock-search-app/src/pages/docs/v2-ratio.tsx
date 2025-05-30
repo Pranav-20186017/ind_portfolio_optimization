@@ -24,18 +24,22 @@ const V2RatioPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>V2 Ratio | Portfolio Optimization</title>
+        <title>V2 Ratio for Indian Market Strategies | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn about the V2 Ratio, a performance measure that evaluates relative growth rate compared to benchmark divided by relative drawdown volatility."
+          content="Evaluate Indian investment strategies with the V2 Ratio. Compare growth rates to drawdown volatility for NSE/BSE portfolios relative to Indian market benchmarks."
         />
+        <meta property="og:title" content="V2 Ratio for Indian Market Strategies | QuantPort India Docs" />
+        <meta property="og:description" content="Evaluate Indian investment strategies with the V2 Ratio. Compare growth rates to drawdown volatility for NSE/BSE portfolios relative to Indian market benchmarks." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/v2-ratio" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>

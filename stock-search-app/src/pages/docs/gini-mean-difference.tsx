@@ -24,18 +24,22 @@ const GiniMeanDifferencePage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Gini Mean Difference | Portfolio Optimization</title>
+        <title>Gini Mean Difference for Indian Portfolios | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn about Gini Mean Difference, a robust measure of dispersion in returns that evaluates the average absolute difference between all pairs of observations."
+          content="Analyze dispersion in Indian stock portfolios with Gini Mean Difference. Use this robust risk measure to evaluate NSE/BSE securities with non-normal return distributions."
         />
+        <meta property="og:title" content="Gini Mean Difference for Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Analyze dispersion in Indian stock portfolios with Gini Mean Difference. Use this robust risk measure to evaluate NSE/BSE securities with non-normal return distributions." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/gini-mean-difference" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>

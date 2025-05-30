@@ -24,18 +24,22 @@ const InformationRatioPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Information Ratio | Portfolio Optimization</title>
+        <title>Information Ratio for Indian Investors | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn about the Information Ratio, a performance metric that evaluates active return per unit of risk relative to a benchmark index."
+          content="Understand Information Ratio for evaluating Indian stock portfolios. Learn to measure active return per unit of risk for NSE/BSE investments relative to Indian market benchmarks."
         />
+        <meta property="og:title" content="Information Ratio for Indian Investors | QuantPort India Docs" />
+        <meta property="og:description" content="Understand Information Ratio for evaluating Indian stock portfolios. Learn to measure active return per unit of risk for NSE/BSE investments relative to Indian market benchmarks." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/information-ratio" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>

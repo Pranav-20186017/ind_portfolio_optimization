@@ -30,8 +30,12 @@ const MinCDaRPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Minimum Conditional Drawdown at Risk (CDaR) | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Minimum Conditional Drawdown at Risk (CDaR) portfolio optimization, an approach that minimizes the maximum expected drawdown with a certain confidence level." />
+        <title>Min-CDaR for Indian Equity Portfolios | QuantPort India Docs</title>
+        <meta name="description" content="Minimize drawdowns in your Indian stock portfolio with CDaR optimization. Build resilient NSE/BSE portfolios that protect against extended market downturns." />
+        <meta property="og:title" content="Min-CDaR for Indian Equity Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Minimize drawdowns in your Indian stock portfolio with CDaR optimization. Build resilient NSE/BSE portfolios that protect against extended market downturns." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/min-cdar" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -39,7 +43,7 @@ const MinCDaRPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

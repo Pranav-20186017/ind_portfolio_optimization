@@ -24,18 +24,22 @@ const UlcerIndexPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Ulcer Index | Portfolio Optimization</title>
+        <title>Ulcer Index for Indian Portfolios | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn about the Ulcer Index, a volatility measure that captures the depth and duration of drawdowns, focusing on downside movement."
+          content="Measure drawdown risk in Indian stock portfolios with the Ulcer Index. Analyze NSE/BSE investments with a risk metric that captures both depth and duration of market declines."
         />
+        <meta property="og:title" content="Ulcer Index for Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Measure drawdown risk in Indian stock portfolios with the Ulcer Index. Analyze NSE/BSE investments with a risk metric that captures both depth and duration of market declines." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/ulcer-index" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>

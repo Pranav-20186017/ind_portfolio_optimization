@@ -24,18 +24,22 @@ const MaximumDrawdownPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Maximum Drawdown | Portfolio Optimization</title>
+        <title>Maximum Drawdown for Indian Portfolios | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn about Maximum Drawdown, a measure of the largest peak-to-trough decline in a portfolio's value, representing the worst-case scenario for an investment."
+          content="Analyze downside risk in Indian stock portfolios with Maximum Drawdown. Measure worst-case scenarios for NSE/BSE investments and understand potential losses during market downturns."
         />
+        <meta property="og:title" content="Maximum Drawdown for Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Analyze downside risk in Indian stock portfolios with Maximum Drawdown. Measure worst-case scenarios for NSE/BSE investments and understand potential losses during market downturns." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/maximum-drawdown" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>

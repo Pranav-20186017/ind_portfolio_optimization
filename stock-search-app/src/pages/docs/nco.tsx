@@ -25,8 +25,12 @@ const NestedClusteredOptimizationPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Nested Clustered Optimization (NCO) | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Nested Clustered Optimization (NCO), a portfolio construction method that combines hierarchical clustering with traditional optimization techniques." />
+        <title>NCO Strategy for Indian Stocks | QuantPort India Docs</title>
+        <meta name="description" content="Implement Nested Clustered Optimization (NCO) for Indian stock portfolios. Combine hierarchical clustering with traditional techniques for superior NSE/BSE portfolio construction." />
+        <meta property="og:title" content="NCO Strategy for Indian Stocks | QuantPort India Docs" />
+        <meta property="og:description" content="Implement Nested Clustered Optimization (NCO) for Indian stock portfolios. Combine hierarchical clustering with traditional techniques for superior NSE/BSE portfolio construction." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/nco" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -34,7 +38,7 @@ const NestedClusteredOptimizationPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

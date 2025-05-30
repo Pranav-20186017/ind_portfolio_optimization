@@ -24,18 +24,22 @@ const EquallyWeightedPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Equally Weighted Portfolio | Portfolio Optimization</title>
+        <title>Equally Weighted Indian Portfolios | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn how the naïve 1/N diversification rule constructs a simple yet powerful Equally Weighted portfolio—complete with intuition, full math, and implementation details."
+          content="Implement equally weighted (1/N) portfolios for Indian equities. Learn how this simple yet effective strategy can diversify risk across NSE and BSE stocks."
         />
+        <meta property="og:title" content="Equally Weighted Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Implement equally weighted (1/N) portfolios for Indian equities. Learn how this simple yet effective strategy can diversify risk across NSE and BSE stocks." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/equi-weighted" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>

@@ -24,18 +24,22 @@ const ModiglianiRiskAdjustedPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Modigliani Risk-Adjusted Performance (M²) | Portfolio Optimization</title>
+        <title>Modigliani Risk-Adjusted Performance for Indian Markets | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn about Modigliani Risk-Adjusted Performance (M²), a measure that adjusts portfolio returns to match market volatility, allowing direct comparison with benchmark returns."
+          content="Apply Modigliani Risk-Adjusted Performance (M²) to Indian equity portfolios. Compare NSE/BSE investments with market benchmarks on a volatility-adjusted basis for more informed decisions."
         />
+        <meta property="og:title" content="Modigliani Risk-Adjusted Performance for Indian Markets | QuantPort India Docs" />
+        <meta property="og:description" content="Apply Modigliani Risk-Adjusted Performance (M²) to Indian equity portfolios. Compare NSE/BSE investments with market benchmarks on a volatility-adjusted basis for more informed decisions." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/modigliani-risk-adjusted" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>

@@ -24,18 +24,22 @@ const ConditionalDrawdownAtRiskPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Conditional Drawdown at Risk (CDaR) | Portfolio Optimization</title>
+        <title>Conditional Drawdown at Risk (CDaR) for Indian Portfolios | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn about Conditional Drawdown at Risk (CDaR), the expected value of drawdown when exceeding the Drawdown at Risk threshold, measuring tail drawdown risk."
+          content="Apply Conditional Drawdown at Risk (CDaR) to manage tail risks in Indian stock portfolios. Protect NSE/BSE investments against extreme market downturns with advanced risk measurement."
         />
+        <meta property="og:title" content="Conditional Drawdown at Risk (CDaR) for Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Apply Conditional Drawdown at Risk (CDaR) to manage tail risks in Indian stock portfolios. Protect NSE/BSE investments against extreme market downturns with advanced risk measurement." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/cdar" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>

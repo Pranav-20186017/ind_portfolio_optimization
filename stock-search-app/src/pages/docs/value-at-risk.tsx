@@ -31,8 +31,12 @@ const ValueAtRiskPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Value-at-Risk (VaR) | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Value-at-Risk (VaR), a key risk metric that measures the potential loss in value of a portfolio over a defined period for a given confidence interval." />
+        <title>Value-at-Risk for Indian Portfolios | QuantPort India Docs</title>
+        <meta name="description" content="Quantify potential losses in your Indian stock portfolio with Value-at-Risk (VaR). Assess downside risk for NSE/BSE investments with statistical confidence." />
+        <meta property="og:title" content="Value-at-Risk for Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Quantify potential losses in your Indian stock portfolio with Value-at-Risk (VaR). Assess downside risk for NSE/BSE investments with statistical confidence." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/value-at-risk" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -40,7 +44,7 @@ const ValueAtRiskPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

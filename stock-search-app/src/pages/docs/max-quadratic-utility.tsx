@@ -25,8 +25,12 @@ const MaxQuadraticUtilityPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Maximum Quadratic Utility Optimization | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Maximum Quadratic Utility optimization, a method that incorporates investor risk aversion directly into the portfolio optimization process." />
+        <title>Max Quadratic Utility for Indian Stocks | QuantPort India Docs</title>
+        <meta name="description" content="Optimize Indian equity portfolios with Maximum Quadratic Utility. Balance returns and risk aversion for NSE/BSE stocks using advanced quantitative techniques." />
+        <meta property="og:title" content="Max Quadratic Utility for Indian Stocks | QuantPort India Docs" />
+        <meta property="og:description" content="Optimize Indian equity portfolios with Maximum Quadratic Utility. Balance returns and risk aversion for NSE/BSE stocks using advanced quantitative techniques." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/max-quadratic-utility" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -34,7 +38,7 @@ const MaxQuadraticUtilityPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

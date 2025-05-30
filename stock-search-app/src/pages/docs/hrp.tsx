@@ -25,8 +25,12 @@ const HierarchicalRiskParityPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Hierarchical Risk Parity (HRP) | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Hierarchical Risk Parity (HRP), a modern portfolio optimization method that uses clustering and machine learning techniques to build diversified portfolios." />
+        <title>HRP for Indian Stock Portfolios | QuantPort India Docs</title>
+        <meta name="description" content="Apply Hierarchical Risk Parity (HRP) to optimize your Indian equity portfolios. Use machine learning for better diversification of NSE/BSE stocks with reduced estimation error." />
+        <meta property="og:title" content="HRP for Indian Stock Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Apply Hierarchical Risk Parity (HRP) to optimize your Indian equity portfolios. Use machine learning for better diversification of NSE/BSE stocks with reduced estimation error." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/hrp" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -34,7 +38,7 @@ const HierarchicalRiskParityPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

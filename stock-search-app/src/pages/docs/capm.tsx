@@ -57,8 +57,12 @@ const CapitalAssetPricingModelPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Capital Asset Pricing Model (CAPM) | Portfolio Optimization</title>
-        <meta name="description" content="Learn about the Capital Asset Pricing Model (CAPM), the cornerstone of modern financial theory that helps investors understand the relationship between systematic risk and expected return." />
+        <title>Capital Asset Pricing Model (CAPM) for Indian Markets | QuantPort India Docs</title>
+        <meta name="description" content="Understand how the Capital Asset Pricing Model (CAPM) applies to Indian equity markets. Learn to calculate required returns for NSE/BSE stocks based on systematic risk and market risk premium." />
+        <meta property="og:title" content="Capital Asset Pricing Model (CAPM) for Indian Markets | QuantPort India Docs" />
+        <meta property="og:description" content="Understand how the Capital Asset Pricing Model (CAPM) applies to Indian equity markets. Learn to calculate required returns for NSE/BSE stocks based on systematic risk and market risk premium." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/capm" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -66,7 +70,7 @@ const CapitalAssetPricingModelPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

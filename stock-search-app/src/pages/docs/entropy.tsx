@@ -24,18 +24,22 @@ const EntropyPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Entropy in Portfolio Returns | Portfolio Optimization</title>
+        <title>Entropy Analysis for Indian Portfolios | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn about Entropy as a measure of uncertainty or randomness in portfolio returns, including the Freedman-Diaconis rule for bin width calculation."
+          content="Apply entropy analysis to Indian equity portfolios. Measure uncertainty in NSE/BSE securities returns using information theory for more robust Indian market risk assessment."
         />
+        <meta property="og:title" content="Entropy Analysis for Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Apply entropy analysis to Indian equity portfolios. Measure uncertainty in NSE/BSE securities returns using information theory for more robust Indian market risk assessment." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/entropy" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>

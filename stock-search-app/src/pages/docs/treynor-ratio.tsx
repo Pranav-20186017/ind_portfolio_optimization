@@ -30,15 +30,19 @@ const TreynorRatioPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Treynor Ratio | Portfolio Optimization</title>
-        <meta name="description" content="Learn about the Treynor Ratio, a performance metric that measures excess return per unit of systematic risk (beta)." />
+        <title>Treynor Ratio for Indian Portfolios | QuantPort India Docs</title>
+        <meta name="description" content="Evaluate Indian stock portfolios with the Treynor Ratio. Measure excess returns per unit of systematic risk for NSE/BSE securities to optimize market-related risk exposure." />
+        <meta property="og:title" content="Treynor Ratio for Indian Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Evaluate Indian stock portfolios with the Treynor Ratio. Measure excess returns per unit of systematic risk for NSE/BSE securities to optimize market-related risk exposure." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/treynor-ratio" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation Buttons */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Button variant="outlined" color="primary" component={Link} href="/docs">
-            ← Back to Education
+            ← Back to Docs
           </Button>
           <Button variant="outlined" color="secondary" component={Link} href="/">
             ← Back to Portfolio Optimizer

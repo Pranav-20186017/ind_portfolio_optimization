@@ -30,8 +30,12 @@ const MinCVaRPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Minimum Conditional Value at Risk (CVaR) | Portfolio Optimization</title>
-        <meta name="description" content="Learn about Minimum Conditional Value at Risk (CVaR) optimization, a method that minimizes expected losses in the worst-case scenarios beyond the VaR threshold." />
+        <title>Min-CVaR for Indian Stock Portfolios | QuantPort India Docs</title>
+        <meta name="description" content="Apply Minimum Conditional Value at Risk (CVaR) optimization to Indian equities. Protect your NSE/BSE portfolio against extreme market risks and downside events." />
+        <meta property="og:title" content="Min-CVaR for Indian Stock Portfolios | QuantPort India Docs" />
+        <meta property="og:description" content="Apply Minimum Conditional Value at Risk (CVaR) optimization to Indian equities. Protect your NSE/BSE portfolio against extreme market risks and downside events." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/min-cvar" />
       </Head>
       
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -39,7 +43,7 @@ const MinCVaRPage: React.FC = () => {
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
             <Button variant="outlined" color="primary">
-              ← Back to Education
+              ← Back to Docs
             </Button>
           </Link>
           <Link href="/" passHref>

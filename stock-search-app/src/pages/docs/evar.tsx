@@ -24,18 +24,22 @@ const EntropicVaRPage: React.FC = () => {
   return (
     <>
       <Head>
-        <title>Entropic Value at Risk (EVaR) | Portfolio Optimization</title>
+        <title>Entropic VaR for Indian Markets | QuantPort India Docs</title>
         <meta
           name="description"
-          content="Learn about Entropic Value at Risk (EVaR), a coherent risk measure that provides tighter bounds on tail risk than traditional VaR or CVaR."
+          content="Explore Entropic Value at Risk (EVaR) for Indian equity portfolios. Manage tail risks in NSE/BSE stocks with more precise risk measurement than traditional VaR."
         />
+        <meta property="og:title" content="Entropic VaR for Indian Markets | QuantPort India Docs" />
+        <meta property="og:description" content="Explore Entropic Value at Risk (EVaR) for Indian equity portfolios. Manage tail risks in NSE/BSE stocks with more precise risk measurement than traditional VaR." />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="https://indportfoliooptimization.vercel.app/docs/evar" />
       </Head>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Navigation */}
         <Box sx={{ mb: 4, display: 'flex', gap: 2 }}>
           <Link href="/docs" passHref>
-            <Button variant="outlined" color="primary">← Back to Education</Button>
+            <Button variant="outlined" color="primary">← Back to Docs</Button>
           </Link>
           <Link href="/" passHref>
             <Button variant="outlined" color="secondary">← Back to Portfolio Optimizer</Button>
