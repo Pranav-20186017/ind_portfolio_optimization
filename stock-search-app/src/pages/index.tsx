@@ -526,6 +526,44 @@ const HomePage: React.FC = () => {
     return { labels, datasets };
   };
 
+  // Prepare chart data for Rolling Betas
+  const prepareBetaChartData = (res: PortfolioOptimizationResponse) => {
+    const years = getAllYears(res);
+    const yearLabels = years.map(year => year.toString());
+    
+    const datasets = [
+      // Reference line for market beta (1.0)
+      {
+        label: 'Market Beta (1.0)',
+        data: Array(years.length).fill(1),
+        borderColor: 'rgba(128, 128, 128, 0.7)',
+        borderWidth: 1.5,
+        borderDash: [5, 5],
+        pointRadius: 0,
+        fill: false
+      }
+    ];
+    
+    // Add datasets for each method that has rolling betas
+    Object.entries(res.results)
+      .filter(([_, methodData]) => methodData && methodData.rolling_betas)
+      .forEach(([methodKey, methodData]) => {
+        if (!methodData || !methodData.rolling_betas) return;
+        
+        datasets.push({
+          label: algoDisplayNames[methodKey] || methodKey,
+          data: years.map(year => methodData.rolling_betas?.[year] || null),
+          borderColor: colors[methodKey as keyof typeof colors] || '#000000',
+          fill: false,
+          pointRadius: 4,
+          borderWidth: 2,
+          borderDash: [] // Adding required borderDash property
+        });
+      });
+    
+    return { labels: yearLabels, datasets };
+  };
+
   const chartOptions = {
     responsive: true,
     plugins: {
@@ -1240,7 +1278,7 @@ const HomePage: React.FC = () => {
                     
                     <Grid container spacing={3}>
                       {/* Weights Section */}
-                      <Grid item xs={12} md={6}>
+                      <Grid item xs={12} md={4}>
                         <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                           Portfolio Weights
                         </Typography>
@@ -1263,162 +1301,317 @@ const HomePage: React.FC = () => {
                       </Grid>
                       
                       {/* Performance Metrics */}
-                      <Grid item xs={12} md={6}>
+                      <Grid item xs={12} md={8}>
                         <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                           Performance Metrics
                         </Typography>
-                        <Table size="small">
-                          <TableBody>
-                            {methodData.performance && (
-                              <>
-                                <TableRow>
-                                  <TableCell>Expected Return</TableCell>
-                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.expected_return)}>
-                                    {(methodData.performance.expected_return * 100).toFixed(2)}%
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>Volatility</TableCell>
-                                  <TableCell align="right">
-                                    {(methodData.performance.volatility * 100).toFixed(2)}%
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>Sharpe Ratio</TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.sharpe.toFixed(3)}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>Sortino Ratio</TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.sortino.toFixed(3)}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>Maximum Drawdown</TableCell>
-                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.max_drawdown)}>
-                                    {(methodData.performance.max_drawdown * 100).toFixed(2)}%
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>CAGR</TableCell>
-                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.cagr)}>
-                                    {(methodData.performance.cagr * 100).toFixed(2)}%
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>Portfolio Beta</TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.portfolio_beta.toFixed(3)}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>Portfolio Alpha</TableCell>
-                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.portfolio_alpha)}>
-                                    {(methodData.performance.portfolio_alpha * 100).toFixed(2)}%
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>Blume Adjusted Beta</TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.blume_adjusted_beta.toFixed(3)}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>Treynor Ratio</TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.treynor_ratio.toFixed(4)}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>Information Ratio</TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.information_ratio.toFixed(4)}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>R²</TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.r_squared.toFixed(4)}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>VaR (95%)</TableCell>
-                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.var_95)}>
-                                    {(methodData.performance.var_95 * 100).toFixed(2)}%
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>CVaR (95%)</TableCell>
-                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.cvar_95)}>
-                                    {(methodData.performance.cvar_95 * 100).toFixed(2)}%
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>Calmar Ratio</TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.calmar_ratio.toFixed(4)}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>Omega Ratio</TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.omega_ratio.toFixed(4)}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>Skewness</TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.skewness.toFixed(4)}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>Kurtosis</TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.kurtosis.toFixed(4)}
-                                  </TableCell>
-                                </TableRow>
-                                {methodData.performance.welch_beta !== undefined && (
-                                  <TableRow>
-                                    <TableCell>Welch Beta</TableCell>
-                                    <TableCell align="right">
-                                      {methodData.performance.welch_beta.toFixed(4)}
-                                    </TableCell>
-                                  </TableRow>
+                        
+                        {/* Primary Metrics (First Column) */}
+                        <Grid container spacing={2}>
+                          <Grid item xs={12} md={6}>
+                            <Table size="small">
+                              <TableBody>
+                                {methodData.performance && (
+                                  <>
+                                    <TableRow>
+                                      <TableCell>Expected Return</TableCell>
+                                      <TableCell align="right" style={getReturnCellStyle(methodData.performance.expected_return)}>
+                                        {(methodData.performance.expected_return * 100).toFixed(2)}%
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>Volatility</TableCell>
+                                      <TableCell align="right">
+                                        {(methodData.performance.volatility * 100).toFixed(2)}%
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>
+                                        Sharpe Ratio
+                                        <Tooltip title="Sharpe Ratio measures excess return per unit of total volatility. Calculated as (Annualized Return – Risk-Free Rate) / Annualized Volatility.">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {methodData.performance.sharpe.toFixed(3)}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>
+                                        Sortino Ratio
+                                        <Tooltip title="Sortino Ratio measures excess return per unit of downside volatility. Calculated as (Annualized Return – Risk-Free Rate) / Annualized Downside Deviation.">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {methodData.performance.sortino.toFixed(3)}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>Maximum Drawdown</TableCell>
+                                      <TableCell align="right" style={getReturnCellStyle(methodData.performance.max_drawdown)}>
+                                        {(methodData.performance.max_drawdown * 100).toFixed(2)}%
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>CAGR</TableCell>
+                                      <TableCell align="right" style={getReturnCellStyle(methodData.performance.cagr)}>
+                                        {(methodData.performance.cagr * 100).toFixed(2)}%
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>
+                                        Portfolio Beta
+                                        <Tooltip title="Beta is estimated through Ordinary Least Squares (OLS) regression using the Capital Asset Pricing Model (CAPM). The regression equation is: Ri - Rf = α + β(Rm - Rf) + ε, where Ri is the portfolio return, Rf is the risk-free rate, Rm is the market return, and ε is the error term. The coefficient β represents the portfolio's sensitivity to market movements.">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {methodData.performance.portfolio_beta.toFixed(3)}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>
+                                        Portfolio Alpha
+                                        <Tooltip title="Alpha is the portfolio's excess return over what would be predicted by the Capital Asset Pricing Model (CAPM). It represents the portfolio manager's ability to generate returns through security selection rather than market movements. A positive alpha means the portfolio outperformed its benchmark on a risk-adjusted basis, while a negative alpha indicates underperformance.">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right" style={getReturnCellStyle(methodData.performance.portfolio_alpha)}>
+                                        {(methodData.performance.portfolio_alpha * 100).toFixed(2)}%
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>R-Squared</TableCell>
+                                      <TableCell align="right">
+                                        {methodData.performance.r_squared.toFixed(4)}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>VaR (95%)</TableCell>
+                                      <TableCell align="right" style={getReturnCellStyle(methodData.performance.var_95)}>
+                                        {(methodData.performance.var_95 * 100).toFixed(2)}%
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>CVaR (95%)</TableCell>
+                                      <TableCell align="right" style={getReturnCellStyle(methodData.performance.cvar_95)}>
+                                        {(methodData.performance.cvar_95 * 100).toFixed(2)}%
+                                      </TableCell>
+                                    </TableRow>
+                                  </>
                                 )}
-                                {methodData.performance.semi_beta !== undefined && (
-                                  <TableRow>
-                                    <TableCell>Semi Beta</TableCell>
-                                    <TableCell align="right">
-                                      {methodData.performance.semi_beta.toFixed(4)}
-                                    </TableCell>
-                                  </TableRow>
+                              </TableBody>
+                            </Table>
+                          </Grid>
+                        
+                          {/* Advanced Metrics (Second Column) */}
+                          <Grid item xs={12} md={6}>
+                            <Table size="small">
+                              <TableBody>
+                                {methodData.performance && (
+                                  <>
+                                    <TableRow>
+                                      <TableCell>
+                                        Blume Adjusted Beta
+                                        <Tooltip title="Blume Adjusted Beta = 1 + 0.67·(β – 1), which shrinks beta toward 1 to account for historical mean reversion.">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {methodData.performance.blume_adjusted_beta.toFixed(3)}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>
+                                        Treynor Ratio
+                                        <Tooltip title="The Treynor Ratio measures excess return per unit of market risk. It's calculated as (Portfolio Return - Risk-Free Rate) / Portfolio Beta. A higher Treynor Ratio indicates better risk-adjusted performance relative to market risk.">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {methodData.performance.treynor_ratio.toFixed(4)}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>
+                                        Information Ratio
+                                        <Tooltip title="The Information Ratio measures the active return divided by the active risk (tracking error). It quantifies the excess return per unit of risk taken relative to the benchmark. Higher values indicate better risk-adjusted active returns.">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {methodData.performance.information_ratio.toFixed(4)}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>
+                                        Skewness
+                                        <Tooltip title="Measures asymmetry of the returns distribution. Positive skew indicates a long right tail.">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {methodData.performance.skewness.toFixed(4)}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>
+                                        Kurtosis
+                                        <Tooltip title="Measures tail heaviness. High kurtosis indicates fat tails (more extreme outcomes).">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {methodData.performance.kurtosis.toFixed(4)}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>
+                                        Omega Ratio
+                                        <Tooltip title="The Omega Ratio measures the relationship between the probability of gains and losses relative to a threshold (typically the risk-free rate). It's the ratio of the area above the threshold to the area below it in the returns distribution. Higher values indicate better risk-return characteristics.">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {methodData.performance.omega_ratio.toFixed(4)}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>
+                                        Calmar Ratio
+                                        <Tooltip title="The Calmar Ratio is the ratio of annualized return to maximum drawdown. It measures the return per unit of downside risk, with higher values indicating better risk-adjusted performance.">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {methodData.performance.calmar_ratio.toFixed(4)}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>
+                                        EVaR (95%)
+                                        <Tooltip title="Entropic Value at Risk (EVaR) uses a Chernoff-bound formulation via the moment-generating function to bound tail losses more tightly than VaR/CVaR. It provides a more conservative risk estimate than traditional VaR measures.">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {(methodData.performance.evar_95 * 100).toFixed(2)}%
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>
+                                        DaR (95%)
+                                        <Tooltip title="Drawdown at Risk (DaR) represents the drawdown that won't be exceeded with 95% confidence. It's similar to VaR but for drawdowns instead of returns.">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {(methodData.performance.dar_95 * 100).toFixed(2)}%
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell>
+                                        CDaR (95%)
+                                        <Tooltip title="Conditional Drawdown at Risk (CDaR) is the expected drawdown when the drawdown exceeds the DaR. It provides insight into the severity of extreme drawdowns.">
+                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                        </Tooltip>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {(methodData.performance.cdar_95 * 100).toFixed(2)}%
+                                      </TableCell>
+                                    </TableRow>
+                                  </>
                                 )}
-                                {methodData.performance.coskewness !== undefined && (
-                                  <TableRow>
-                                    <TableCell>Coskewness</TableCell>
-                                    <TableCell align="right">
-                                      {methodData.performance.coskewness.toFixed(4)}
-                                    </TableCell>
-                                  </TableRow>
-                                )}
-                                {methodData.performance.cokurtosis !== undefined && (
-                                  <TableRow>
-                                    <TableCell>Cokurtosis</TableCell>
-                                    <TableCell align="right">
-                                      {methodData.performance.cokurtosis.toFixed(4)}
-                                    </TableCell>
-                                  </TableRow>
-                                )}
-                              </>
-                            )}
-                          </TableBody>
-                        </Table>
+                              </TableBody>
+                            </Table>
+                          </Grid>
+                        </Grid>
+                        
+                        {/* Advanced Beta and Cross-Moment Metrics Section */}
+                        <Typography 
+                          variant="subtitle1" 
+                          sx={{ 
+                            mt: 2, 
+                            mb: 1, 
+                            fontWeight: 'bold',
+                            backgroundColor: '#f5f5f5',
+                            p: 1,
+                            borderRadius: '4px',
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}
+                        >
+                          Advanced Beta and Cross-Moment Metrics
+                          <span style={{ 
+                            backgroundColor: '#4caf50', 
+                            color: 'white', 
+                            padding: '2px 6px', 
+                            borderRadius: '4px', 
+                            fontSize: '0.7rem', 
+                            marginLeft: '8px',
+                            fontWeight: 'bold'
+                          }}>
+                            NEW
+                          </span>
+                        </Typography>
+                        
+                        <Grid container spacing={2}>
+                          <Grid item xs={12} md={12}>
+                            <Table size="small">
+                              <TableBody>
+                                <TableRow>
+                                  <TableCell>
+                                    Welch Beta
+                                    <Tooltip title="A robust alternative to traditional beta that uses winsorization to reduce the impact of extreme returns. It provides a more stable measure of market sensitivity that is less affected by outliers.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.welch_beta !== undefined ? methodData.performance.welch_beta.toFixed(4) : 'N/A'}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Semi Beta
+                                    <Tooltip title="A downside beta that measures the portfolio's sensitivity to the benchmark only during down markets. Higher values indicate greater correlation with the benchmark during market declines.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.semi_beta !== undefined ? methodData.performance.semi_beta.toFixed(4) : 'N/A'}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Coskewness
+                                    <Tooltip title="Measures the relationship between portfolio returns and squared market returns. Negative values suggest the portfolio tends to have negative returns when market volatility increases.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.coskewness !== undefined ? methodData.performance.coskewness.toFixed(4) : 'N/A'}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Cokurtosis
+                                    <Tooltip title="Fourth cross-moment measuring the relationship between portfolio returns and extreme market returns. A high positive value indicates portfolio returns amplify extreme market movements.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.cokurtosis !== undefined ? methodData.performance.cokurtosis.toFixed(4) : 'N/A'}
+                                  </TableCell>
+                                </TableRow>
+                              </TableBody>
+                            </Table>
+                          </Grid>
+                        </Grid>
                       </Grid>
                     </Grid>
                     
-                    {/* Additional Visualizations Grid */}
+                    {/* Visualizations Grid */}
                     <Grid container spacing={3} sx={{ mt: 2 }}>
                       {/* Returns Distribution Plot */}
                       {methodData.returns_dist && (
@@ -1505,6 +1698,109 @@ const HomePage: React.FC = () => {
               </div>
             )}
             
+            {/* Rolling Betas Visualization */}
+            {optimizationResult.results && Object.values(optimizationResult.results).some(method => method && method.rolling_betas) && (
+              <Card style={{ marginTop: '2rem' }}>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
+                    Rolling Betas by Year
+                    <Tooltip title="Beta values calculated for each calendar year, showing how the portfolio's market sensitivity changes over time. Beta=1.0 indicates market-equivalent risk level.">
+                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                    </Tooltip>
+                  </Typography>
+                  <div style={{ height: '400px' }}>
+                    <Line
+                      data={{
+                        labels: getAllYears(optimizationResult).map(String),
+                        datasets: [
+                          // Reference line for market beta (1.0)
+                          {
+                            label: 'Market Beta (1.0)',
+                            data: Array(getAllYears(optimizationResult).length).fill(1),
+                            borderColor: 'rgba(128, 128, 128, 0.7)',
+                            borderWidth: 1,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false
+                          },
+                          // Actual beta values for each method
+                          ...Object.entries(optimizationResult.results)
+                            .filter(([_, methodData]) => methodData && methodData.rolling_betas)
+                            .map(([methodKey, methodData]) => ({
+                              label: algoDisplayNames[methodKey] || methodKey,
+                              data: getAllYears(optimizationResult).map(year => 
+                                methodData?.rolling_betas ? methodData.rolling_betas[year] || null : null
+                              ),
+                              borderColor: colors[methodKey as keyof typeof colors] || '#000000',
+                              // Remove backgroundColor as it's not in the type definition
+                              fill: false,
+                              pointRadius: 3,
+                              borderWidth: 2
+                            }))
+                        ]
+                      }}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                          y: {
+                            beginAtZero: false,
+                            grid: {
+                              color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            title: {
+                              display: true,
+                              text: 'Beta Value',
+                              font: {
+                                weight: 'bold'
+                              }
+                            }
+                          },
+                          x: {
+                            grid: {
+                              color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            title: {
+                              display: true,
+                              text: 'Year',
+                              font: {
+                                weight: 'bold'
+                              }
+                            }
+                          }
+                        },
+                        plugins: {
+                          legend: {
+                            display: true,
+                            position: 'top'
+                          },
+                          tooltip: {
+                            callbacks: {
+                              label: function(context: any) {
+                                const value = context.raw;
+                                const formattedBeta = typeof value === 'number' ? value.toFixed(2) : 'N/A';
+                                let riskLevel = '';
+                                if (typeof value === 'number') {
+                                  if (value > 1.2) {
+                                    riskLevel = '🔴 High Risk';
+                                  } else if (value > 0.8) {
+                                    riskLevel = '🟡 Medium Risk';
+                                  } else {
+                                    riskLevel = '🟢 Low Risk';
+                                  }
+                                }
+                                return [`${context.dataset.label}: ${formattedBeta}`, riskLevel];
+                              }
+                            }
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
             {/* Yearly Returns Table */}
             {optimizationResult.stock_yearly_returns && Object.keys(optimizationResult.stock_yearly_returns).length > 0 && (
               <div className="yearly-returns-section" style={{ marginTop: '2rem' }}>
@@ -1539,85 +1835,6 @@ const HomePage: React.FC = () => {
                           })}
                         </TableRow>
                       ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            )}
-            
-            {/* Rolling Betas Visualization */}
-            {optimizationResult.results && Object.values(optimizationResult.results).some(method => method && method.rolling_betas) && (
-              <div style={{ marginTop: '2rem' }}>
-                <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
-                  Rolling Betas by Year
-                </Typography>
-                <div style={{ height: '400px' }}>
-                  <Line 
-                    data={{
-                      labels: getAllYears(optimizationResult).map(year => year.toString()),
-                      datasets: Object.entries(optimizationResult.results)
-                        .filter(([_, methodData]) => methodData && methodData.rolling_betas)
-                        .map(([methodKey, methodData]) => ({
-                          label: algoDisplayNames[methodKey] || methodKey,
-                          data: getAllYears(optimizationResult).map(year => 
-                            methodData?.rolling_betas ? methodData.rolling_betas[year] || null : null
-                          ),
-                          borderColor: colors[methodKey as keyof typeof colors] || '#000000',
-                          fill: false,
-                          pointRadius: 3,
-                          borderWidth: 2
-                        }))
-                    }}
-                    options={{
-                      responsive: true,
-                      plugins: {
-                        legend: { position: 'top' as const },
-                        tooltip: { mode: 'index' as const, intersect: false },
-                      },
-                      scales: {
-                        x: { display: true, title: { display: true, text: 'Year' } },
-                        y: { display: true, title: { display: true, text: 'Beta' } },
-                      },
-                    }}
-                    height={undefined}
-                    width={undefined}
-                  />
-                </div>
-                
-                {/* Also include tabular data for reference */}
-                <div style={{ marginTop: '1rem', overflowX: 'auto' }}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Method</TableCell>
-                        {getAllYears(optimizationResult).map(year => (
-                          <TableCell key={year} align="right">{year}</TableCell>
-                        ))}
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {Object.entries(optimizationResult.results).map(([methodKey, methodData]) => {
-                        if (!methodData || !methodData.rolling_betas) return null;
-                        
-                        return (
-                          <TableRow key={methodKey}>
-                            <TableCell>{algoDisplayNames[methodKey] || methodKey}</TableCell>
-                            {getAllYears(optimizationResult).map(year => {
-                              // We already checked that methodData.rolling_betas exists above,
-                              // but TypeScript still needs the optional chaining operator
-                              const beta = methodData.rolling_betas?.[year];
-                              return (
-                                <TableCell 
-                                  key={`${methodKey}-${year}`} 
-                                  align="right"
-                                >
-                                  {beta !== undefined ? beta.toFixed(3) : 'N/A'}
-                                </TableCell>
-                              );
-                            })}
-                          </TableRow>
-                        );
-                      })}
                     </TableBody>
                   </Table>
                 </div>
