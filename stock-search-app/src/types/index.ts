@@ -80,6 +80,11 @@ export interface OptimizationResult {
     returns_dist?: string;
     max_drawdown_plot?: string;
     
+    // Additional visualization plots
+    efficient_frontier_img?: string;
+    weights_plot?: string;
+    dendrogram_plot?: string;
+    
     // Yearly rolling betas - Note: JSON serializes the Python int keys as strings
     rolling_betas?: { [year: string]: number };
 }

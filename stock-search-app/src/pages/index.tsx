@@ -1214,7 +1214,258 @@ const HomePage: React.FC = () => {
               </Button>
             </Box>
             
-            {/* Rest of the results display code... */}
+            {/* Method Cards */}
+            {Object.entries(optimizationResult.results).map(([methodKey, methodData], index) => {
+              if (!methodData) return null;
+              
+              // Get display name for the method
+              const displayName = algoDisplayNames[methodKey] || methodKey;
+              
+              return (
+                <Card 
+                  key={methodKey} 
+                  id={`method-card-${methodKey}`}
+                  data-method-key={methodKey}
+                  className="method-card"
+                  sx={{ 
+                    mb: 4, 
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+                    border: '1px solid #f0f0f0'
+                  }}
+                >
+                  <CardContent>
+                    <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, color: '#1e293b' }}>
+                      {displayName}
+                    </Typography>
+                    
+                    <Grid container spacing={3}>
+                      {/* Weights Section */}
+                      <Grid item xs={12} md={6}>
+                        <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                          Portfolio Weights
+                        </Typography>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Stock</TableCell>
+                              <TableCell align="right">Weight (%)</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {methodData.weights && Object.entries(methodData.weights).map(([ticker, weight]) => (
+                              <TableRow key={ticker}>
+                                <TableCell>{ticker}</TableCell>
+                                <TableCell align="right">{(weight * 100).toFixed(2)}%</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </Grid>
+                      
+                      {/* Performance Metrics */}
+                      <Grid item xs={12} md={6}>
+                        <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                          Performance Metrics
+                        </Typography>
+                        <Table size="small">
+                          <TableBody>
+                            {methodData.performance && (
+                              <>
+                                <TableRow>
+                                  <TableCell>Expected Return</TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.expected_return)}>
+                                    {(methodData.performance.expected_return * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Volatility</TableCell>
+                                  <TableCell align="right">
+                                    {(methodData.performance.volatility * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Sharpe Ratio</TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.sharpe.toFixed(3)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Sortino Ratio</TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.sortino.toFixed(3)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Maximum Drawdown</TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.max_drawdown)}>
+                                    {(methodData.performance.max_drawdown * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>CAGR</TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.cagr)}>
+                                    {(methodData.performance.cagr * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Portfolio Beta</TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.portfolio_beta.toFixed(3)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Portfolio Alpha</TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.portfolio_alpha)}>
+                                    {(methodData.performance.portfolio_alpha * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                              </>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </Grid>
+                    </Grid>
+                    
+                    {/* Portfolio Visualizations */}
+                    {methodData.efficient_frontier_img && (
+                      <Box mt={4}>
+                        <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                          Efficient Frontier
+                        </Typography>
+                        <ImageComponent base64String={methodData.efficient_frontier_img} altText="Efficient Frontier" />
+                      </Box>
+                    )}
+                    
+                    {methodData.weights_plot && (
+                      <Box mt={4}>
+                        <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                          Portfolio Weights Visualization
+                        </Typography>
+                        <ImageComponent base64String={methodData.weights_plot} altText="Portfolio Weights" />
+                      </Box>
+                    )}
+                    
+                    {methodData.dendrogram_plot && (
+                      <Box mt={4}>
+                        <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                          Hierarchical Clustering Dendrogram
+                        </Typography>
+                        <ImageComponent base64String={methodData.dendrogram_plot} altText="Hierarchical Clustering" />
+                      </Box>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+            
+            {/* Cumulative Returns Chart */}
+            {optimizationResult.dates && optimizationResult.cumulative_returns && (
+              <div id="cumulative-returns-chart" style={{ marginTop: '2rem' }}>
+                <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
+                  Cumulative Returns Over Time
+                </Typography>
+                <div style={{ height: '400px' }}>
+                  <Line 
+                    data={prepareChartData(optimizationResult)} 
+                    options={chartOptions} 
+                    height={undefined}
+                    width={undefined}
+                  />
+                </div>
+              </div>
+            )}
+            
+            {/* Yearly Returns Table */}
+            {optimizationResult.stock_yearly_returns && Object.keys(optimizationResult.stock_yearly_returns).length > 0 && (
+              <div className="yearly-returns-section" style={{ marginTop: '2rem' }}>
+                <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
+                  Yearly Stock Returns
+                </Typography>
+                <div style={{ overflowX: 'auto' }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Stock</TableCell>
+                        {allYears.map(year => (
+                          <TableCell key={year} align="right">{year}</TableCell>
+                        ))}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {Object.entries(optimizationResult.stock_yearly_returns).map(([ticker, yearData]) => (
+                        <TableRow key={ticker}>
+                          <TableCell>{ticker}</TableCell>
+                          {allYears.map(year => {
+                            const returnValue = yearData[year];
+                            return (
+                              <TableCell 
+                                key={`${ticker}-${year}`} 
+                                align="right"
+                                style={getReturnCellStyle(returnValue)}
+                              >
+                                {returnValue !== undefined ? `${(returnValue * 100).toFixed(2)}%` : 'N/A'}
+                              </TableCell>
+                            );
+                          })}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+            
+            {/* Rolling Betas */}
+            {optimizationResult.results && Object.values(optimizationResult.results).some(method => method && method.rolling_betas) && (
+              <div style={{ marginTop: '2rem' }}>
+                <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
+                  Rolling Betas by Year
+                </Typography>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Method</TableCell>
+                      {getAllYears(optimizationResult).map(year => (
+                        <TableCell key={year} align="right">{year}</TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {Object.entries(optimizationResult.results).map(([methodKey, methodData]) => {
+                      if (!methodData || !methodData.rolling_betas) return null;
+                      
+                      return (
+                        <TableRow key={methodKey}>
+                          <TableCell>{algoDisplayNames[methodKey] || methodKey}</TableCell>
+                          {getAllYears(optimizationResult).map(year => {
+                            // We already checked that methodData.rolling_betas exists
+                            const beta = methodData.rolling_betas?.[year];
+                            return (
+                              <TableCell 
+                                key={`${methodKey}-${year}`} 
+                                align="right"
+                              >
+                                {beta !== undefined ? beta.toFixed(3) : 'N/A'}
+                              </TableCell>
+                            );
+                          })}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+            
+            {/* Covariance Heatmap */}
+            {optimizationResult.covariance_heatmap && (
+              <div style={{ marginTop: '2rem' }}>
+                <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
+                  Variance-Covariance Matrix
+                </Typography>
+                <ImageComponent base64String={optimizationResult.covariance_heatmap} altText="Covariance Heatmap" />
+              </div>
+            )}
           </div>
         )
       )}
