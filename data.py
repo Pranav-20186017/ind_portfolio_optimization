@@ -48,6 +48,9 @@ class OptimizationMethod(str, Enum):
     HRP = "HRP"  # New HRP optimization method
     MIN_CVAR = "MinCVaR"
     MIN_CDAR = "MinCDaR"
+    HERC = "HERC"  # Hierarchical Equal Risk Contribution
+    NCO = "NCO"    # Nested Clustered Optimization
+    HERC2 = "HERC2"  # Another variant of HERC
 
 # New enum for CLA sub-methods
 class CLAOptimizationMethod(str, Enum):

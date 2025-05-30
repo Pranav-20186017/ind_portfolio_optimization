@@ -7,7 +7,7 @@ import warnings
 import logging
 import time
 from datetime import datetime
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock, mock_open, ANY
 from pathlib import Path
 import math
 
@@ -31,6 +31,10 @@ settings_module = MagicMock()
 settings_module.settings = MockSettings()
 sys.modules['settings'] = settings_module
 
+# Mock riskfolio-lib module
+riskfolio_mock = MagicMock()
+sys.modules['riskfolio'] = riskfolio_mock
+
 # Import the functions and classes from srv.py
 from srv import (
     format_tickers, fetch_and_align_data, freedman_diaconis_bins,
@@ -41,7 +45,10 @@ from srv import (
     OptimizationMethod, CLAOptimizationMethod, StockItem, ExchangeEnum,
     APIError, Benchmarks, BenchmarkName, BenchmarkReturn,
     TickerRequest, PortfolioOptimizationResponse, risk_free_rate_manager,
-    sanitize_bse_prices
+    sanitize_bse_prices, run_optimization_HERC, run_optimization_NCO, run_optimization_HERC2,
+    app, optimize_portfolio, finalize_portfolio, run_in_threadpool,
+    _original_fetch_and_align_data, _original_run_optimization_HERC, _original_run_optimization_NCO, _original_run_optimization_HERC2,
+    _original_compute_yearly_returns_stocks, _original_generate_covariance_heatmap
 )
 
 # Suppress warnings for cleaner test output
@@ -690,6 +697,133 @@ class TestPortfolioOptimization(unittest.TestCase):
         weights_sum = sum(result.weights.values())
         self.assertAlmostEqual(weights_sum, 1.0, places=2)
 
+    def test_run_optimization_herc(self):
+        """Test run_optimization_HERC method."""
+        # Setup mock for HCPortfolio and its optimization method
+        port_mock = MagicMock()
+        # Mock the weights returned from optimization
+        weights_df = pd.DataFrame(
+            {'weights': [0.3, 0.3, 0.4]},
+            index=self.returns.columns
+        )
+        port_mock.optimization.return_value = weights_df
+        
+        # Mock the HCPortfolio constructor to return our mock
+        riskfolio_mock.HCPortfolio.return_value = port_mock
+        
+        # Test HERC with updated signature (no covariance matrix parameter)
+        result, cum_returns = run_optimization_HERC(
+            self.returns, self.nifty_returns
+        )
+        
+        # Check that the HCPortfolio constructor was called with returns
+        riskfolio_mock.HCPortfolio.assert_called_once_with(returns=self.returns)
+        
+        # Check that optimization was called with expected parameters
+        port_mock.optimization.assert_called_once()
+        call_args = port_mock.optimization.call_args[1]
+        self.assertEqual(call_args['model'], 'HERC')  # Changed from 'assets' to 'HERC'
+        self.assertEqual(call_args['codependence'], 'pearson')
+        self.assertEqual(call_args['rm'], 'MV')
+        self.assertEqual(call_args['linkage'], 'ward')  # Changed from 'single' to 'ward'
+        self.assertEqual(call_args['method_cov'], 'hist')
+        self.assertEqual(call_args['method_mu'], 'hist')  # Added method_mu check
+        
+        # Check result is not None
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(cum_returns)
+        
+        # Check weights sum to approximately 1
+        weights_sum = sum(result.weights.values())
+        self.assertAlmostEqual(weights_sum, 1.0, places=2)
+
+    def test_run_optimization_nco(self):
+        """Test run_optimization_NCO method."""
+        # Reset mock for HCPortfolio
+        riskfolio_mock.reset_mock()
+        
+        # Setup mock for HCPortfolio and its optimization method
+        port_mock = MagicMock()
+        # Mock the weights returned from optimization
+        weights_df = pd.DataFrame(
+            {'weights': [0.25, 0.25, 0.5]},
+            index=self.returns.columns
+        )
+        port_mock.optimization.return_value = weights_df
+        
+        # Mock the HCPortfolio constructor to return our mock
+        riskfolio_mock.HCPortfolio.return_value = port_mock
+        
+        # Test NCO with updated signature (no mu, no cov_matrix)
+        result, cum_returns = run_optimization_NCO(
+            self.returns, self.nifty_returns
+        )
+        
+        # Check that the HCPortfolio constructor was called with returns
+        riskfolio_mock.HCPortfolio.assert_called_once_with(returns=self.returns)
+        
+        # Check that optimization was called with expected parameters
+        port_mock.optimization.assert_called_once()
+        call_args = port_mock.optimization.call_args[1]
+        self.assertEqual(call_args['model'], 'NCO')
+        self.assertEqual(call_args['codependence'], 'pearson')
+        self.assertEqual(call_args['obj'], 'MinRisk')
+        self.assertEqual(call_args['rm'], 'MV')
+        self.assertEqual(call_args['linkage'], 'ward')
+        self.assertEqual(call_args['method_mu'], 'hist')  # Check the new parameter
+        self.assertEqual(call_args['method_cov'], 'hist')  # Check the new parameter
+        
+        # Check result is not None
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(cum_returns)
+        
+        # Check weights sum to approximately 1
+        weights_sum = sum(result.weights.values())
+        self.assertAlmostEqual(weights_sum, 1.0, places=2)
+
+    def test_run_optimization_herc2(self):
+        """Test run_optimization_HERC2 method."""
+        # Reset mock for HCPortfolio
+        riskfolio_mock.reset_mock()
+        
+        # Setup mock for HCPortfolio and its optimization method
+        port_mock = MagicMock()
+        # Mock the weights returned from optimization
+        weights_df = pd.DataFrame(
+            {'weights': [0.2, 0.3, 0.5]},
+            index=self.returns.columns
+        )
+        port_mock.optimization.return_value = weights_df
+        
+        # Mock the HCPortfolio constructor to return our mock
+        riskfolio_mock.HCPortfolio.return_value = port_mock
+        
+        # Test HERC2 with updated signature (no cov_matrix)
+        result, cum_returns = run_optimization_HERC2(
+            self.returns, self.nifty_returns
+        )
+        
+        # Check that the HCPortfolio constructor was called with returns
+        riskfolio_mock.HCPortfolio.assert_called_once_with(returns=self.returns)
+        
+        # Check that optimization was called with expected parameters
+        port_mock.optimization.assert_called_once()
+        call_args = port_mock.optimization.call_args[1]
+        self.assertEqual(call_args['model'], 'HERC2')  # This is the key difference for HERC2
+        self.assertEqual(call_args['codependence'], 'pearson')
+        self.assertEqual(call_args['rm'], 'MV')
+        self.assertEqual(call_args['linkage'], 'ward')
+        self.assertEqual(call_args['method_cov'], 'hist')  # Check the new parameter
+        self.assertEqual(call_args['method_mu'], 'hist')  # Check the new parameter
+        
+        # Check result is not None
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(cum_returns)
+        
+        # Check weights sum to approximately 1
+        weights_sum = sum(result.weights.values())
+        self.assertAlmostEqual(weights_sum, 1.0, places=2)
+
     @patch('srv.http_get')
     def test_get_risk_free_rate(self, mock_http_get):
         """Test risk_free_rate_manager.fetch_and_set function with mocked API response."""
@@ -1178,6 +1312,144 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertIn('coskewness', tiny_metrics)
         self.assertIn('cokurtosis', tiny_metrics)
         self.assertIn('garch_beta', tiny_metrics)
+
+    def test_portfolio_optimization_with_new_methods(self):
+        """Test portfolio optimization with HERC, NCO, and HERC2 methods."""
+        from srv import app, optimize_portfolio
+        
+        # Create a TickerRequest with the new methods
+        request = TickerRequest(
+            stocks=[
+                StockItem(ticker="STOCK1", exchange=ExchangeEnum.NSE),
+                StockItem(ticker="STOCK2", exchange=ExchangeEnum.NSE),
+                StockItem(ticker="STOCK3", exchange=ExchangeEnum.NSE)
+            ],
+            methods=[
+                OptimizationMethod.HERC,
+                OptimizationMethod.NCO,
+                OptimizationMethod.HERC2
+            ]
+        )
+        
+        # Setup mocks for fetch_and_align_data and run_in_threadpool
+        with patch('srv.fetch_and_align_data') as mock_fetch:
+            with patch('srv.run_in_threadpool') as mock_run:
+                # Mock fetch_and_align_data to return our test data
+                mock_fetch.return_value = (self.df, self.nifty_df)
+                
+                # Mock run_in_threadpool to simulate successful execution
+                async def mock_thread(func, *args, **kwargs):
+                    # Import the functions we need to check (both original and current)
+                    from srv import (
+                        fetch_and_align_data, 
+                        run_optimization_HERC, 
+                        run_optimization_NCO, 
+                        run_optimization_HERC2,
+                        compute_yearly_returns_stocks,
+                        generate_covariance_heatmap,
+                        _original_fetch_and_align_data,
+                        _original_run_optimization_HERC,
+                        _original_run_optimization_NCO,
+                        _original_run_optimization_HERC2,
+                        _original_compute_yearly_returns_stocks,
+                        _original_generate_covariance_heatmap
+                    )
+                    
+                    # Special case for fetch_and_align_data
+                    if func is fetch_and_align_data or func is _original_fetch_and_align_data:
+                        return self.df, self.nifty_df
+                    
+                    # Handle local functions by checking function names
+                    func_name = getattr(func, '__name__', str(func))
+                    
+                    # Handle calc_expected_returns (local function)
+                    if func_name == 'calc_expected_returns':
+                        # Return mock expected returns
+                        return self.mu
+                        
+                    # Handle calc_covariance (local function)
+                    if func_name == 'calc_covariance':
+                        # Return mock covariance matrix
+                        return self.S
+                        
+                    # Handle compute_yearly_returns_stocks
+                    if (func is compute_yearly_returns_stocks or 
+                        func is _original_compute_yearly_returns_stocks or 
+                        func_name == 'compute_yearly_returns_stocks'):
+                        # Return mock yearly returns data
+                        return {
+                            'STOCK1.NS': {'2020': 0.12, '2021': 0.08},
+                            'STOCK2.NS': {'2020': 0.15, '2021': 0.10},
+                            'STOCK3.NS': {'2020': 0.10, '2021': 0.05}
+                        }
+                        
+                    # Handle generate_covariance_heatmap
+                    if (func is generate_covariance_heatmap or 
+                        func is _original_generate_covariance_heatmap or 
+                        func_name == 'generate_covariance_heatmap'):
+                        # Return mock base64 string
+                        return "mock_base64_heatmap_data"
+                    
+                    # For optimization functions
+                    weights = {
+                        'STOCK1.NS': 0.3,
+                        'STOCK2.NS': 0.3,
+                        'STOCK3.NS': 0.4
+                    }
+                    
+                    # Determine which method we're using based on the function object
+                    if func is run_optimization_HERC or func is _original_run_optimization_HERC:
+                        method_str = "HERC"
+                    elif func is run_optimization_NCO or func is _original_run_optimization_NCO:
+                        method_str = "NCO"
+                    elif func is run_optimization_HERC2 or func is _original_run_optimization_HERC2:
+                        method_str = "HERC2"
+                    else:
+                        method_str = "Unknown"
+                    
+                    # Use finalize_portfolio to create a valid result
+                    return await run_in_threadpool(
+                        finalize_portfolio,
+                        method=method_str,
+                        weights=weights,
+                        returns=self.returns,
+                        benchmark_df=self.nifty_returns,
+                        risk_free_rate=0.05
+                    )
+                
+                mock_run.side_effect = mock_thread
+                
+                # Run the function
+                import asyncio
+                result = asyncio.run(optimize_portfolio(request))
+                
+                # Check that result has all methods
+                self.assertIn('HERC', result['results'])
+                self.assertIn('NCO', result['results'])
+                self.assertIn('HERC2', result['results'])
+                
+                # Check that run_in_threadpool was called multiple times for various functions
+                self.assertGreaterEqual(mock_run.call_count, 5)
+                
+                # Check that appropriate functions were called with correct arguments
+                # fetch_and_align_data is called with (formatted_tickers, benchmark_ticker, sanitize_bse)
+                mock_run.assert_any_call(_original_fetch_and_align_data, ANY, ANY, ANY)
+                
+                # The optimization functions are called with different argument patterns
+                # HERC: (returns, benchmark_df, risk_free_rate)  
+                mock_run.assert_any_call(_original_run_optimization_HERC, ANY, ANY, ANY)
+                
+                # NCO: (returns, benchmark_df, risk_free_rate) + keyword args (linkage, obj, rm, method_mu, method_cov)
+                # Check if NCO was called (might be positional + keyword args)
+                nco_found = False
+                for call in mock_run.call_args_list:
+                    if call[0][0] is _original_run_optimization_NCO:
+                        nco_found = True
+                        break
+                self.assertTrue(nco_found, "NCO optimization function was not called")
+                
+                # HERC2: (returns, benchmark_df, risk_free_rate)
+                mock_run.assert_any_call(_original_run_optimization_HERC2, ANY, ANY, ANY)
 
 if __name__ == '__main__':
     unittest.main() 

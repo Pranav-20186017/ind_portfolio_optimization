@@ -78,9 +78,11 @@ const algorithmOptions = [
   { label: 'Equally Weighted', value: 'EquiWeighted' },
   { label: 'Critical Line Algorithm', value: 'CriticalLineAlgorithm' },
   { label: 'Hierarchical Risk Parity (HRP)', value: 'HRP' },
+  { label: 'Hierarchical Equal Risk Contribution (HERC)', value: 'HERC' },
+  { label: 'Nested Clustered Optimization (NCO)', value: 'NCO' },
+  { label: 'Hierarchical Equal Risk Contribution 2 (HERC2)', value: 'HERC2' },
   { label: 'Minimum Conditional Value at Risk (CVaR)', value: 'MinCVaR' },
   { label: 'Minimum Conditional Drawdown at Risk (CDaR)', value: 'MinCDaR' },
-  
 ];
 
 // Mapping for descriptive headings in the results section
@@ -92,6 +94,9 @@ const algoDisplayNames: { [key: string]: string } = {
   CriticalLineAlgorithm_MVO: "Critical Line Algorithm (Mean-Variance Optimization)",
   CriticalLineAlgorithm_MinVol: "Critical Line Algorithm (Minimum Volatility)",
   HRP: "Hierarchical Risk Parity (HRP)",
+  HERC: "Hierarchical Equal Risk Contribution (HERC)",
+  NCO: "Nested Clustered Optimization (NCO)", 
+  HERC2: "Hierarchical Equal Risk Contribution 2 (HERC2)",
   MinCVaR: "Minimum Conditional Value at Risk (CVaR)",
   MinCDaR: "Minimum Conditional Drawdown at Risk (CDaR)"
 };
@@ -466,6 +471,15 @@ const HomePage: React.FC = () => {
     if (res.cumulative_returns.HRP?.length) {
       datasets.push({ label: 'Hierarchical Risk Parity (HRP)', data: res.cumulative_returns.HRP, borderColor: 'brown', fill: false, pointRadius: 0, borderWidth: 1.5 });
     }
+    if (res.cumulative_returns.HERC?.length) {
+      datasets.push({ label: 'Hierarchical Equal Risk Contribution (HERC)', data: res.cumulative_returns.HERC, borderColor: '#FF6B35', fill: false, pointRadius: 0, borderWidth: 1.5 });
+    }
+    if (res.cumulative_returns.NCO?.length) {
+      datasets.push({ label: 'Nested Clustered Optimization (NCO)', data: res.cumulative_returns.NCO, borderColor: '#2E8B57', fill: false, pointRadius: 0, borderWidth: 1.5 });
+    }
+    if (res.cumulative_returns.HERC2?.length) {
+      datasets.push({ label: 'Hierarchical Equal Risk Contribution 2 (HERC2)', data: res.cumulative_returns.HERC2, borderColor: '#8A2BE2', fill: false, pointRadius: 0, borderWidth: 1.5 });
+    }
     if (res.cumulative_returns.MinCVaR?.length) {
       datasets.push({ label: 'Minimum Conditional VaR (MCVar)', data: res.cumulative_returns.MinCVaR, borderColor: 'cyan', fill: false, pointRadius: 0, borderWidth: 1.5 });
     }
@@ -797,6 +811,9 @@ const HomePage: React.FC = () => {
     'CriticalLineAlgorithm_MVO': 'rgba(54, 162, 235, 1)',
     'CriticalLineAlgorithm_MinVol': 'rgba(255, 206, 86, 1)',
     HRP: 'rgba(75, 192, 75, 1)',
+    HERC: 'rgba(255, 107, 53, 1)',  // Orange-red
+    NCO: 'rgba(46, 139, 87, 1)',    // Sea green
+    HERC2: 'rgba(138, 43, 226, 1)', // Blue violet
     MinCVaR: 'rgba(255, 99, 255, 1)',
     MinCDaR: 'rgba(199, 99, 132, 1)'
   };

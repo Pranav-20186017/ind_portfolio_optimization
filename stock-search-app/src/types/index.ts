@@ -123,6 +123,9 @@ export enum OptimizationMethod {
   EquiWeighted = "EquiWeighted",
   CriticalLineAlgorithm = "CriticalLineAlgorithm",
   HRP = "HRP",
+  HERC = "HERC",
+  NCO = "NCO",
+  HERC2 = "HERC2",
   MinCVaR = "MinCVaR",
   MinCDaR = "MinCDaR"
 }

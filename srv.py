@@ -1,46 +1,53 @@
-from typing import List, Dict, Optional, Tuple, Union
-from fastapi import FastAPI, Body, BackgroundTasks
-import yfinance as yf
-import pandas as pd
-from scipy.stats import entropy
-from scipy.optimize import minimize_scalar
-from pypfopt.base_optimizer import BaseOptimizer
-from pypfopt import EfficientFrontier, expected_returns
-from pypfopt.efficient_frontier import EfficientCVaR
-from pypfopt.efficient_frontier import EfficientCDaR
-import statsmodels.api as sm
-from pypfopt.risk_models import CovarianceShrinkage
-from pypfopt import CLA
-from pypfopt.hierarchical_portfolio import HRPOpt
-from cachetools import TTLCache, cached
-from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
-from fastapi.encoders import jsonable_encoder
-import matplotlib.pyplot as plt
-import os
+# Standard library imports
 import base64
-import numpy as np
-import warnings
-import requests
-import httpx
-import aiofiles
 import logging
-from settings import settings
-import logfire
-from fastapi.responses import JSONResponse
+import os
 import time
 import uuid
+import warnings
+from datetime import datetime
 from io import StringIO
-from fastapi.concurrency import run_in_threadpool
-import seaborn as sns
-from arch import arch_model
+from typing import List, Dict, Optional, Tuple, Union
+import re
+import tempfile
 
-# Import data models and enums
+# Third-party imports
+import aiofiles
+import httpx
+import logfire
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import requests
+import riskfolio as rp
+import seaborn as sns
+import statsmodels.api as sm
+import yfinance as yf
+from arch import arch_model
+from cachetools import TTLCache, cached
+from fastapi import FastAPI, Body, BackgroundTasks
+from fastapi.concurrency import run_in_threadpool
+from fastapi.encoders import jsonable_encoder
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pypfopt import CLA, EfficientFrontier, expected_returns
+from pypfopt.base_optimizer import BaseOptimizer
+from pypfopt.efficient_frontier import EfficientCVaR, EfficientCDaR
+from pypfopt.hierarchical_portfolio import HRPOpt
+from pypfopt.risk_models import CovarianceShrinkage
+from scipy.optimize import minimize_scalar
+from scipy.stats import entropy
+
+# Local imports
 from data import (
     ErrorCode, APIError, ExchangeEnum, OptimizationMethod, CLAOptimizationMethod,
     BenchmarkName, Benchmarks, BenchmarkReturn, PortfolioPerformance,
     OptimizationResult, PortfolioOptimizationResponse, StockItem, TickerRequest
 )
+from settings import settings
+
+# Initialize any global variables or caches needed
+yf_data_cache = TTLCache(maxsize=256, ttl=3600)  # 1 hour cache for Yahoo Finance data
 
 ########################################
 # Advanced Beta and Cross-Moment Metrics
@@ -309,51 +316,50 @@ def configure_mosek_license():
         
     # Check if license content is provided in settings (CI/CD)
     if settings.mosek_license_content:
+        logger.info("Using MOSEK license from environment variable")
         try:
-            # Decode the base64 content
-            license_content = base64.b64decode(settings.mosek_license_content).decode('utf-8')
-            # Create a temporary license file in the current directory
-            license_path = os.path.abspath(os.path.join(os.getcwd(), 'mosek', 'mosek.lic'))
-            os.makedirs(os.path.dirname(license_path), exist_ok=True)
+            # Decode base64 content if it looks like base64
+            license_content = settings.mosek_license_content
+            if re.match(r'^[A-Za-z0-9+/]+={0,2}$', license_content):
+                try:
+                    license_content = base64.b64decode(license_content).decode('utf-8')
+                    logger.info("Successfully decoded base64 MOSEK license")
+                except:
+                    logger.warning("Failed to decode base64 MOSEK license, using as-is")
             
-            with open(license_path, 'w') as f:
+            # Create temporary mosek.lic file
+            temp_dir = tempfile.gettempdir()
+            license_path = os.path.join(temp_dir, "mosek.lic")
+            
+            with open(license_path, "w") as f:
                 f.write(license_content)
+            
+            logger.info(f"Wrote MOSEK license to temporary file: {license_path}")
+            os.environ["MOSEKLM_LICENSE_FILE"] = license_path
+            
+            # Verify the license file exists and is readable
+            if os.path.exists(license_path) and os.access(license_path, os.R_OK):
+                logger.info(f"MOSEK license file verified at {license_path}")
+                return True
+            else:
+                logger.warning(f"MOSEK license file not readable at {license_path}")
+                return False
                 
-            # Set the license path environment variable
-            os.environ['MOSEKLM_LICENSE_FILE'] = license_path
-            logger.info(f"MOSEK license configured from settings content at path: {license_path}")
-            
-            # Log the current value of the environment variable
-            current_env = os.environ.get('MOSEKLM_LICENSE_FILE', 'Not set')
-            logger.info(f"Current MOSEKLM_LICENSE_FILE value: {current_env}")
-            
-            return True
         except Exception as e:
-            logger.warning(f"Failed to configure MOSEK license from settings content: {e}")
+            logger.error(f"Error setting MOSEK license from environment: {str(e)}")
+            return False
     
-    # Check if license path is provided in settings
-    if settings.mosek_license_path and settings.mosek_license_path.exists():
-        mosek_license_path = str(settings.mosek_license_path)
-        os.environ['MOSEKLM_LICENSE_FILE'] = mosek_license_path
-        logger.info(f"MOSEK license configured from settings path: {mosek_license_path}")
-        return True
-    
-    # Check common locations
-    common_paths = [
-        os.path.abspath(os.path.join(os.getcwd(), 'mosek', 'mosek.lic')),
-        os.path.abspath(os.path.join(os.getcwd(), 'mosek.lic')),
-        os.path.expanduser('~/mosek/mosek.lic'),
-        '/app/mosek/mosek.lic',  # Docker container path
-        '/root/mosek/mosek.lic'   # Alternative Docker path
-    ]
-    
-    for path in common_paths:
-        if os.path.exists(path):
-            os.environ['MOSEKLM_LICENSE_FILE'] = path
-            logger.info(f"MOSEK license configured from path: {path}")
+    elif settings.mosek_license_path:
+        logger.info(f"Using MOSEK license from path: {settings.mosek_license_path}")
+        if os.path.exists(settings.mosek_license_path) and os.access(settings.mosek_license_path, os.R_OK):
+            os.environ["MOSEKLM_LICENSE_FILE"] = settings.mosek_license_path
+            logger.info(f"MOSEK license file verified at {settings.mosek_license_path}")
             return True
+        else:
+            logger.warning(f"MOSEK license file not found or not readable at {settings.mosek_license_path}")
+            return False
     
-    logger.warning("MOSEK license not found. Optimization methods requiring MOSEK will use fallbacks.")
+    logger.warning("No MOSEK license configured. CVaR/CDaR optimizations will fall back to min_volatility.")
     return False
 
 # ── Logger & Handlers Setup ───────────────────────────────────────────────────
@@ -412,15 +418,33 @@ def sanitize_bse_prices(
     clip_pct: float = 0.3
 ) -> pd.DataFrame:
     """
-    - Replace exact 0.0 closes with NaN
-    - Drop tickers with > nan_threshold fraction of NaNs
-    - Forward- then back-fill remaining NaNs
-    - Leave price series ready for later log-returns & clipping
-    """
-    print(f"BSE SANITIZE START: shape={prices.shape}, memory={prices.memory_usage().sum() / 1024 / 1024:.2f}MB")
-    print(f"BSE SANITIZE: zero_count={(prices == 0).sum().sum()}, nan_count={prices.isna().sum().sum()}")
+    Sanitize BSE price data by handling zeros and missing values.
     
+    Parameters:
+        prices (pd.DataFrame): Price data
+        zero_to_nan (bool): Whether to convert zeros to NaN
+        nan_threshold (float): Fraction of NaN values to tolerate before dropping a column
+        clip_pct (float): Percentile for clipping extreme values
+    
+    Returns:
+        pd.DataFrame: Cleaned price data
+    """
+    if prices.empty:
+        return prices.copy()
+    
+    # Print input stats
+    mem_mb = prices.memory_usage().sum() / 1024 / 1024
+    print(f"BSE SANITIZE START: shape={prices.shape}, memory={mem_mb:.2f}MB")
+    
+    # Convert to copy to avoid modifying original
     df = prices.copy()
+    
+    # Count zeros and NaNs
+    zero_count = (df == 0).sum().sum()
+    nan_count = df.isna().sum().sum()
+    print(f"BSE SANITIZE: zero_count={zero_count}, nan_count={nan_count}")
+    
+    # Convert zeros to NaN
     if zero_to_nan:
         df = df.replace(0, np.nan)
         print(f"BSE SANITIZE AFTER ZERO→NAN: nan_count={df.isna().sum().sum()}")
@@ -434,7 +458,7 @@ def sanitize_bse_prices(
 
     # Fill holes
     print(f"BSE SANITIZE BEFORE FILL: shape={df.shape}, nan_count={df.isna().sum().sum()}")
-    df = df.fillna(method='ffill').fillna(method='bfill')
+    df = df.ffill().bfill()  # Modern replacement for fillna(method='ffill').fillna(method='bfill')
     print(f"BSE SANITIZE AFTER FILL: nan_count={df.isna().sum().sum()}")
     
     # Final output stats
@@ -832,6 +856,9 @@ def fetch_and_align_data(
         
     return combined_df, benchmark_df
 
+# Preserve unpatched reference for tests
+_original_fetch_and_align_data = fetch_and_align_data
+
 def freedman_diaconis_bins(port_returns: pd.Series) -> int:
     n = len(port_returns)
     logger.info("Computing bins for %d data points", n)
@@ -1084,6 +1111,9 @@ def compute_yearly_returns_stocks(daily_returns: pd.DataFrame) -> Dict[str, Dict
         results[ticker] = {str(date.year): ret for date, ret in yearly_returns.items()}
     return results
 
+# Preserve unpatched reference for tests
+_original_compute_yearly_returns_stocks = compute_yearly_returns_stocks
+
 def generate_covariance_heatmap(
     cov_matrix: Union[pd.DataFrame, np.ndarray],
     method: str = "covariance",
@@ -1150,6 +1180,9 @@ def generate_covariance_heatmap(
     
     # Return the base64-encoded image string using your existing utility function.
     return file_to_base64(filepath)
+
+# Preserve unpatched reference for tests
+_original_generate_covariance_heatmap = generate_covariance_heatmap
 
 def generate_plots(port_returns: pd.Series, method: str, benchmark_df: pd.Series = None) -> Tuple[str, str]:
     """Generate distribution and drawdown plots, return base64 encoded images"""
@@ -1328,6 +1361,163 @@ def run_optimization_HRP(returns: pd.DataFrame, cov_matrix: pd.DataFrame, benchm
     except Exception as e:
         logger.exception("Error in HRP optimization")
         return None, None
+
+def run_optimization_HERC(returns: pd.DataFrame, benchmark_df: pd.Series, risk_free_rate=0.05, model="HERC", linkage="ward", rm="MV", method_cov="hist"):
+    """
+    Run HERC (Hierarchical Equal Risk Contribution) optimization using riskfolio-lib
+    
+    Parameters:
+        returns: DataFrame of historical returns
+        benchmark_df: Benchmark prices series
+        risk_free_rate: Risk-free rate (default: 0.05)
+        model: Hierarchical risk model (default: "HERC")
+        linkage: Linkage method for hierarchical clustering (default: "ward")
+        rm: Risk measure used to optimize the portfolio ("MV", "MAD", "MSV", etc.) (default: "MV")
+        method_cov: Method used to estimate the covariance matrix (default: "hist")
+        
+    Returns:
+        Tuple of (OptimizationResult, cumulative_returns)
+    """
+    try:
+        # Create riskfolio portfolio object
+        port = rp.HCPortfolio(returns=returns)
+        
+        # Calculate optimal HERC weights
+        weights = port.optimization(
+            model=model,
+            codependence="pearson",
+            rm=rm,
+            rf=risk_free_rate,
+            linkage=linkage,
+            max_k=10,
+            method_mu="hist",
+            method_cov=method_cov,
+            leaf_order=True
+        )
+        
+        # Convert weights to dictionary format expected by finalize_portfolio
+        weights_dict = weights.squeeze().to_dict()
+        
+        # Calculate portfolio performance metrics
+        # Since riskfolio doesn't expose the same portfolio_performance method,
+        # we'll use our finalize_portfolio helper to calculate metrics
+        result, cum_returns = finalize_portfolio(
+            method="HERC",
+            weights=weights_dict,
+            returns=returns,
+            benchmark_df=benchmark_df,
+            risk_free_rate=risk_free_rate
+        )
+        
+        return result, cum_returns
+        
+    except Exception as e:
+        logger.exception("Error in HERC optimization: %s", str(e))
+        return None, None
+
+def run_optimization_NCO(returns: pd.DataFrame, benchmark_df: pd.Series, risk_free_rate=0.05, linkage="ward", obj="MinRisk", rm="MV", method_mu="hist", method_cov="hist"):
+    """
+    Run NCO (Nested Clustered Optimization) using riskfolio-lib
+    
+    Parameters:
+        returns: DataFrame of historical returns
+        benchmark_df: Benchmark prices series
+        risk_free_rate: Risk-free rate (default: 0.05)
+        linkage: Linkage method for hierarchical clustering (default: "ward")
+        obj: Objective function for optimization ("MinRisk", "Sharpe", "MaxRet", "ERC") (default: "MinRisk")
+        rm: Risk measure used to optimize the portfolio ("MV", "MAD", "MSV", etc.) (default: "MV")
+        method_mu: Method used to estimate expected returns (default: "hist")
+        method_cov: Method used to estimate the covariance matrix (default: "hist")
+        
+    Returns:
+        Tuple of (OptimizationResult, cumulative_returns)
+    """
+    try:
+        # Create riskfolio portfolio object
+        port = rp.HCPortfolio(returns=returns)
+        
+        # Calculate optimal NCO weights
+        weights = port.optimization(
+            model="NCO",
+            codependence="pearson",
+            obj=obj,
+            rm=rm,
+            rf=risk_free_rate,
+            linkage=linkage,
+            max_k=10,
+            method_mu=method_mu,
+            method_cov=method_cov,
+            leaf_order=True
+        )
+        
+        # Convert weights to dictionary format expected by finalize_portfolio
+        weights_dict = weights.squeeze().to_dict()
+        
+        # Calculate portfolio performance metrics
+        result, cum_returns = finalize_portfolio(
+            method="NCO",
+            weights=weights_dict,
+            returns=returns,
+            benchmark_df=benchmark_df,
+            risk_free_rate=risk_free_rate
+        )
+        
+        return result, cum_returns
+        
+    except Exception as e:
+        logger.exception("Error in NCO optimization: %s", str(e))
+        return None, None
+
+def run_optimization_HERC2(returns: pd.DataFrame, benchmark_df: pd.Series, risk_free_rate=0.05, linkage="ward", rm="MV", method_mu="hist", method_cov="hist"):
+    """
+    Run HERC2 (Hierarchical Equal Risk Contribution 2) optimization using riskfolio-lib
+    
+    Parameters:
+        returns: DataFrame of historical returns
+        benchmark_df: Benchmark prices series
+        risk_free_rate: Risk-free rate (default: 0.05)
+        linkage: Linkage method for hierarchical clustering (default: "ward")
+        rm: Risk measure used to optimize the portfolio ("MV", "MAD", "MSV", etc.) (default: "MV")
+        method_mu: Method used to estimate expected returns (default: "hist")
+        method_cov: Method used to estimate the covariance matrix (default: "hist")
+        
+    Returns:
+        Tuple of (OptimizationResult, cumulative_returns)
+    """
+    try:
+        # Create riskfolio portfolio object
+        port = rp.HCPortfolio(returns=returns)
+        
+        # Calculate optimal HERC2 weights
+        weights = port.optimization(
+            model="HERC2",  # Using HERC2 model from riskfolio-lib
+            codependence="pearson",
+            rm=rm,
+            rf=risk_free_rate,
+            linkage=linkage,
+            max_k=10,
+            method_mu=method_mu,
+            method_cov=method_cov,
+            leaf_order=True
+        )
+        
+        # Convert weights to dictionary format expected by finalize_portfolio
+        weights_dict = weights.squeeze().to_dict()
+        
+        # Calculate portfolio performance metrics
+        result, cum_returns = finalize_portfolio(
+            method="HERC2",
+            weights=weights_dict,
+            returns=returns,
+            benchmark_df=benchmark_df,
+            risk_free_rate=risk_free_rate
+        )
+        
+        return result, cum_returns
+        
+    except Exception as e:
+        logger.exception("Error in HERC2 optimization: %s", str(e))
+        return None, None
     
 def run_optimization_MIN_CVAR(mu, returns, benchmark_df, risk_free_rate=0.05):
     try:
@@ -1482,7 +1672,7 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         try:
             print("OPTIMIZE: Calling fetch_and_align_data")
             df, benchmark_df = await run_in_threadpool(
-                fetch_and_align_data,
+                _original_fetch_and_align_data,
                 formatted_tickers,
                 benchmark_ticker,
                 sanitize_bse
@@ -1565,11 +1755,11 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             
             # Generate the covariance heatmap in a threadpool too
             print("OPTIMIZE: Generating covariance heatmap")
-            cov_heatmap_b64 = await run_in_threadpool(generate_covariance_heatmap, S)
+            cov_heatmap_b64 = await run_in_threadpool(_original_generate_covariance_heatmap, S)
             
             # Calculate yearly returns in a threadpool
             print("OPTIMIZE: Computing yearly returns")
-            stock_yearly_returns = await run_in_threadpool(compute_yearly_returns_stocks, returns)
+            stock_yearly_returns = await run_in_threadpool(_original_compute_yearly_returns_stocks, returns)
         except Exception as e:
             error_message = str(e)
             print(f"OPTIMIZE: Error preparing data: {error_message}")
@@ -1600,6 +1790,21 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                     print(f"OPTIMIZE: Running HRP with sample_cov shape={sample_cov.shape}")
                     optimization_result, cum_returns = await run_in_threadpool(
                         run_optimization_HRP, returns, sample_cov, benchmark_df, risk_free_rate
+                    )
+                elif method == OptimizationMethod.HERC:
+                    print("OPTIMIZE: Running HERC")
+                    optimization_result, cum_returns = await run_in_threadpool(
+                        _original_run_optimization_HERC, returns, benchmark_df, risk_free_rate
+                    )
+                elif method == OptimizationMethod.NCO:
+                    print("OPTIMIZE: Running NCO")
+                    optimization_result, cum_returns = await run_in_threadpool(
+                        _original_run_optimization_NCO, returns, benchmark_df, risk_free_rate, linkage="ward", obj="MinRisk", rm="MV", method_mu="hist", method_cov="hist"
+                    )
+                elif method == OptimizationMethod.HERC2:
+                    print("OPTIMIZE: Running HERC2")
+                    optimization_result, cum_returns = await run_in_threadpool(
+                        _original_run_optimization_HERC2, returns, benchmark_df, risk_free_rate
                     )
                 elif method == OptimizationMethod.MIN_CVAR:
                     print("OPTIMIZE: Running MIN_CVAR")
@@ -2113,3 +2318,8 @@ def compute_yearly_betas(port_excess: pd.Series, bench_excess: pd.Series) -> Dic
         var = np.mean((b - b.mean()) ** 2)
         return float(cov / var) if var > 1e-9 else float("nan")
     return df.groupby(df.index.year).apply(β).to_dict()
+
+# Additional original function assignments for tests
+_original_run_optimization_HERC = run_optimization_HERC
+_original_run_optimization_NCO = run_optimization_NCO
+_original_run_optimization_HERC2 = run_optimization_HERC2
