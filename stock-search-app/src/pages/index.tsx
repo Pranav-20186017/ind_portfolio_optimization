@@ -1277,18 +1277,294 @@ const HomePage: React.FC = () => {
                     </Typography>
                     
                     <Grid container spacing={3}>
-                      {/* Weights Section */}
+                      {/* Weights Section - Move to below the metrics */}
+                      
+                      {/* Performance Metrics */}
                       <Grid item xs={12} md={4}>
                         <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                          Portfolio Weights
+                          Performance Metrics
+                        </Typography>
+                        
+                        {/* Primary Metrics */}
+                        <Table size="small">
+                          <TableBody>
+                            {methodData.performance && (
+                              <>
+                                <TableRow>
+                                  <TableCell>Expected Return</TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.expected_return)}>
+                                    {(methodData.performance.expected_return * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Volatility</TableCell>
+                                  <TableCell align="right">
+                                    {(methodData.performance.volatility * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Sharpe Ratio
+                                    <Tooltip title="Sharpe Ratio measures excess return per unit of total volatility. Calculated as (Annualized Return – Risk-Free Rate) / Annualized Volatility.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.sharpe.toFixed(3)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Sortino Ratio
+                                    <Tooltip title="Sortino Ratio measures excess return per unit of downside volatility. Calculated as (Annualized Return – Risk-Free Rate) / Annualized Downside Deviation.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.sortino.toFixed(3)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>Maximum Drawdown</TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.max_drawdown)}>
+                                    {(methodData.performance.max_drawdown * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>CAGR</TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.cagr)}>
+                                    {(methodData.performance.cagr * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Portfolio Beta
+                                    <Tooltip title="Beta is estimated through Ordinary Least Squares (OLS) regression using the Capital Asset Pricing Model (CAPM). The regression equation is: Ri - Rf = α + β(Rm - Rf) + ε, where Ri is the portfolio return, Rf is the risk-free rate, Rm is the market return, and ε is the error term. The coefficient β represents the portfolio's sensitivity to market movements.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.portfolio_beta.toFixed(3)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Portfolio Alpha
+                                    <Tooltip title="Alpha is the portfolio's excess return over what would be predicted by the Capital Asset Pricing Model (CAPM). It represents the portfolio manager's ability to generate returns through security selection rather than market movements. A positive alpha means the portfolio outperformed its benchmark on a risk-adjusted basis, while a negative alpha indicates underperformance.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.portfolio_alpha)}>
+                                    {(methodData.performance.portfolio_alpha * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>R-Squared</TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.r_squared.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>VaR (95%)</TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.var_95)}>
+                                    {(methodData.performance.var_95 * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>CVaR (95%)</TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.cvar_95)}>
+                                    {(methodData.performance.cvar_95 * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Blume Adjusted Beta
+                                    <Tooltip title="Blume Adjusted Beta = 1 + 0.67·(β – 1), which shrinks beta toward 1 to account for historical mean reversion.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.blume_adjusted_beta.toFixed(3)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Treynor Ratio
+                                    <Tooltip title="The Treynor Ratio measures excess return per unit of market risk. It's calculated as (Portfolio Return - Risk-Free Rate) / Portfolio Beta. A higher Treynor Ratio indicates better risk-adjusted performance relative to market risk.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.treynor_ratio.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Information Ratio
+                                    <Tooltip title="The Information Ratio measures the active return divided by the active risk (tracking error). It quantifies the excess return per unit of risk taken relative to the benchmark. Higher values indicate better risk-adjusted active returns.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.information_ratio.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Skewness
+                                    <Tooltip title="Measures asymmetry of the returns distribution. Positive skew indicates a long right tail.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.skewness.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Kurtosis
+                                    <Tooltip title="Measures tail heaviness. High kurtosis indicates fat tails (more extreme outcomes).">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.kurtosis.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Omega Ratio
+                                    <Tooltip title="The Omega Ratio measures the relationship between the probability of gains and losses relative to a threshold (typically the risk-free rate). It's the ratio of the area above the threshold to the area below it in the returns distribution. Higher values indicate better risk-return characteristics.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.omega_ratio.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Calmar Ratio
+                                    <Tooltip title="The Calmar Ratio is the ratio of annualized return to maximum drawdown. It measures the return per unit of downside risk, with higher values indicating better risk-adjusted performance.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.calmar_ratio.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    EVaR (95%)
+                                    <Tooltip title="Entropic Value at Risk (EVaR) uses a Chernoff-bound formulation via the moment-generating function to bound tail losses more tightly than VaR/CVaR. It provides a more conservative risk estimate than traditional VaR measures.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {(methodData.performance.evar_95 * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    DaR (95%)
+                                    <Tooltip title="Drawdown at Risk (DaR) represents the drawdown that won't be exceeded with 95% confidence. It's similar to VaR but for drawdowns instead of returns.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {(methodData.performance.dar_95 * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    CDaR (95%)
+                                    <Tooltip title="Conditional Drawdown at Risk (CDaR) is the expected drawdown when the drawdown exceeds the DaR. It provides insight into the severity of extreme drawdowns.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {(methodData.performance.cdar_95 * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                              </>
+                            )}
+                          </TableBody>
+                        </Table>
+                        
+                        {/* Advanced Beta and Cross-Moment Metrics Section */}
+                        <TableRow>
+                          <TableCell colSpan={2} style={{ backgroundColor: '#f5f5f5' }}>
+                            <Typography variant="subtitle1" style={{ fontWeight: 'bold' }}>
+                              Advanced Beta and Cross-Moment Metrics
+                              <span style={{ 
+                                backgroundColor: '#4caf50', 
+                                color: 'white', 
+                                padding: '2px 6px', 
+                                borderRadius: '4px', 
+                                fontSize: '0.7rem', 
+                                marginLeft: '8px',
+                                fontWeight: 'bold',
+                                verticalAlign: 'middle'
+                              }}>
+                                NEW
+                              </span>
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                        
+                        <Table size="small">
+                          <TableBody>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Welch Beta</strong>
+                                <Tooltip title="A robust alternative to traditional beta that uses winsorization to reduce the impact of extreme returns. It provides a more stable measure of market sensitivity that is less affected by outliers.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell align="right">
+                                {methodData.performance.welch_beta !== undefined ? methodData.performance.welch_beta.toFixed(4) : 'N/A'}
+                              </TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Semi Beta</strong>
+                                <Tooltip title="A downside beta that measures the portfolio's sensitivity to the benchmark only during down markets. Higher values indicate greater correlation with the benchmark during market declines.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell align="right">
+                                {methodData.performance.semi_beta !== undefined ? methodData.performance.semi_beta.toFixed(4) : 'N/A'}
+                              </TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Coskewness</strong>
+                                <Tooltip title="Measures the relationship between portfolio returns and squared market returns. Negative values suggest the portfolio tends to have negative returns when market volatility increases.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell align="right">
+                                {methodData.performance.coskewness !== undefined ? methodData.performance.coskewness.toFixed(4) : 'N/A'}
+                              </TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                <strong>Cokurtosis</strong>
+                                <Tooltip title="Fourth cross-moment measuring the relationship between portfolio returns and extreme market returns. A high positive value indicates portfolio returns amplify extreme market movements.">
+                                  <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell align="right">
+                                {methodData.performance.cokurtosis !== undefined ? methodData.performance.cokurtosis.toFixed(4) : 'N/A'}
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                        
+                        <Typography variant="subtitle1" style={{ marginTop: '1rem', fontWeight: 'bold' }}>
+                          Weights
                         </Typography>
                         <Table size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell>Stock</TableCell>
-                              <TableCell align="right">Weight (%)</TableCell>
-                            </TableRow>
-                          </TableHead>
                           <TableBody>
                             {methodData.weights && Object.entries(methodData.weights).map(([ticker, weight]) => (
                               <TableRow key={ticker}>
@@ -1300,345 +1576,29 @@ const HomePage: React.FC = () => {
                         </Table>
                       </Grid>
                       
-                      {/* Performance Metrics */}
+                      {/* Visualizations - Returns Distribution and Drawdown */}
                       <Grid item xs={12} md={8}>
-                        <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                          Performance Metrics
-                        </Typography>
-                        
-                        {/* Primary Metrics (First Column) */}
-                        <Grid container spacing={2}>
-                          <Grid item xs={12} md={6}>
-                            <Table size="small">
-                              <TableBody>
-                                {methodData.performance && (
-                                  <>
-                                    <TableRow>
-                                      <TableCell>Expected Return</TableCell>
-                                      <TableCell align="right" style={getReturnCellStyle(methodData.performance.expected_return)}>
-                                        {(methodData.performance.expected_return * 100).toFixed(2)}%
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>Volatility</TableCell>
-                                      <TableCell align="right">
-                                        {(methodData.performance.volatility * 100).toFixed(2)}%
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>
-                                        Sharpe Ratio
-                                        <Tooltip title="Sharpe Ratio measures excess return per unit of total volatility. Calculated as (Annualized Return – Risk-Free Rate) / Annualized Volatility.">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {methodData.performance.sharpe.toFixed(3)}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>
-                                        Sortino Ratio
-                                        <Tooltip title="Sortino Ratio measures excess return per unit of downside volatility. Calculated as (Annualized Return – Risk-Free Rate) / Annualized Downside Deviation.">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {methodData.performance.sortino.toFixed(3)}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>Maximum Drawdown</TableCell>
-                                      <TableCell align="right" style={getReturnCellStyle(methodData.performance.max_drawdown)}>
-                                        {(methodData.performance.max_drawdown * 100).toFixed(2)}%
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>CAGR</TableCell>
-                                      <TableCell align="right" style={getReturnCellStyle(methodData.performance.cagr)}>
-                                        {(methodData.performance.cagr * 100).toFixed(2)}%
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>
-                                        Portfolio Beta
-                                        <Tooltip title="Beta is estimated through Ordinary Least Squares (OLS) regression using the Capital Asset Pricing Model (CAPM). The regression equation is: Ri - Rf = α + β(Rm - Rf) + ε, where Ri is the portfolio return, Rf is the risk-free rate, Rm is the market return, and ε is the error term. The coefficient β represents the portfolio's sensitivity to market movements.">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {methodData.performance.portfolio_beta.toFixed(3)}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>
-                                        Portfolio Alpha
-                                        <Tooltip title="Alpha is the portfolio's excess return over what would be predicted by the Capital Asset Pricing Model (CAPM). It represents the portfolio manager's ability to generate returns through security selection rather than market movements. A positive alpha means the portfolio outperformed its benchmark on a risk-adjusted basis, while a negative alpha indicates underperformance.">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right" style={getReturnCellStyle(methodData.performance.portfolio_alpha)}>
-                                        {(methodData.performance.portfolio_alpha * 100).toFixed(2)}%
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>R-Squared</TableCell>
-                                      <TableCell align="right">
-                                        {methodData.performance.r_squared.toFixed(4)}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>VaR (95%)</TableCell>
-                                      <TableCell align="right" style={getReturnCellStyle(methodData.performance.var_95)}>
-                                        {(methodData.performance.var_95 * 100).toFixed(2)}%
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>CVaR (95%)</TableCell>
-                                      <TableCell align="right" style={getReturnCellStyle(methodData.performance.cvar_95)}>
-                                        {(methodData.performance.cvar_95 * 100).toFixed(2)}%
-                                      </TableCell>
-                                    </TableRow>
-                                  </>
-                                )}
-                              </TableBody>
-                            </Table>
-                          </Grid>
-                        
-                          {/* Advanced Metrics (Second Column) */}
-                          <Grid item xs={12} md={6}>
-                            <Table size="small">
-                              <TableBody>
-                                {methodData.performance && (
-                                  <>
-                                    <TableRow>
-                                      <TableCell>
-                                        Blume Adjusted Beta
-                                        <Tooltip title="Blume Adjusted Beta = 1 + 0.67·(β – 1), which shrinks beta toward 1 to account for historical mean reversion.">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {methodData.performance.blume_adjusted_beta.toFixed(3)}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>
-                                        Treynor Ratio
-                                        <Tooltip title="The Treynor Ratio measures excess return per unit of market risk. It's calculated as (Portfolio Return - Risk-Free Rate) / Portfolio Beta. A higher Treynor Ratio indicates better risk-adjusted performance relative to market risk.">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {methodData.performance.treynor_ratio.toFixed(4)}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>
-                                        Information Ratio
-                                        <Tooltip title="The Information Ratio measures the active return divided by the active risk (tracking error). It quantifies the excess return per unit of risk taken relative to the benchmark. Higher values indicate better risk-adjusted active returns.">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {methodData.performance.information_ratio.toFixed(4)}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>
-                                        Skewness
-                                        <Tooltip title="Measures asymmetry of the returns distribution. Positive skew indicates a long right tail.">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {methodData.performance.skewness.toFixed(4)}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>
-                                        Kurtosis
-                                        <Tooltip title="Measures tail heaviness. High kurtosis indicates fat tails (more extreme outcomes).">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {methodData.performance.kurtosis.toFixed(4)}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>
-                                        Omega Ratio
-                                        <Tooltip title="The Omega Ratio measures the relationship between the probability of gains and losses relative to a threshold (typically the risk-free rate). It's the ratio of the area above the threshold to the area below it in the returns distribution. Higher values indicate better risk-return characteristics.">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {methodData.performance.omega_ratio.toFixed(4)}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>
-                                        Calmar Ratio
-                                        <Tooltip title="The Calmar Ratio is the ratio of annualized return to maximum drawdown. It measures the return per unit of downside risk, with higher values indicating better risk-adjusted performance.">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {methodData.performance.calmar_ratio.toFixed(4)}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>
-                                        EVaR (95%)
-                                        <Tooltip title="Entropic Value at Risk (EVaR) uses a Chernoff-bound formulation via the moment-generating function to bound tail losses more tightly than VaR/CVaR. It provides a more conservative risk estimate than traditional VaR measures.">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {(methodData.performance.evar_95 * 100).toFixed(2)}%
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>
-                                        DaR (95%)
-                                        <Tooltip title="Drawdown at Risk (DaR) represents the drawdown that won't be exceeded with 95% confidence. It's similar to VaR but for drawdowns instead of returns.">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {(methodData.performance.dar_95 * 100).toFixed(2)}%
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell>
-                                        CDaR (95%)
-                                        <Tooltip title="Conditional Drawdown at Risk (CDaR) is the expected drawdown when the drawdown exceeds the DaR. It provides insight into the severity of extreme drawdowns.">
-                                          <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                        </Tooltip>
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        {(methodData.performance.cdar_95 * 100).toFixed(2)}%
-                                      </TableCell>
-                                    </TableRow>
-                                  </>
-                                )}
-                              </TableBody>
-                            </Table>
-                          </Grid>
-                        </Grid>
-                        
-                        {/* Advanced Beta and Cross-Moment Metrics Section */}
-                        <Typography 
-                          variant="subtitle1" 
-                          sx={{ 
-                            mt: 2, 
-                            mb: 1, 
-                            fontWeight: 'bold',
-                            backgroundColor: '#f5f5f5',
-                            p: 1,
-                            borderRadius: '4px',
-                            display: 'flex',
-                            alignItems: 'center'
-                          }}
-                        >
-                          Advanced Beta and Cross-Moment Metrics
-                          <span style={{ 
-                            backgroundColor: '#4caf50', 
-                            color: 'white', 
-                            padding: '2px 6px', 
-                            borderRadius: '4px', 
-                            fontSize: '0.7rem', 
-                            marginLeft: '8px',
-                            fontWeight: 'bold'
-                          }}>
-                            NEW
-                          </span>
-                        </Typography>
-                        
-                        <Grid container spacing={2}>
-                          <Grid item xs={12} md={12}>
-                            <Table size="small">
-                              <TableBody>
-                                <TableRow>
-                                  <TableCell>
-                                    Welch Beta
-                                    <Tooltip title="A robust alternative to traditional beta that uses winsorization to reduce the impact of extreme returns. It provides a more stable measure of market sensitivity that is less affected by outliers.">
-                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                    </Tooltip>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.welch_beta !== undefined ? methodData.performance.welch_beta.toFixed(4) : 'N/A'}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>
-                                    Semi Beta
-                                    <Tooltip title="A downside beta that measures the portfolio's sensitivity to the benchmark only during down markets. Higher values indicate greater correlation with the benchmark during market declines.">
-                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                    </Tooltip>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.semi_beta !== undefined ? methodData.performance.semi_beta.toFixed(4) : 'N/A'}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>
-                                    Coskewness
-                                    <Tooltip title="Measures the relationship between portfolio returns and squared market returns. Negative values suggest the portfolio tends to have negative returns when market volatility increases.">
-                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                    </Tooltip>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.coskewness !== undefined ? methodData.performance.coskewness.toFixed(4) : 'N/A'}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell>
-                                    Cokurtosis
-                                    <Tooltip title="Fourth cross-moment measuring the relationship between portfolio returns and extreme market returns. A high positive value indicates portfolio returns amplify extreme market movements.">
-                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                    </Tooltip>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    {methodData.performance.cokurtosis !== undefined ? methodData.performance.cokurtosis.toFixed(4) : 'N/A'}
-                                  </TableCell>
-                                </TableRow>
-                              </TableBody>
-                            </Table>
-                          </Grid>
-                        </Grid>
-                      </Grid>
-                    </Grid>
-                    
-                    {/* Visualizations Grid */}
-                    <Grid container spacing={3} sx={{ mt: 2 }}>
-                      {/* Returns Distribution Plot */}
-                      {methodData.returns_dist && (
-                        <Grid item xs={12} md={6}>
+                        {methodData.returns_dist && (
                           <Box>
                             <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                               Returns Distribution
                             </Typography>
                             <ImageComponent base64String={methodData.returns_dist} altText="Returns Distribution" />
                           </Box>
-                        </Grid>
-                      )}
-                      
-                      {/* Maximum Drawdown Plot */}
-                      {methodData.max_drawdown_plot && (
-                        <Grid item xs={12} md={6}>
+                        )}
+                        
+                        {methodData.max_drawdown_plot && (
                           <Box>
                             <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                               Maximum Drawdown
                             </Typography>
                             <ImageComponent base64String={methodData.max_drawdown_plot} altText="Maximum Drawdown" />
                           </Box>
-                        </Grid>
-                      )}
+                        )}
+                      </Grid>
                     </Grid>
                     
-                    {/* Portfolio Visualizations */}
+                    {/* Additional Portfolio Visualizations */}
                     <Grid container spacing={3} sx={{ mt: 2 }}>
                       {/* Efficient Frontier */}
                       {methodData.efficient_frontier_img && (
