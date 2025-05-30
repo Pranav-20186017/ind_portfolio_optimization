@@ -48,6 +48,24 @@ const docsIndexPage: React.FC = () => {
       available: true
     },
     {
+      title: 'Hierarchical Equal Risk Contribution (HERC)',
+      description: 'An extension of HRP that combines hierarchical clustering with equal risk contribution principles.',
+      path: '/docs/herc',
+      available: true
+    },
+    {
+      title: 'Nested Clustered Optimization (NCO)',
+      description: 'A hybrid approach that combines hierarchical clustering with traditional optimization techniques.',
+      path: '/docs/nco',
+      available: true
+    },
+    {
+      title: 'Hierarchical Equal Risk Contribution 2 (HERC2)',
+      description: 'A simplified hierarchical approach that uses equal weights within clusters for portfolio construction.',
+      path: '/docs/herc2',
+      available: true
+    },
+    {
       title: 'Equally Weighted',
       description: 'A simple yet effective diversification approach that assigns equal weight to all assets in a portfolio.',
       path: '/docs/equi-weighted',
