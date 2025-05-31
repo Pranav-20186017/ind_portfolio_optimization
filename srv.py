@@ -1370,7 +1370,6 @@ def run_optimization_HERC(returns: pd.DataFrame, benchmark_df: pd.Series, risk_f
         returns: DataFrame of historical returns
         benchmark_df: Benchmark prices series
         risk_free_rate: Risk-free rate (default: 0.05)
-        model: Hierarchical risk model (default: "HERC")
         linkage: Linkage method for hierarchical clustering (default: "ward")
         rm: Risk measure used to optimize the portfolio ("MV", "MAD", "MSV", etc.) (default: "MV")
         method_cov: Method used to estimate the covariance matrix (default: "hist")
@@ -1379,21 +1378,53 @@ def run_optimization_HERC(returns: pd.DataFrame, benchmark_df: pd.Series, risk_f
         Tuple of (OptimizationResult, cumulative_returns)
     """
     try:
+        # Check if we have enough assets for meaningful clustering
+        n_assets = returns.shape[1]
+        logger.info(f"Running HERC optimization with {n_assets} assets")
+        
+        if n_assets < 3:
+            # Instead of fallback, raise clear error for frontend to handle
+            error_msg = f"HERC optimization requires at least 3 assets, but only {n_assets} provided"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
         # Create riskfolio portfolio object
         port = rp.HCPortfolio(returns=returns)
         
-        # Calculate optimal HERC weights
-        weights = port.optimization(
-            model=model,
-            codependence="pearson",
-            rm=rm,
-            rf=risk_free_rate,
-            linkage=linkage,
-            max_k=10,
-            method_mu="hist",
-            method_cov=method_cov,
-            leaf_order=True
-        )
+        # Set maximum number of clusters based on portfolio size
+        max_k = min(10, n_assets - 1)  # Ensure max_k doesn't exceed n-1
+        
+        try:
+            # First attempt with default settings
+            weights = port.optimization(
+                model=model,
+                codependence="pearson",
+                rm=rm,
+                rf=risk_free_rate,
+                linkage=linkage,
+                max_k=max_k,
+                method_mu="hist",
+                method_cov=method_cov,
+                leaf_order=True,
+                # Use a more robust k selection method
+                opt_k_method="silhouette" if n_assets < 5 else "twodiff"
+            )
+        except ValueError as e:
+            # If the first attempt fails, try with alternative settings
+            logger.warning(f"First HERC attempt failed: {str(e)}. Trying alternative settings...")
+            # Second attempt with more conservative settings
+            weights = port.optimization(
+                model=model,
+                codependence="pearson",
+                rm=rm,
+                rf=risk_free_rate,
+                linkage="single",  # Try a simpler linkage method
+                max_k=2,  # Minimal clustering
+                method_mu="hist",
+                method_cov=method_cov,
+                leaf_order=True,
+                opt_k_method="silhouette"  # More robust for small datasets
+            )
         
         # Convert weights to dictionary format expected by finalize_portfolio
         weights_dict = weights.squeeze().to_dict()
@@ -1413,7 +1444,8 @@ def run_optimization_HERC(returns: pd.DataFrame, benchmark_df: pd.Series, risk_f
         
     except Exception as e:
         logger.exception("Error in HERC optimization: %s", str(e))
-        return None, None
+        # Re-raise the exception for frontend handling instead of silently falling back
+        raise
 
 def run_optimization_NCO(returns: pd.DataFrame, benchmark_df: pd.Series, risk_free_rate=0.05, linkage="ward", obj="MinRisk", rm="MV", method_mu="hist", method_cov="hist"):
     """
@@ -1433,22 +1465,55 @@ def run_optimization_NCO(returns: pd.DataFrame, benchmark_df: pd.Series, risk_fr
         Tuple of (OptimizationResult, cumulative_returns)
     """
     try:
+        # Check if we have enough assets for meaningful clustering
+        n_assets = returns.shape[1]
+        logger.info(f"Running NCO optimization with {n_assets} assets")
+        
+        if n_assets < 3:
+            # Instead of fallback, raise clear error for frontend to handle
+            error_msg = f"NCO optimization requires at least 3 assets, but only {n_assets} provided"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
         # Create riskfolio portfolio object
         port = rp.HCPortfolio(returns=returns)
         
-        # Calculate optimal NCO weights
-        weights = port.optimization(
-            model="NCO",
-            codependence="pearson",
-            obj=obj,
-            rm=rm,
-            rf=risk_free_rate,
-            linkage=linkage,
-            max_k=10,
-            method_mu=method_mu,
-            method_cov=method_cov,
-            leaf_order=True
-        )
+        # Set maximum number of clusters based on portfolio size
+        max_k = min(10, n_assets - 1)  # Ensure max_k doesn't exceed n-1
+        
+        try:
+            # First attempt with default settings
+            weights = port.optimization(
+                model="NCO",
+                codependence="pearson",
+                obj=obj,
+                rm=rm,
+                rf=risk_free_rate,
+                linkage=linkage,
+                max_k=max_k,
+                method_mu=method_mu,
+                method_cov=method_cov,
+                leaf_order=True,
+                # Use a more robust k selection method
+                opt_k_method="silhouette" if n_assets < 5 else "twodiff"
+            )
+        except ValueError as e:
+            # If the first attempt fails, try with alternative settings
+            logger.warning(f"First NCO attempt failed: {str(e)}. Trying alternative settings...")
+            # Second attempt with more conservative settings
+            weights = port.optimization(
+                model="NCO",
+                codependence="pearson",
+                obj=obj,
+                rm=rm,
+                rf=risk_free_rate,
+                linkage="single",  # Try a simpler linkage method
+                max_k=2,  # Minimal clustering
+                method_mu=method_mu,
+                method_cov=method_cov,
+                leaf_order=True,
+                opt_k_method="silhouette"  # More robust for small datasets
+            )
         
         # Convert weights to dictionary format expected by finalize_portfolio
         weights_dict = weights.squeeze().to_dict()
@@ -1466,7 +1531,8 @@ def run_optimization_NCO(returns: pd.DataFrame, benchmark_df: pd.Series, risk_fr
         
     except Exception as e:
         logger.exception("Error in NCO optimization: %s", str(e))
-        return None, None
+        # Re-raise the exception for frontend handling
+        raise
 
 def run_optimization_HERC2(returns: pd.DataFrame, benchmark_df: pd.Series, risk_free_rate=0.05, linkage="complete", rm="CVaR", method_mu="hist", method_cov="hist", codependence="spearman", max_k=15):
     """
@@ -1490,22 +1556,71 @@ def run_optimization_HERC2(returns: pd.DataFrame, benchmark_df: pd.Series, risk_
         Tuple of (OptimizationResult, cumulative_returns)
     """
     try:
+        # Check if we have enough assets for meaningful clustering
+        n_assets = returns.shape[1]
+        logger.info(f"Running HERC2 optimization with {n_assets} assets")
+        
+        if n_assets < 3:
+            # Instead of fallback, raise clear error for frontend to handle
+            error_msg = f"HERC2 optimization requires at least 3 assets, but only {n_assets} provided"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
         # Create riskfolio portfolio object
         port = rp.HCPortfolio(returns=returns)
         
-        # Calculate optimal HERC2 weights with parameters designed to create better clusters
-        weights = port.optimization(
-            model="HERC2",  # Using HERC2 model from riskfolio-lib
-            codependence=codependence,  # Use Spearman for better non-linear correlation detection
-            rm=rm,  # Use CVaR for better risk differentiation
-            rf=risk_free_rate,
-            linkage=linkage,  # Use complete linkage for more balanced clusters
-            max_k=max_k,  # Allow more clusters to be considered
-            method_mu=method_mu,
-            method_cov=method_cov,
-            leaf_order=True,
-            opt_k_method="twodiff"  # Explicitly set cluster optimization method
-        )
+        # Adjust max_k based on portfolio size
+        max_k = min(max_k, n_assets - 1)  # Ensure max_k doesn't exceed n-1
+        
+        try:
+            # First attempt with default settings
+            weights = port.optimization(
+                model="HERC2",  # Using HERC2 model from riskfolio-lib
+                codependence=codependence,  # Use Spearman for better non-linear correlation detection
+                rm=rm,  # Use CVaR for better risk differentiation
+                rf=risk_free_rate,
+                linkage=linkage,  # Use complete linkage for more balanced clusters
+                max_k=max_k,  # Allow more clusters to be considered
+                method_mu=method_mu,
+                method_cov=method_cov,
+                leaf_order=True,
+                opt_k_method="silhouette" if n_assets < 5 else "twodiff"  # Use appropriate method based on size
+            )
+        except ValueError as e:
+            # If the first attempt fails, try with alternative settings
+            logger.warning(f"First HERC2 attempt failed: {str(e)}. Trying alternative settings...")
+            try:
+                # Second attempt with more conservative settings
+                weights = port.optimization(
+                    model="HERC2",
+                    codependence="pearson",  # Simpler correlation method
+                    rm="MV",  # Simpler risk measure
+                    rf=risk_free_rate,
+                    linkage="single",  # Try a simpler linkage method
+                    max_k=2,  # Minimal clustering
+                    method_mu=method_mu,
+                    method_cov=method_cov,
+                    leaf_order=True,
+                    opt_k_method="silhouette"  # More robust for small datasets
+                )
+            except Exception as e2:
+                logger.warning(f"Second HERC2 attempt failed: {str(e2)}. Trying direct clustering approach...")
+                
+                # Third attempt - try using a fixed number of clusters instead of optimization
+                k = 2  # Start with just 2 clusters for maximum robustness
+                weights = port.optimization(
+                    model="HERC2",
+                    codependence="pearson",
+                    rm="MV",
+                    rf=risk_free_rate,
+                    linkage="single",
+                    max_k=k,
+                    method_mu=method_mu,
+                    method_cov=method_cov,
+                    leaf_order=True,
+                    opt_k_method=None,  # Don't use automatic selection
+                    k=k  # Force k=2 clusters
+                )
         
         # Convert weights to dictionary format expected by finalize_portfolio
         weights_dict = weights.squeeze().to_dict()
@@ -1528,7 +1643,8 @@ def run_optimization_HERC2(returns: pd.DataFrame, benchmark_df: pd.Series, risk_
         
     except Exception as e:
         logger.exception("Error in HERC2 optimization: %s", str(e))
-        return None, None
+        # Re-raise the exception for frontend handling
+        raise
 
 def debug_herc2_clustering(returns: pd.DataFrame, linkage="complete", codependence="spearman", max_k=15):
     """
@@ -1596,7 +1712,7 @@ def debug_herc2_clustering(returns: pd.DataFrame, linkage="complete", codependen
     except Exception as e:
         logger.exception("Error in HERC2 debugging: %s", str(e))
         return None
-
+        
 def run_optimization_MIN_CVAR(mu, returns, benchmark_df, risk_free_rate=0.05):
     try:
         # Check if the MOSEK license is configured
@@ -1750,7 +1866,7 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         try:
             print("OPTIMIZE: Calling fetch_and_align_data")
             df, benchmark_df = await run_in_threadpool(
-                _original_fetch_and_align_data,
+                fetch_and_align_data,
                 formatted_tickers,
                 benchmark_ticker,
                 sanitize_bse
@@ -1833,11 +1949,11 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             
             # Generate the covariance heatmap in a threadpool too
             print("OPTIMIZE: Generating covariance heatmap")
-            cov_heatmap_b64 = await run_in_threadpool(_original_generate_covariance_heatmap, S)
+            cov_heatmap_b64 = await run_in_threadpool(generate_covariance_heatmap, S)
             
             # Calculate yearly returns in a threadpool
             print("OPTIMIZE: Computing yearly returns")
-            stock_yearly_returns = await run_in_threadpool(_original_compute_yearly_returns_stocks, returns)
+            stock_yearly_returns = await run_in_threadpool(compute_yearly_returns_stocks, returns)
         except Exception as e:
             error_message = str(e)
             print(f"OPTIMIZE: Error preparing data: {error_message}")
@@ -1872,17 +1988,17 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                 elif method == OptimizationMethod.HERC:
                     print("OPTIMIZE: Running HERC")
                     optimization_result, cum_returns = await run_in_threadpool(
-                        _original_run_optimization_HERC, returns, benchmark_df, risk_free_rate
+                        run_optimization_HERC, returns, benchmark_df, risk_free_rate
                     )
                 elif method == OptimizationMethod.NCO:
                     print("OPTIMIZE: Running NCO")
                     optimization_result, cum_returns = await run_in_threadpool(
-                        _original_run_optimization_NCO, returns, benchmark_df, risk_free_rate, linkage="ward", obj="MinRisk", rm="MV", method_mu="hist", method_cov="hist"
+                        run_optimization_NCO, returns, benchmark_df, risk_free_rate, linkage="ward", obj="MinRisk", rm="MV", method_mu="hist", method_cov="hist"
                     )
                 elif method == OptimizationMethod.HERC2:
                     print("OPTIMIZE: Running HERC2")
                     optimization_result, cum_returns = await run_in_threadpool(
-                        _original_run_optimization_HERC2, returns, benchmark_df, risk_free_rate,
+                        run_optimization_HERC2, returns, benchmark_df, risk_free_rate,
                         linkage="complete", rm="CVaR", method_mu="hist", method_cov="hist", 
                         codependence="spearman", max_k=15
                     )
