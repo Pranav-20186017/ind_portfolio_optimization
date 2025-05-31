@@ -264,12 +264,23 @@ const HomePage: React.FC = () => {
       : [BenchmarkName.sensex];
   };
 
-  const canSubmit = selectedStocks.length >= 2 && selectedAlgorithms.length >= 1 && selectedExchange !== null;
+  // Check if any clustering algorithm is selected
+  const hasClusteringAlgorithm = selectedAlgorithms.some(algo => 
+    ['HERC', 'NCO', 'HERC2'].includes(algo.value)
+  );
+  
+  // Require at least 3 stocks for clustering algorithms
+  const needsMinimum3Stocks = hasClusteringAlgorithm && selectedStocks.length < 3;
+  
+  const canSubmit = selectedStocks.length >= 2 && selectedAlgorithms.length >= 1 && selectedExchange !== null && !needsMinimum3Stocks;
+  
   let submitError = '';
   if (selectedStocks.length < 2 && selectedAlgorithms.length < 1) {
     submitError = 'Please select at least 2 stocks and 1 optimization method.';
   } else if (selectedStocks.length < 2) {
     submitError = 'Please select at least 2 stocks.';
+  } else if (needsMinimum3Stocks) {
+    submitError = 'Clustering algorithms (HERC, NCO, HERC2) require at least 3 stocks.';
   } else if (selectedAlgorithms.length < 1) {
     submitError = 'Please select at least 1 optimization method.';
   }
@@ -365,6 +376,13 @@ const HomePage: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
+    
+    // Extra check for clustering algorithms
+    if (needsMinimum3Stocks) {
+      // Show error message but don't proceed
+      return;
+    }
+    
     setLoading(true);
     setError(null); // Clear any previous errors
     const dataToSend = {
