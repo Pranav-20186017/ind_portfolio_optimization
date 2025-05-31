@@ -816,7 +816,7 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertEqual(call_args['method_cov'], 'hist')  # Check the new parameter
         self.assertEqual(call_args['method_mu'], 'hist')  # Check the new parameter
         self.assertEqual(call_args['max_k'], 2)  # Updated to 2 to match the implementation
-        self.assertEqual(call_args['opt_k_method'], 'silhouette')  # New parameter
+        self.assertEqual(call_args['opt_k_method'], 'twodiff')  # Update to valid option
         
         # Check result is not None
         self.assertIsNotNone(result)

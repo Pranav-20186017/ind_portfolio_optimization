@@ -1406,8 +1406,8 @@ def run_optimization_HERC(returns: pd.DataFrame, benchmark_df: pd.Series, risk_f
                 method_mu="hist",
                 method_cov=method_cov,
                 leaf_order=True,
-                # Use a more robust k selection method
-                opt_k_method="silhouette" if n_assets < 5 else "twodiff"
+                # Use valid opt_k_method options only
+                opt_k_method="twodiff" # Valid options are only 'twodiff' and 'stdsil'
             )
         except ValueError as e:
             # If the first attempt fails, try with alternative settings
@@ -1423,7 +1423,7 @@ def run_optimization_HERC(returns: pd.DataFrame, benchmark_df: pd.Series, risk_f
                 method_mu="hist",
                 method_cov=method_cov,
                 leaf_order=True,
-                opt_k_method="silhouette"  # More robust for small datasets
+                opt_k_method="stdsil"  # Try the other valid option
             )
         
         # Convert weights to dictionary format expected by finalize_portfolio
@@ -1494,8 +1494,8 @@ def run_optimization_NCO(returns: pd.DataFrame, benchmark_df: pd.Series, risk_fr
                 method_mu=method_mu,
                 method_cov=method_cov,
                 leaf_order=True,
-                # Use a more robust k selection method
-                opt_k_method="silhouette" if n_assets < 5 else "twodiff"
+                # Use valid opt_k_method options only
+                opt_k_method="twodiff" # Valid options are only 'twodiff' and 'stdsil'
             )
         except ValueError as e:
             # If the first attempt fails, try with alternative settings
@@ -1512,7 +1512,7 @@ def run_optimization_NCO(returns: pd.DataFrame, benchmark_df: pd.Series, risk_fr
                 method_mu=method_mu,
                 method_cov=method_cov,
                 leaf_order=True,
-                opt_k_method="silhouette"  # More robust for small datasets
+                opt_k_method="stdsil"  # Try the other valid option
             )
         
         # Convert weights to dictionary format expected by finalize_portfolio
@@ -1584,7 +1584,7 @@ def run_optimization_HERC2(returns: pd.DataFrame, benchmark_df: pd.Series, risk_
                 method_mu=method_mu,
                 method_cov=method_cov,
                 leaf_order=True,
-                opt_k_method="silhouette" if n_assets < 5 else "twodiff"  # Use appropriate method based on size
+                opt_k_method="twodiff"  # Only valid options are 'twodiff' and 'stdsil'
             )
         except ValueError as e:
             # If the first attempt fails, try with alternative settings
@@ -1601,7 +1601,7 @@ def run_optimization_HERC2(returns: pd.DataFrame, benchmark_df: pd.Series, risk_
                     method_mu=method_mu,
                     method_cov=method_cov,
                     leaf_order=True,
-                    opt_k_method="silhouette"  # More robust for small datasets
+                    opt_k_method="stdsil"  # Try the other valid option
                 )
             except Exception as e2:
                 logger.warning(f"Second HERC2 attempt failed: {str(e2)}. Trying direct clustering approach...")
@@ -1693,7 +1693,7 @@ def debug_herc2_clustering(returns: pd.DataFrame, linkage="complete", codependen
             method_mu="hist",
             method_cov="hist",
             leaf_order=True,
-            opt_k_method="twodiff"
+            opt_k_method="twodiff"  # Only valid options are 'twodiff' and 'stdsil'
         )
         
         weights_dict = weights.squeeze().to_dict()
