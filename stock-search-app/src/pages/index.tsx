@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { StockData, StockOption, PortfolioOptimizationResponse, OptimizationResult, APIError, ExchangeEnum, OptimizationMethod, CLAOptimizationMethod, BenchmarkName } from '../types';
+import { StockData, StockOption, PortfolioOptimizationResponse, OptimizationResult, APIError, ExchangeEnum, OptimizationMethod, CLAOptimizationMethod, BenchmarkName, TechnicalIndicator, TechnicalIndicatorType } from '../types';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import Chip from '@mui/material/Chip';
@@ -87,6 +87,7 @@ const algorithmOptions = [
   { label: 'Hierarchical Equal Risk Contribution 2 (HERC2)', value: 'HERC2' },
   { label: 'Minimum Conditional Value at Risk (CVaR)', value: 'MinCVaR' },
   { label: 'Minimum Conditional Drawdown at Risk (CDaR)', value: 'MinCDaR' },
+  { label: 'Technical Indicator Optimization', value: 'TechnicalOptimization' },
 ];
 
 // Mapping for descriptive headings in the results section
@@ -102,7 +103,8 @@ const algoDisplayNames: { [key: string]: string } = {
   NCO: "Nested Clustered Optimization (NCO)", 
   HERC2: "Hierarchical Equal Risk Contribution 2 (HERC2)",
   MinCVaR: "Minimum Conditional Value at Risk (CVaR)",
-  MinCDaR: "Minimum Conditional Drawdown at Risk (CDaR)"
+  MinCDaR: "Minimum Conditional Drawdown at Risk (CDaR)",
+  TechnicalOptimization: "Technical Indicator Optimization"
 };
 
 /**
@@ -139,6 +141,41 @@ const HomePage: React.FC = () => {
   const [error, setError] = useState<APIError | null>(null);
   const [selectedBenchmark, setSelectedBenchmark] = useState<BenchmarkName>(BenchmarkName.nifty);
   const [selectedExchange, setSelectedExchange] = useState<ExchangeEnum | null>(null);
+  
+  // Technical indicators state
+  const [selectedIndicators, setSelectedIndicators] = useState<TechnicalIndicator[]>([]);
+  const [indicatorName, setIndicatorName] = useState<TechnicalIndicatorType>(TechnicalIndicatorType.SMA);
+  const [indicatorWindow, setIndicatorWindow] = useState<number>(20);
+  const [indicatorMult, setIndicatorMult] = useState<number>(2);
+  
+  // Check if technical optimization is selected
+  const isTechnicalOptimizationSelected = selectedAlgorithms.some(algo => 
+    algo.value === 'TechnicalOptimization'
+  );
+  
+  // Function to add a technical indicator
+  const handleAddIndicator = () => {
+    const newIndicator: TechnicalIndicator = {
+      name: indicatorName,
+      window: indicatorWindow,
+      mult: ["SUPERTREND", "BOLLINGER"].includes(indicatorName) ? indicatorMult : undefined
+    };
+    
+    // Check for duplicates
+    const isDuplicate = selectedIndicators.some(
+      ind => ind.name === newIndicator.name && ind.window === newIndicator.window && 
+             (ind.mult === newIndicator.mult || (!ind.mult && !newIndicator.mult))
+    );
+    
+    if (!isDuplicate) {
+      setSelectedIndicators([...selectedIndicators, newIndicator]);
+    }
+  };
+  
+  // Function to remove a technical indicator
+  const handleRemoveIndicator = (indexToRemove: number) => {
+    setSelectedIndicators(selectedIndicators.filter((_, index) => index !== indexToRemove));
+  };
 
   // Default stocks to show initially - NSE
   const defaultNSEStocks: StockOption[] = [
@@ -272,7 +309,14 @@ const HomePage: React.FC = () => {
   // Require at least 3 stocks for clustering algorithms
   const needsMinimum3Stocks = hasClusteringAlgorithm && selectedStocks.length < 3;
   
-  const canSubmit = selectedStocks.length >= 2 && selectedAlgorithms.length >= 1 && selectedExchange !== null && !needsMinimum3Stocks;
+  // Require at least 2 technical indicators for technical optimization
+  const needsMinimum2Indicators = isTechnicalOptimizationSelected && selectedIndicators.length < 2;
+  
+  const canSubmit = selectedStocks.length >= 2 && 
+                   selectedAlgorithms.length >= 1 && 
+                   selectedExchange !== null && 
+                   !needsMinimum3Stocks &&
+                   !(isTechnicalOptimizationSelected && needsMinimum2Indicators);
   
   let submitError = '';
   if (selectedStocks.length < 2 && selectedAlgorithms.length < 1) {
@@ -281,6 +325,8 @@ const HomePage: React.FC = () => {
     submitError = 'Please select at least 2 stocks.';
   } else if (needsMinimum3Stocks) {
     submitError = 'Clustering algorithms (HERC, NCO, HERC2) require at least 3 stocks.';
+  } else if (needsMinimum2Indicators) {
+    submitError = 'Technical Indicator Optimization requires at least 2 indicators.';
   } else if (selectedAlgorithms.length < 1) {
     submitError = 'Please select at least 1 optimization method.';
   }
@@ -383,6 +429,12 @@ const HomePage: React.FC = () => {
       return;
     }
     
+    // Extra check for technical indicators
+    if (isTechnicalOptimizationSelected && needsMinimum2Indicators) {
+      // Show error message but don't proceed
+      return;
+    }
+    
     setLoading(true);
     setError(null); // Clear any previous errors
     const dataToSend = {
@@ -391,7 +443,10 @@ const HomePage: React.FC = () => {
       ...(selectedAlgorithms.some((a) => a.value === 'CriticalLineAlgorithm')
         ? { cla_method: selectedCLA.value }
         : {}),
-      benchmark: selectedBenchmark
+      benchmark: selectedBenchmark,
+      ...(isTechnicalOptimizationSelected 
+        ? { indicators: selectedIndicators }
+        : {})
     };
     //TODO: change to backend url
     try {
@@ -435,6 +490,10 @@ const HomePage: React.FC = () => {
     }
   };
 
+  // Check if the result is from technical optimization
+  const isTechnicalOptimizationResult = optimizationResult?.is_technical_only;
+
+  // Reset technical indicators when clearing results
   const handleReset = () => {
     setSelectedStocks([]);
     setInputValue('');
@@ -442,6 +501,7 @@ const HomePage: React.FC = () => {
     setSelectedCLA(claSubOptions[2]);
     setOptimizationResult(null);
     setError(null); // Clear any errors on reset
+    setSelectedIndicators([]); // Clear technical indicators
   };
 
   const formatDate = (dateStr: string) => {
@@ -645,15 +705,24 @@ const HomePage: React.FC = () => {
   const generatePDF = async () => {
     if (!optimizationResult) return;
 
+    // Special handling for technical optimization
+    const isTechnicalReport = isTechnicalOptimizationResult;
+    
+    // For technical optimization, show special message
+    if (isTechnicalReport) {
+      alert("Note: PDF report for Technical Indicator Optimization will only include optimization results and weights.");
+    }
+
     const pdfCacheKey = selectedStocks.map(s => s.ticker).join('-') + '-' +
                      (optimizationResult.start_date || '') + '-' +
-                     (optimizationResult.end_date || '');
+                     (optimizationResult.end_date || '') +
+                     (isTechnicalReport ? '-technical' : '');
 
     // If we have a cached PDF, use it immediately without showing loading overlay
     if (pdfCache[pdfCacheKey]) {
       const link = document.createElement('a');
       link.href = pdfCache[pdfCacheKey];
-      link.download = `portfolio_optimization_${new Date().toISOString().split('T')[0]}.pdf`;
+      link.download = `portfolio_optimization_${new Date().toISOString().split('T')[0]}${isTechnicalReport ? '_technical' : ''}.pdf`;
       link.click();
       console.log('Using cached PDF (full report)');
       return;
@@ -753,51 +822,55 @@ const HomePage: React.FC = () => {
       }
 
       // ----------- 3. CUMULATIVE RETURNS CHART -----------
-      const chartElement = document.querySelector('#cumulative-returns-chart canvas');
-      if (chartElement) {
-        pdfDoc.addPage();
-        pdfDoc.setFontSize(16);
-        pdfDoc.text('Cumulative Returns Over Time', pageWidth / 2, 20, { align: 'center' });
-        try {
-          const chartCanvas = await renderOnce(chartElement as HTMLElement, 'cumulative-returns-chart', commonCanvasOptions);
-          const chartImgData = chartCanvas.toDataURL('image/png');
-          const chartImgWidth = pageWidth - (margin * 2);
-          const chartImgHeight = (chartCanvas.height * chartImgWidth) / chartCanvas.width;
-          pdfDoc.addImage(chartImgData, 'PNG', margin, 30, chartImgWidth, chartImgHeight);
-        } catch (err) {
-          console.error('Failed to render cumulative returns chart:', err);
-          pdfDoc.setFontSize(12);
-          pdfDoc.text('Unable to render cumulative returns chart.', margin, 40);
+      if (!isTechnicalReport) {
+        const chartElement = document.querySelector('#cumulative-returns-chart canvas');
+        if (chartElement) {
+          pdfDoc.addPage();
+          pdfDoc.setFontSize(16);
+          pdfDoc.text('Cumulative Returns Over Time', pageWidth / 2, 20, { align: 'center' });
+          try {
+            const chartCanvas = await renderOnce(chartElement as HTMLElement, 'cumulative-returns-chart', commonCanvasOptions);
+            const chartImgData = chartCanvas.toDataURL('image/png');
+            const chartImgWidth = pageWidth - (margin * 2);
+            const chartImgHeight = (chartCanvas.height * chartImgWidth) / chartCanvas.width;
+            pdfDoc.addImage(chartImgData, 'PNG', margin, 30, chartImgWidth, chartImgHeight);
+          } catch (err) {
+            console.error('Failed to render cumulative returns chart:', err);
+            pdfDoc.setFontSize(12);
+            pdfDoc.text('Unable to render cumulative returns chart.', margin, 40);
+          }
         }
       }
 
       // ----------- 4. YEARLY RETURNS TABLE -----------
-      const yearlyReturnsSection = document.querySelector('.yearly-returns-section');
-      if (yearlyReturnsSection) {
-        pdfDoc.addPage();
-        pdfDoc.setFontSize(16);
-        pdfDoc.text('Yearly Stock Returns', pageWidth / 2, 20, { align: 'center' });
-        try {
-          const tableCanvas = await renderOnce(yearlyReturnsSection as HTMLElement, 'yearly-returns-table', commonCanvasOptions);
-          const tableImgData = tableCanvas.toDataURL('image/png');
-          const tableImgWidth = pageWidth - (margin * 2);
-          const tableImgHeight = (tableCanvas.height * tableImgWidth) / tableCanvas.width;
+      if (!isTechnicalReport) {
+        const yearlyReturnsSection = document.querySelector('.yearly-returns-section');
+        if (yearlyReturnsSection) {
+          pdfDoc.addPage();
+          pdfDoc.setFontSize(16);
+          pdfDoc.text('Yearly Stock Returns', pageWidth / 2, 20, { align: 'center' });
+          try {
+            const tableCanvas = await renderOnce(yearlyReturnsSection as HTMLElement, 'yearly-returns-table', commonCanvasOptions);
+            const tableImgData = tableCanvas.toDataURL('image/png');
+            const tableImgWidth = pageWidth - (margin * 2);
+            const tableImgHeight = (tableCanvas.height * tableImgWidth) / tableCanvas.width;
 
-          if (tableImgHeight > pageHeight - 30) {
-            const scaleFactor = (pageHeight - 30) / tableImgHeight;
-            pdfDoc.addImage(tableImgData, 'PNG', margin, 30, tableImgWidth * scaleFactor, tableImgHeight * scaleFactor);
-          } else {
-            pdfDoc.addImage(tableImgData, 'PNG', margin, 30, tableImgWidth, tableImgHeight);
+            if (tableImgHeight > pageHeight - 30) {
+              const scaleFactor = (pageHeight - 30) / tableImgHeight;
+              pdfDoc.addImage(tableImgData, 'PNG', margin, 30, tableImgWidth * scaleFactor, tableImgHeight * scaleFactor);
+            } else {
+              pdfDoc.addImage(tableImgData, 'PNG', margin, 30, tableImgWidth, tableImgHeight);
+            }
+          } catch (err) {
+            console.error('Error rendering yearly returns table:', err);
+            pdfDoc.setFontSize(12);
+            pdfDoc.text('Unable to render yearly returns table. The data may be too large.', margin, 40);
           }
-        } catch (err) {
-          console.error('Error rendering yearly returns table:', err);
-          pdfDoc.setFontSize(12);
-          pdfDoc.text('Unable to render yearly returns table. The data may be too large.', margin, 40);
         }
       }
 
       // ----------- 5. COVARIANCE HEATMAP -----------
-      if (optimizationResult.covariance_heatmap) {
+      if (!isTechnicalReport && optimizationResult.covariance_heatmap) {
         pdfDoc.addPage();
         pdfDoc.setFontSize(16);
         pdfDoc.text('Variance-Covariance Matrix', pageWidth / 2, 20, { align: 'center' });
@@ -1098,6 +1171,128 @@ const HomePage: React.FC = () => {
           </div>
         )}
       </div>
+      
+      {/* Technical Indicators Section - Only shown when TechnicalOptimization is selected */}
+      {isTechnicalOptimizationSelected && (
+        <div className="mb-6" style={{ 
+          background: 'white', 
+          borderRadius: '8px', 
+          padding: '20px',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+          border: '1px solid #f0f0f0',
+          maxWidth: '900px',
+          margin: '0 auto 24px auto'
+        }}>
+          <Typography 
+            variant="h6" 
+            component="h2" 
+            gutterBottom
+            style={{ 
+              fontWeight: 600, 
+              fontSize: '1.25rem',
+              color: '#1e293b',
+              marginBottom: '16px'
+            }}
+          >
+            Select Technical Indicators
+            <span style={{ 
+              backgroundColor: '#4caf50', 
+              color: 'white', 
+              padding: '2px 6px', 
+              borderRadius: '4px', 
+              fontSize: '0.7rem', 
+              marginLeft: '8px',
+              fontWeight: 'bold',
+              verticalAlign: 'middle'
+            }}>
+              NEW
+            </span>
+          </Typography>
+          
+          <Typography variant="body2" style={{ marginBottom: '16px' }}>
+            Technical indicator optimization uses cross-sectional signal z-scores to form portfolios. 
+            Select at least 2 indicators to proceed.
+          </Typography>
+          
+          <Grid container spacing={2} style={{ marginBottom: '16px' }}>
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth variant="outlined">
+                <InputLabel>Indicator Type</InputLabel>
+                <Select
+                  value={indicatorName}
+                  onChange={(e) => setIndicatorName(e.target.value as TechnicalIndicatorType)}
+                  label="Indicator Type"
+                >
+                  {Object.values(TechnicalIndicatorType).map((type) => (
+                    <MenuItem key={type} value={type}>
+                      {type}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={3}>
+              <TextField
+                fullWidth
+                label="Window Size"
+                type="number"
+                value={indicatorWindow}
+                onChange={(e) => setIndicatorWindow(Number(e.target.value))}
+                variant="outlined"
+                InputProps={{ inputProps: { min: 1 } }}
+              />
+            </Grid>
+            {["SUPERTREND", "BOLLINGER"].includes(indicatorName) && (
+              <Grid item xs={12} sm={3}>
+                <TextField
+                  fullWidth
+                  label="Multiplier"
+                  type="number"
+                  value={indicatorMult}
+                  onChange={(e) => setIndicatorMult(Number(e.target.value))}
+                  variant="outlined"
+                  InputProps={{ inputProps: { min: 0.1, step: 0.1 } }}
+                />
+              </Grid>
+            )}
+            <Grid item xs={12} sm={2}>
+              <Button
+                fullWidth
+                variant="contained"
+                color="primary"
+                onClick={handleAddIndicator}
+                style={{ height: '56px' }}
+              >
+                Add
+              </Button>
+            </Grid>
+          </Grid>
+          
+          {/* Display selected indicators */}
+          <div>
+            <Typography variant="subtitle1" style={{ marginBottom: '8px', fontWeight: 500 }}>
+              Selected Indicators ({selectedIndicators.length})
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap">
+              {selectedIndicators.map((indicator, idx) => (
+                <Chip
+                  key={idx}
+                  label={`${indicator.name} (Window: ${indicator.window}${indicator.mult ? `, Mult: ${indicator.mult}` : ''})`}
+                  onDelete={() => handleRemoveIndicator(idx)}
+                  className="m-1"
+                  color="primary"
+                  variant="outlined"
+                />
+              ))}
+            </Stack>
+            {needsMinimum2Indicators && (
+              <Typography color="error" style={{ marginTop: '8px', fontSize: '0.875rem' }}>
+                Please select at least 2 technical indicators to proceed with Technical Optimization.
+              </Typography>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Benchmark Selection Section */}
       <div className="mb-6" style={{ 
@@ -1269,6 +1464,26 @@ const HomePage: React.FC = () => {
                 Download PDF Report
               </Button>
             </Box>
+            
+            {/* Technical Optimization Badge */}
+            {isTechnicalOptimizationResult && (
+              <Card style={{ marginBottom: '20px', backgroundColor: '#f0f8ff', border: '1px solid #b3d8ff' }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <InfoOutlined style={{ marginRight: '10px', color: '#0066cc' }} />
+                    <div>
+                      <Typography variant="subtitle1" fontWeight="bold" color="#0066cc">
+                        Technical Indicator Optimization
+                      </Typography>
+                      <Typography variant="body2">
+                        This portfolio is optimized using technical indicators rather than historical returns.
+                        It uses cross-sectional signal z-scores to form portfolios based on the selected indicators.
+                      </Typography>
+                    </div>
+                  </Box>
+                </CardContent>
+              </Card>
+            )}
             
             {/* Method Cards */}
             {Object.entries(optimizationResult.results).map(([methodKey, methodData], index) => {
@@ -1660,7 +1875,7 @@ const HomePage: React.FC = () => {
             })}
             
             {/* Cumulative Returns Chart */}
-            {optimizationResult.dates && optimizationResult.cumulative_returns && (
+            {optimizationResult && !isTechnicalOptimizationResult && optimizationResult.dates && optimizationResult.cumulative_returns && (
               <div id="cumulative-returns-chart" style={{ marginTop: '2rem' }}>
                 <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
                   Cumulative Returns Over Time
@@ -1677,7 +1892,7 @@ const HomePage: React.FC = () => {
             )}
             
             {/* Rolling Betas Visualization */}
-            {optimizationResult.results && Object.values(optimizationResult.results).some(method => method && method.rolling_betas) && (
+            {optimizationResult && !isTechnicalOptimizationResult && optimizationResult.results && Object.values(optimizationResult.results).some(method => method && method.rolling_betas) && (
               <Card style={{ marginTop: '2rem' }}>
                 <CardContent>
                   <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
@@ -1779,8 +1994,8 @@ const HomePage: React.FC = () => {
               </Card>
             )}
             
-            {/* Yearly Returns Table */}
-            {optimizationResult.stock_yearly_returns && Object.keys(optimizationResult.stock_yearly_returns).length > 0 && (
+            {/* Yearly Returns Table - Only shown for non-technical optimization */}
+            {optimizationResult && !isTechnicalOptimizationResult && optimizationResult.stock_yearly_returns && Object.keys(optimizationResult.stock_yearly_returns).length > 0 && (
               <div className="yearly-returns-section" style={{ marginTop: '2rem' }}>
                 <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
                   Yearly Stock Returns
@@ -1819,8 +2034,8 @@ const HomePage: React.FC = () => {
               </div>
             )}
             
-            {/* Covariance Heatmap */}
-            {optimizationResult.covariance_heatmap && (
+            {/* Covariance Heatmap - Only shown for non-technical optimization */}
+            {optimizationResult && !isTechnicalOptimizationResult && optimizationResult.covariance_heatmap && (
               <div style={{ marginTop: '2rem' }}>
                 <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
                   Variance-Covariance Matrix

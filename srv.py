@@ -23,6 +23,7 @@ import riskfolio as rp
 import seaborn as sns
 import statsmodels.api as sm
 import yfinance as yf
+import talib
 from arch import arch_model
 from cachetools import TTLCache, cached
 from fastapi import FastAPI, Body, BackgroundTasks
@@ -37,6 +38,7 @@ from pypfopt.hierarchical_portfolio import HRPOpt
 from pypfopt.risk_models import CovarianceShrinkage
 from scipy.optimize import minimize_scalar
 from scipy.stats import entropy
+import cvxpy as cp
 
 # Local imports
 from data import (
@@ -44,7 +46,25 @@ from data import (
     BenchmarkName, Benchmarks, BenchmarkReturn, PortfolioPerformance,
     OptimizationResult, PortfolioOptimizationResponse, StockItem, TickerRequest
 )
+from signals import build_technical_scores, TECHNICAL_INDICATORS
 from settings import settings
+
+########### Identify which optimizers need returns/mu/cov ############
+RETURN_BASED_METHODS = {
+    OptimizationMethod.MVO,
+    OptimizationMethod.MIN_VOL,
+    OptimizationMethod.MAX_QUADRATIC_UTILITY,
+    OptimizationMethod.EQUI_WEIGHTED,
+    OptimizationMethod.CRITICAL_LINE_ALGORITHM,
+    OptimizationMethod.HRP,
+    OptimizationMethod.MIN_CVAR,
+    OptimizationMethod.MIN_CDAR,
+    OptimizationMethod.HERC,
+    OptimizationMethod.NCO,
+    OptimizationMethod.HERC2,
+}
+
+MIN_LONG_HORIZON_DAYS = 200  # threshold for α/β/Sharpe/etc.
 
 # Initialize any global variables or caches needed
 yf_data_cache = TTLCache(maxsize=256, ttl=3600)  # 1 hour cache for Yahoo Finance data
@@ -180,55 +200,86 @@ def finalize_portfolio(
     Returns:
         Tuple: (OptimizationResult, cumulative_returns)
     """
-    # Create Series from weights dictionary
+    # 1) Build a pd.Series of weights
     w_series = pd.Series(weights)
-    
-    # Calculate portfolio returns
+    # 2) Calculate portfolio returns
     port_returns = returns.dot(w_series)
-    
-    # Compute custom metrics
+
+    # 3) ALWAYS compute "short-horizon" metrics (sortino, max drawdown, VaR/CVaR, etc.)
     custom = compute_custom_metrics(port_returns, benchmark_df, risk_free_rate)
-    
-    # Build daily excess‐returns series for rolling beta
-    # 1) portfolio excess
-    if hasattr(risk_free_rate_manager, '_series') and not risk_free_rate_manager._series.empty:
-        rf_port = risk_free_rate_manager._series.reindex(port_returns.index).ffill().fillna(risk_free_rate/252)
-    else:
-        rf_port = pd.Series(risk_free_rate/252, index=port_returns.index)
-    port_excess = port_returns - rf_port
 
-    # 2) benchmark excess
-    bench_ret = benchmark_df.pct_change().dropna()
-    if hasattr(risk_free_rate_manager, '_series') and not risk_free_rate_manager._series.empty:
-        rf_bench = risk_free_rate_manager._series.reindex(bench_ret.index).ffill().fillna(risk_free_rate/252)
-    else:
-        rf_bench = pd.Series(risk_free_rate/252, index=bench_ret.index)
-    bench_excess = bench_ret - rf_bench
+    # 4) Align & compute excess returns for OLS if we have enough history
+    #    If len(returns) < MIN_LONG_HORIZON_DAYS, we skip all OLS / rolling beta
+    has_long_horizon = len(returns) >= MIN_LONG_HORIZON_DAYS
 
-    # Compute yearly rolling betas
-    yearly_betas = compute_yearly_betas(port_excess, bench_excess)
-    
-    # Generate plots
+    if has_long_horizon:
+        # 4a) portfolio excess
+        if not risk_free_rate_manager.is_empty():
+            rf_port = risk_free_rate_manager._series.reindex(port_returns.index).ffill().fillna(risk_free_rate / 252)
+        else:
+            rf_port = pd.Series(risk_free_rate / 252, index=port_returns.index)
+        port_excess = port_returns - rf_port
+
+        # 4b) benchmark excess
+        bench_ret = benchmark_df.pct_change().dropna()
+        if not risk_free_rate_manager.is_empty():
+            rf_bench = risk_free_rate_manager._series.reindex(bench_ret.index).ffill().fillna(risk_free_rate / 252)
+        else:
+            rf_bench = pd.Series(risk_free_rate / 252, index=bench_ret.index)
+        bench_excess = bench_ret - rf_bench
+
+        # 5) Compute rolling yearly betas
+        yearly_betas = compute_yearly_betas(port_excess, bench_excess)
+
+        # 6) Compute alpha/beta/Sharpe/Treynor via OLS
+        X = sm.add_constant(bench_excess.values)
+        y = port_excess.values
+        model = sm.OLS(y, X).fit()
+        daily_alpha = float(model.params[0])
+        portfolio_beta = float(model.params[1])
+        beta_pvalue = float(model.pvalues[1])
+        r_squared = float(model.rsquared)
+        portfolio_alpha = daily_alpha * 252  # annualize
+
+        mean_excess_daily = port_excess.mean() * 252
+        std_excess_daily = port_excess.std() * np.sqrt(252)
+        sharpe = float(mean_excess_daily / std_excess_daily) if std_excess_daily > 0 else None
+        treynor_ratio = float(mean_excess_daily / portfolio_beta) if portfolio_beta not in (0, None) else None
+
+        # 7) UPDATE custom metrics with these "long-horizon" values
+        custom["portfolio_beta"] = portfolio_beta
+        custom["portfolio_alpha"] = portfolio_alpha
+        custom["beta_pvalue"] = beta_pvalue
+        custom["r_squared"] = r_squared
+        custom["blume_adjusted_beta"] = 1 + 0.67 * (portfolio_beta - 1)
+        custom["treynor_ratio"] = treynor_ratio
+        custom["sharpe_ratio"] = sharpe
+        custom["yearly_betas"] = yearly_betas
+    else:
+        # 4c) Not enough history → force all long-horizon metrics to None/0
+        custom["portfolio_beta"] = None
+        custom["portfolio_alpha"] = None
+        custom["beta_pvalue"] = None
+        custom["r_squared"] = None
+        custom["blume_adjusted_beta"] = None
+        custom["treynor_ratio"] = None
+        custom["sharpe_ratio"] = None
+        custom["yearly_betas"] = {}
+
+    # 8) Generate plots (we always can plot distribution/drawdown even if short-horizon)
     dist_b64, dd_b64 = generate_plots(port_returns, method, benchmark_df)
-    
-    # Get or calculate expected_return, volatility, sharpe
+
+    # 9) Expected return, volatility: if pfolio_perf was passed, use that; else compute
     if pfolio_perf is not None:
-        # Use provided values if available
         expected_return = pfolio_perf[0] if len(pfolio_perf) > 0 else 0.0
         volatility = pfolio_perf[1] if len(pfolio_perf) > 1 else 0.0
-        # If sharpe ratio is missing, calculate it manually or use a default
-        if len(pfolio_perf) > 2:
-            sharpe = pfolio_perf[2]
-        else:
-            # Calculate manually if we have expected_return and volatility
-            sharpe = (expected_return - risk_free_rate) / volatility if volatility > 0 else 0.0
+        sharpe = pfolio_perf[2] if len(pfolio_perf) > 2 else (expected_return - risk_free_rate) / volatility if volatility > 0 else 0.0
     else:
-        # Calculate basic metrics if not provided
         expected_return = port_returns.mean() * 252
         volatility = port_returns.std() * np.sqrt(252)
         sharpe = (expected_return - risk_free_rate) / volatility if volatility > 0 else 0.0
-    
-    # Create performance object
+
+    # 10) Build and return the Pydantic PortfolioPerformance
     performance = PortfolioPerformance(
         expected_return=expected_return,
         volatility=volatility,
@@ -241,16 +292,16 @@ def finalize_portfolio(
         var_90=custom["var_90"],
         cvar_90=custom["cvar_90"],
         cagr=custom["cagr"],
-        portfolio_beta=custom["portfolio_beta"],
-        portfolio_alpha=custom["portfolio_alpha"],
-        beta_pvalue=custom["beta_pvalue"],
-        r_squared=custom["r_squared"],
-        blume_adjusted_beta=custom["blume_adjusted_beta"],
-        treynor_ratio=custom["treynor_ratio"],
+        portfolio_beta=custom["portfolio_beta"] or 0.0,
+        portfolio_alpha=custom["portfolio_alpha"] or 0.0,
+        beta_pvalue=custom["beta_pvalue"] or 1.0,
+        r_squared=custom["r_squared"] or 0.0,
+        blume_adjusted_beta=custom["blume_adjusted_beta"] or 0.0,
+        treynor_ratio=custom["treynor_ratio"] or 0.0,
         skewness=custom["skewness"],
         kurtosis=custom["kurtosis"],
         entropy=custom["entropy"],
-        # Advanced beta and cross-moment metrics
+        # Advanced beta & cross-moment
         welch_beta=custom["welch_beta"],
         semi_beta=custom["semi_beta"],
         coskewness=custom["coskewness"],
@@ -270,31 +321,27 @@ def finalize_portfolio(
         sterling_ratio=custom["sterling_ratio"],
         v2_ratio=custom["v2_ratio"]
     )
-    
-    # Log comprehensive portfolio data as JSON for this optimization method
+
+    # Log & wrap up
     portfolio_data = {
         "method": method,
         "weights": {k: float(v) for k, v in sorted(weights.items(), key=lambda x: x[1], reverse=True)},
         "performance": jsonable_encoder(performance),
-        "yearly_betas": {str(k): float(v) for k, v in yearly_betas.items()},
+        "yearly_betas": {str(k): float(v) for k, v in custom.get("yearly_betas", {}).items()},
         "total_weight": float(sum(weights.values())),
         "timestamp": datetime.now().isoformat()
     }
-    
     logger.info(f"PORTFOLIO OPTIMIZATION RESULT: {method}", extra={"portfolio_data": portfolio_data})
-    
-    # Create result object
+
     result = OptimizationResult(
         weights=weights,
         performance=performance,
         returns_dist=dist_b64,
         max_drawdown_plot=dd_b64,
-        rolling_betas=yearly_betas
+        rolling_betas=custom.get("yearly_betas", {})
     )
-    
-    # Calculate cumulative returns
+
     cum_returns = (1 + port_returns).cumprod()
-    
     return result, cum_returns
 
 # ---- MOSEK License Configuration ----
@@ -1905,65 +1952,63 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             logger.warning("Error fetching risk-free rate: %s. Using default 0.05", str(e))
             risk_free_rate = 0.05  # Default fallback
         
-        # Prepare data for optimization - these are CPU-bound so use threadpool
-        try:
-            print("OPTIMIZE: Preparing returns data")
-            # These operations are CPU-intensive, so run them in a threadpool
-            returns = df.pct_change().dropna()
-            print(f"OPTIMIZE: returns shape={returns.shape}")
-            
-            # Check for any potential problems in returns
-            print(f"OPTIMIZE: returns stats - isna count={returns.isna().sum().sum()}, inf count={np.isinf(returns).sum().sum() if hasattr(returns, 'sum') else 'N/A'}")
-            try:
-                max_ret = returns.max().max()
-                min_ret = returns.min().min()
-                print(f"OPTIMIZE: returns range: min={min_ret:.6f}, max={max_ret:.6f}")
-            except Exception as e:
-                print(f"OPTIMIZE: Error computing returns range: {str(e)}")
-            
-            # Define function wrappers to capture arguments properly
-            def calc_expected_returns():
-                print("OPTIMIZE: Calculating expected returns (mean_historical_return)")
-                er = expected_returns.mean_historical_return(df, frequency=252)
-                print(f"OPTIMIZE: expected returns shape={er.shape}, min={er.min():.6f}, max={er.max():.6f}")
-                return er
-                
-            def calc_covariance():
-                print("OPTIMIZE: Calculating covariance matrix (ledoit_wolf)")
-                cov = CovarianceShrinkage(df).ledoit_wolf()
-                
-                # Check if covariance matrix is positive definite
-                try:
-                    eigenvalues = np.linalg.eigvals(cov)
-                    min_eig = min(eigenvalues)
-                    print(f"OPTIMIZE: Covariance min eigenvalue={min_eig:.6e}")
-                    if min_eig <= 0:
-                        print(f"WARNING: Covariance matrix is not positive definite! min eigenvalue={min_eig:.6e}")
-                except Exception as e:
-                    print(f"OPTIMIZE: Error checking covariance eigenvalues: {str(e)}")
-                    
-                return cov
-                
-            mu = await run_in_threadpool(calc_expected_returns)
-            S = await run_in_threadpool(calc_covariance)
-            
-            # Generate the covariance heatmap in a threadpool too
-            print("OPTIMIZE: Generating covariance heatmap")
-            cov_heatmap_b64 = await run_in_threadpool(generate_covariance_heatmap, S)
-            
-            # Calculate yearly returns in a threadpool
-            print("OPTIMIZE: Computing yearly returns")
-            stock_yearly_returns = await run_in_threadpool(compute_yearly_returns_stocks, returns)
-        except Exception as e:
-            error_message = str(e)
-            print(f"OPTIMIZE: Error preparing data: {error_message}")
-            logger.exception("Error preparing data for optimization")
-            raise APIError(
-                code=ErrorCode.DATA_FETCH_ERROR,
-                message="Error preparing data for optimization",
-                status_code=500,
-                details={"error": error_message}
+        # Prepare returns data (always compute returns; we may or may not use mu/cov)
+        returns = df.pct_change().dropna()
+
+        # Check if any return-based method is requested
+        user_methods = set(request.methods)
+        technical_only = user_methods.isdisjoint(RETURN_BASED_METHODS)
+
+        # Validate selected indicators (if any)
+        indicator_cfgs = [i.dict() for i in request.indicators]
+        for cfg in indicator_cfgs:
+            name = cfg["name"].upper()
+            if name not in TECHNICAL_INDICATORS:
+                raise APIError(
+                    code=ErrorCode.INVALID_TICKER,
+                    message=f"Unsupported indicator: {cfg['name']}",
+                    details={"valid_indicators": list(TECHNICAL_INDICATORS.keys())}
+                )
+            # Optionally: check if cfg["window"] ∈ TECHNICAL_INDICATORS[name]
+
+        # If "technical-only", skip mu/cov entirely; else compute as before
+        if technical_only:
+            mu = None
+            cov = None
+            # Build composite indicator scores S
+            S_scores = build_technical_scores(
+                prices=df,
+                highs=df,    # if you have separate H/L, pass them; else reuse df
+                lows=df,
+                volume=df,   # if no volume, pass a dummy frame of 1.0s
+                indicator_cfgs=indicator_cfgs,
+                blend="equal"  # free tier
             )
+            cov_heatmap_b64 = None
+            stock_yearly_returns = None
+        else:
+            # Compute mu & cov exactly as before (for return-based methods)
+            mu = await run_in_threadpool(
+                lambda: expected_returns.mean_historical_return(df, frequency=252)
+            )
+            cov = await run_in_threadpool(
+                lambda: CovarianceShrinkage(df).ledoit_wolf()
+            )
+            cov_heatmap_b64 = await run_in_threadpool(generate_covariance_heatmap, cov)
+            stock_yearly_returns = await run_in_threadpool(compute_yearly_returns_stocks, returns)
+            # If indicators are also selected, compute S_scores to blend with mu (optional)
+            if indicator_cfgs:
+                S_scores = build_technical_scores(
+                    prices=df,
+                    highs=df,
+                    lows=df,
+                    volume=df,
+                    indicator_cfgs=indicator_cfgs,
+                    blend="equal"  # free tier
+                )
+                # If you want to blend into mu: mu = mu + α·S_scores  (user-specific logic)
+            else:
+                S_scores = pd.Series(0.0, index=df.columns)
         
         # Initialize dictionaries to hold results and cumulative returns
         results: Dict[str, Optional[OptimizationResult]] = {}
@@ -1977,89 +2022,100 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             cum_returns = None
             
             try:
-                # Run optimizations in threadpool since they're CPU-intensive
-                if method == OptimizationMethod.HRP:
-                    # For HRP, use sample covariance matrix (returns.cov())
-                    sample_cov = returns.cov()
-                    print(f"OPTIMIZE: Running HRP with sample_cov shape={sample_cov.shape}")
-                    optimization_result, cum_returns = await run_in_threadpool(
-                        run_optimization_HRP, returns, sample_cov, benchmark_df, risk_free_rate
-                    )
-                elif method == OptimizationMethod.HERC:
-                    print("OPTIMIZE: Running HERC")
-                    optimization_result, cum_returns = await run_in_threadpool(
-                        run_optimization_HERC, returns, benchmark_df, risk_free_rate
-                    )
-                elif method == OptimizationMethod.NCO:
-                    print("OPTIMIZE: Running NCO")
-                    optimization_result, cum_returns = await run_in_threadpool(
-                        run_optimization_NCO, returns, benchmark_df, risk_free_rate, linkage="ward", obj="MinRisk", rm="MV", method_mu="hist", method_cov="hist"
-                    )
-                elif method == OptimizationMethod.HERC2:
-                    print("OPTIMIZE: Running HERC2")
-                    optimization_result, cum_returns = await run_in_threadpool(
-                        run_optimization_HERC2, returns, benchmark_df, risk_free_rate,
-                        linkage="complete", rm="CVaR", method_mu="hist", method_cov="hist", 
-                        codependence="spearman", max_k=15
-                    )
-                elif method == OptimizationMethod.MIN_CVAR:
-                    print("OPTIMIZE: Running MIN_CVAR")
-                    optimization_result, cum_returns = await run_in_threadpool(
-                        run_optimization_MIN_CVAR, mu, returns, benchmark_df, risk_free_rate
-                    )
-                elif method == OptimizationMethod.MIN_CDAR:
-                    print("OPTIMIZE: Running MIN_CDAR")
-                    optimization_result, cum_returns = await run_in_threadpool(
-                        run_optimization_MIN_CDAR, mu, returns, benchmark_df, risk_free_rate
-                    )
-                elif method != OptimizationMethod.CRITICAL_LINE_ALGORITHM:
-                    print(f"OPTIMIZE: Running standard method: {method.value}")
-                    optimization_result, cum_returns = await run_in_threadpool(
-                        run_optimization, method, mu, S, returns, benchmark_df, risk_free_rate
-                    )
-                else:
-                    # Handle CLA separately
-                    if request.cla_method == CLAOptimizationMethod.BOTH:
-                        print("OPTIMIZE: Running CLA with BOTH methods")
-                        result_mvo, cum_returns_mvo = await run_in_threadpool(
-                            run_optimization_CLA, "MVO", mu, S, returns, benchmark_df, risk_free_rate
-                        )
-                        result_min_vol, cum_returns_min_vol = await run_in_threadpool(
-                            run_optimization_CLA, "MinVol", mu, S, returns, benchmark_df, risk_free_rate
-                        )
-                        
-                        if result_mvo:
-                            print("OPTIMIZE: CLA_MVO succeeded")
-                            results["CriticalLineAlgorithm_MVO"] = result_mvo
-                            cum_returns_df["CriticalLineAlgorithm_MVO"] = cum_returns_mvo
-                        else:
-                            print("OPTIMIZE: CLA_MVO failed")
-                            failed_methods.append("CriticalLineAlgorithm_MVO")
-                            
-                        if result_min_vol:
-                            print("OPTIMIZE: CLA_MinVol succeeded")
-                            results["CriticalLineAlgorithm_MinVol"] = result_min_vol
-                            cum_returns_df["CriticalLineAlgorithm_MinVol"] = cum_returns_min_vol
-                        else:
-                            print("OPTIMIZE: CLA_MinVol failed")
-                            failed_methods.append("CriticalLineAlgorithm_MinVol")
-                        
-                        # Continue to next method since we've handled CLA specially
-                        continue
-                    else:
-                        sub_method = request.cla_method.value
-                        print(f"OPTIMIZE: Running CLA with {sub_method}")
+                if method in RETURN_BASED_METHODS and not technical_only:
+                    # ─ Return-based methods (exactly as before) ─
+                    if method == OptimizationMethod.HRP:
+                        # For HRP, use sample covariance matrix (returns.cov())
+                        sample_cov = returns.cov()
+                        print(f"OPTIMIZE: Running HRP with sample_cov shape={sample_cov.shape}")
                         optimization_result, cum_returns = await run_in_threadpool(
-                            run_optimization_CLA, sub_method, mu, S, returns, benchmark_df, risk_free_rate
+                            run_optimization_HRP, returns, sample_cov, benchmark_df, risk_free_rate
                         )
-                        if optimization_result:
-                            print(f"OPTIMIZE: CLA_{sub_method} succeeded")
-                            results[f"CriticalLineAlgorithm_{sub_method}"] = optimization_result
-                            cum_returns_df[f"CriticalLineAlgorithm_{sub_method}"] = cum_returns
+                    elif method == OptimizationMethod.HERC:
+                        print("OPTIMIZE: Running HERC")
+                        optimization_result, cum_returns = await run_in_threadpool(
+                            run_optimization_HERC, returns, benchmark_df, risk_free_rate
+                        )
+                    elif method == OptimizationMethod.NCO:
+                        print("OPTIMIZE: Running NCO")
+                        optimization_result, cum_returns = await run_in_threadpool(
+                            run_optimization_NCO, returns, benchmark_df, risk_free_rate, linkage="ward", obj="MinRisk", rm="MV", method_mu="hist", method_cov="hist"
+                        )
+                    elif method == OptimizationMethod.HERC2:
+                        print("OPTIMIZE: Running HERC2")
+                        optimization_result, cum_returns = await run_in_threadpool(
+                            run_optimization_HERC2, returns, benchmark_df, risk_free_rate,
+                            linkage="complete", rm="CVaR", method_mu="hist", method_cov="hist", 
+                            codependence="spearman", max_k=15
+                        )
+                    elif method == OptimizationMethod.MIN_CVAR:
+                        print("OPTIMIZE: Running MIN_CVAR")
+                        optimization_result, cum_returns = await run_in_threadpool(
+                            run_optimization_MIN_CVAR, mu, returns, benchmark_df, risk_free_rate
+                        )
+                    elif method == OptimizationMethod.MIN_CDAR:
+                        print("OPTIMIZE: Running MIN_CDAR")
+                        optimization_result, cum_returns = await run_in_threadpool(
+                            run_optimization_MIN_CDAR, mu, returns, benchmark_df, risk_free_rate
+                        )
+                    elif method != OptimizationMethod.CRITICAL_LINE_ALGORITHM:
+                        # This is MVO, MIN_VOL, MAX_QUADRATIC_UTILITY, EQUI_WEIGHTED, etc.
+                        optimization_result, cum_returns = await run_in_threadpool(
+                            run_optimization, method, mu, cov, returns, benchmark_df, risk_free_rate
+                        )
+                    else:
+                        # ─ CLA logic (unchanged) ─
+                        if request.cla_method == CLAOptimizationMethod.BOTH:
+                            result_mvo, cum_ret_mvo = await run_in_threadpool(
+                                run_optimization_CLA, "MVO", mu, cov, returns, benchmark_df, risk_free_rate
+                            )
+                            result_minvol, cum_ret_minvol = await run_in_threadpool(
+                                run_optimization_CLA, "MinVol", mu, cov, returns, benchmark_df, risk_free_rate
+                            )
+                            if result_mvo:
+                                results["CriticalLineAlgorithm_MVO"] = result_mvo
+                                cum_returns_df["CriticalLineAlgorithm_MVO"] = cum_ret_mvo
+                            else:
+                                failed_methods.append("CriticalLineAlgorithm_MVO")
+                            if result_minvol:
+                                results["CriticalLineAlgorithm_MinVol"] = result_minvol
+                                cum_returns_df["CriticalLineAlgorithm_MinVol"] = cum_ret_minvol
+                            else:
+                                failed_methods.append("CriticalLineAlgorithm_MinVol")
+                            continue
                         else:
-                            print(f"OPTIMIZE: CLA_{sub_method} failed")
-                            failed_methods.append(f"CriticalLineAlgorithm_{sub_method}")
-                        continue
+                            sub_method = request.cla_method.value
+                            optimization_result, cum_returns = await run_in_threadpool(
+                                run_optimization_CLA, sub_method, mu, cov, returns, benchmark_df, risk_free_rate
+                            )
+                            if optimization_result:
+                                results[f"CriticalLineAlgorithm_{sub_method}"] = optimization_result
+                                cum_returns_df[f"CriticalLineAlgorithm_{sub_method}"] = cum_returns
+                            else:
+                                failed_methods.append(f"CriticalLineAlgorithm_{sub_method}")
+                            continue
+                else:
+                    # ─ TECHNICAL-ONLY mode ─
+                    # We already computed S_scores above. Solve LP → get raw weights
+                    raw_wts = run_technical_only_LP(S_scores, returns, benchmark_df, risk_free_rate)
+                    # Now feed those weights into finalize_portfolio(...) so that we produce
+                    # a valid OptimizationResult and cumulative returns
+                    optimization_result, cum_returns = await run_in_threadpool(
+                        finalize_portfolio,
+                        method.value,
+                        raw_wts,
+                        returns,
+                        benchmark_df,
+                        risk_free_rate
+                    )
+                
+                if optimization_result:
+                    print(f"OPTIMIZE: {method.value} succeeded")
+                    results[method.value] = optimization_result
+                    cum_returns_df[method.value] = cum_returns
+                else:
+                    print(f"OPTIMIZE: {method.value} failed")
+                    failed_methods.append(method.value)
             
             except Exception as e:
                 error_message = str(e)
@@ -2067,14 +2123,6 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                 logger.exception("Error in optimization method %s: %s", method.value, error_message)
                 failed_methods.append(method.value)
                 continue  # Skip to next method
-                
-            if optimization_result:
-                print(f"OPTIMIZE: {method.value} succeeded")
-                results[method.value] = optimization_result
-                cum_returns_df[method.value] = cum_returns
-            else:
-                print(f"OPTIMIZE: {method.value} failed")
-                failed_methods.append(method.value)
         
         # If all methods failed, return an error
         if len(results) == 0:
@@ -2519,3 +2567,74 @@ def compute_yearly_betas(port_excess: pd.Series, bench_excess: pd.Series) -> Dic
 _original_run_optimization_HERC = run_optimization_HERC
 _original_run_optimization_NCO = run_optimization_NCO
 _original_run_optimization_HERC2 = run_optimization_HERC2
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 7) TECHNICAL-ONLY LP ROUTINE (max Sᵀw − λ·MAD(w))
+#    only used when NO return-based optimizer is requested
+# ──────────────────────────────────────────────────────────────────────────────
+
+def run_technical_only_LP(
+    S: pd.Series,
+    returns: pd.DataFrame,
+    benchmark_df: pd.Series,
+    risk_free_rate: float
+) -> Dict[str, float]:
+    """
+    Solve a simple LP:
+         max_{w}  Sᵀ w  −  λ · (1/T) Σ_t ε_t
+       s.t.  ε_t  ≥  − Σ_i (r_{t,i} − μ_i) w_i  ∀ t
+              Σ_i w_i = 1
+              0 ≤ w_i ≤ w_max
+              || w − w_prev ||₁ ≤ turnover_cap
+
+    Returns a dict of {ticker: weight}.
+    Cumulative returns will be computed by finalize_portfolio(...) later.
+    """
+    tickers = S.index.tolist()
+    n = len(tickers)
+
+    # 1) Hyperparameters (tweak as needed)
+    lam = 5.0                  # penalty on MAD
+    w_max = 0.05               # 5% max per stock
+    turnover_cap = 0.20        # 20% turnover at most
+
+    # 2) Previous weights: for simplicity, start from equal weight
+    w_prev = np.array([1.0 / n] * n)
+
+    # 3) Build CVXPY variables
+    w = cp.Variable(n)                     # weights
+    epsilon = cp.Variable(returns.shape[0]) # slack for MAD
+
+    # 4) Center returns: μ_i = mean_i (we can use returns.mean() or zero)
+    mu_vec = returns.mean(axis=0).values     # (n,)
+    R_centered = returns.values - mu_vec[np.newaxis, :]  # (T, n)
+
+    # 5) MAD constraints: ε_t + Σ_i R_centered[t,i]*w_i ≥ 0  ∀ t
+    mad_constraints = []
+    for t in range(R_centered.shape[0]):
+        mad_constraints.append(
+            epsilon[t] + R_centered[t, :] @ w >= 0
+        )
+
+    # 6) Box, budget, turnover constraints:
+    constraints = [
+        cp.sum(w) == 1,
+        w >= 0,
+        w <= w_max,
+        cp.norm1(w - w_prev) <= turnover_cap
+    ] + mad_constraints
+
+    # 7) Objective: maximize  Sᵀ w − lam*(1/T) Σ_t ε_t
+    obj = cp.Maximize(S.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
+
+    prob = cp.Problem(obj, constraints)
+    prob.solve(solver=cp.ECOS, verbose=False)
+
+    if w.value is None:
+        raise ValueError("Technical-only LP failed to converge")
+
+    return pd.Series(w.value, index=tickers).to_dict()
+
+# ──────────────────────────────────────────────────────────────────────────────
+# END OF run_technical_only_LP
+# ──────────────────────────────────────────────────────────────────────────────

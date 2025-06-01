@@ -3,6 +3,9 @@ FROM python:3.11.1
 
 WORKDIR /app
 
+# Install TA-Lib dependencies (simplified)
+RUN apt-get update && apt-get install -y libta-lib-dev && rm -rf /var/lib/apt/lists/*
+
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
@@ -12,7 +15,7 @@ RUN pip install --upgrade pip && \
 RUN mkdir -p /app/mosek /app/outputs
 
 # Copy all application files at once (reducing layers)
-COPY data.py srv.py settings.py test.py main.py ./
+COPY data.py srv.py settings.py test.py main.py signals.py ./
 
 # Create entrypoint script to handle MOSEK license
 RUN echo '#!/bin/bash\n\

@@ -51,6 +51,7 @@ class OptimizationMethod(str, Enum):
     HERC = "HERC"  # Hierarchical Equal Risk Contribution
     NCO = "NCO"    # Nested Clustered Optimization
     HERC2 = "HERC2"  # Another variant of HERC
+    TECHNICAL = "TECHNICAL"  # Technical indicator-based optimization
 
 # New enum for CLA sub-methods
 class CLAOptimizationMethod(str, Enum):
@@ -147,13 +148,20 @@ class PortfolioOptimizationResponse(BaseModel):
     stock_yearly_returns: Optional[Dict[str, Dict[str, float]]]
     covariance_heatmap: Optional[str] = None
     risk_free_rate : float
+    is_technical_only: bool = False  # True if only technical methods were used
 
 class StockItem(BaseModel):
     ticker: str
     exchange: ExchangeEnum
 
+class TechnicalIndicator(BaseModel):
+    name: str
+    window: str  # Required field for most indicators
+    mult: Optional[float] = None  # Optional only for SUPERTREND
+
 class TickerRequest(BaseModel):
     stocks: List[StockItem]
     methods: List[OptimizationMethod] = [OptimizationMethod.MVO]
     cla_method: Optional[CLAOptimizationMethod] = CLAOptimizationMethod.BOTH
-    benchmark: BenchmarkName = BenchmarkName.nifty  # Default to Nifty 
+    benchmark: BenchmarkName = BenchmarkName.nifty  # Default to Nifty
+    indicators: List[TechnicalIndicator] = [] 

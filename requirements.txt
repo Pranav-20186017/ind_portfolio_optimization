@@ -21,3 +21,4 @@ aiofiles>=23.2.1
 cachetools>=5.0.0
 arch>=6.0.0
 riskfolio-lib>=7.0.1
+TA-Lib>=0.6.3

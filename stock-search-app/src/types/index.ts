@@ -114,6 +114,9 @@ export interface PortfolioOptimizationResponse {
     covariance_heatmap?: string;
 
     risk_free_rate?: number;
+    
+    // Flag to indicate if the response is for technical indicators optimization
+    is_technical_only?: boolean;
 }
 
 export enum ExchangeEnum {
@@ -132,7 +135,8 @@ export enum OptimizationMethod {
   NCO = "NCO",
   HERC2 = "HERC2",
   MinCVaR = "MinCVaR",
-  MinCDaR = "MinCDaR"
+  MinCDaR = "MinCDaR",
+  TechnicalOptimization = "TechnicalOptimization"
 }
 
 export enum CLAOptimizationMethod {
@@ -152,11 +156,32 @@ export interface StockItem {
   exchange: ExchangeEnum;
 }
 
+// Technical indicator types
+export enum TechnicalIndicatorType {
+  SMA = "SMA",
+  EMA = "EMA",
+  RSI = "RSI",
+  WILLR = "WILLR",
+  ATR = "ATR",
+  SUPERTREND = "SUPERTREND",
+  MACD = "MACD",
+  STOCH = "STOCH",
+  BOLLINGER = "BOLLINGER",
+  CCI = "CCI"
+}
+
+export interface TechnicalIndicator {
+  name: TechnicalIndicatorType;
+  window: number;
+  mult?: number;
+}
+
 export interface TickerRequest {
   stocks: StockItem[];
   methods: OptimizationMethod[];
   cla_method?: CLAOptimizationMethod;
   benchmark: BenchmarkName;
+  indicators?: TechnicalIndicator[];
 }
 
 export interface BenchmarkReturn {
