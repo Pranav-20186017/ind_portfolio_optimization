@@ -3,33 +3,22 @@ FROM python:3.11.1
 
 WORKDIR /app
 
-# Install TA-Lib from source (official method)
-RUN apt-get update && apt-get install -y \
-    wget \
-    build-essential \
-    && wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.6.4-src.tar.gz \
-    && tar -xzf ta-lib-0.6.4-src.tar.gz \
-    && cd ta-lib-0.6.4/ \
-    && ./configure --prefix=/usr \
-    && make \
-    && make install \
-    && cd .. \
-    && rm -rf ta-lib-0.6.4 ta-lib-0.6.4-src.tar.gz \
+# Install TA-Lib using official Debian package (much faster and more reliable)
+RUN apt-get update && apt-get install -y wget \
+    && wget https://github.com/ta-lib/ta-lib/releases/download/v0.6.4/ta-lib_0.6.4_amd64.deb \
+    && dpkg -i ta-lib_0.6.4_amd64.deb \
+    && rm ta-lib_0.6.4_amd64.deb \
     && apt-get remove -y wget \
+    && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-# Install TA-Lib Python package first (needs build-essential)
+# Install TA-Lib Python package first (needs the C library)
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir TA-Lib>=0.6.3
 
 # Install other Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Clean up build dependencies now that we're done
-RUN apt-get update && apt-get remove -y build-essential \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
 
 # Create directories
 RUN mkdir -p /app/mosek /app/outputs
