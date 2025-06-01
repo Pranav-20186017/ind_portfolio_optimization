@@ -15,14 +15,21 @@ RUN apt-get update && apt-get install -y \
     && make install \
     && cd .. \
     && rm -rf ta-lib-0.6.4 ta-lib-0.6.4-src.tar.gz \
-    && apt-get remove -y wget build-essential \
-    && apt-get autoremove -y \
+    && apt-get remove -y wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt .
+# Install TA-Lib Python package first (needs build-essential)
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir TA-Lib>=0.6.3
+
+# Install other Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Clean up build dependencies now that we're done
+RUN apt-get update && apt-get remove -y build-essential \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create directories
 RUN mkdir -p /app/mosek /app/outputs
