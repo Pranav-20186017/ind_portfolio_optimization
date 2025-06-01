@@ -1969,7 +1969,15 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                     message=f"Unsupported indicator: {cfg['name']}",
                     details={"valid_indicators": list(TECHNICAL_INDICATORS.keys())}
                 )
-            # Optionally: check if cfg["window"] ∈ TECHNICAL_INDICATORS[name]
+            
+            # Skip window validation for indicators that don't need a window
+            if name in ["OBV", "AD"] and TECHNICAL_INDICATORS[name][0] == "":
+                continue
+                
+            # Convert window to string if it's a number
+            if "window" in cfg and cfg["window"] is not None:
+                # No need to validate specific window values - any reasonable window is acceptable
+                pass
 
         # If "technical-only", skip mu/cov entirely; else compute as before
         if technical_only:

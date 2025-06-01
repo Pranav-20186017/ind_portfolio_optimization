@@ -148,6 +148,27 @@ const HomePage: React.FC = () => {
   const [indicatorWindow, setIndicatorWindow] = useState<number>(20);
   const [indicatorMult, setIndicatorMult] = useState<number>(2);
   
+  // Predefined window options for each indicator type
+  const indicatorWindowOptions = {
+    [TechnicalIndicatorType.SMA]: [200, 100, 50, 20, 10],
+    [TechnicalIndicatorType.EMA]: [200, 100, 50, 20, 10],
+    [TechnicalIndicatorType.RSI]: [14, 9, 21],
+    [TechnicalIndicatorType.WILLR]: [14, 9, 21],
+    [TechnicalIndicatorType.ATR]: [14, 7, 21],
+    [TechnicalIndicatorType.SUPERTREND]: [10, 7, 14],
+    [TechnicalIndicatorType.MACD]: [12], // MACD uses fixed parameters internally
+    [TechnicalIndicatorType.STOCH]: [14, 9, 21],
+    [TechnicalIndicatorType.BOLLINGER]: [20, 10, 50],
+    [TechnicalIndicatorType.CCI]: [20, 14, 50],
+  };
+  
+  // Update window size when indicator type changes
+  useEffect(() => {
+    if (indicatorWindowOptions[indicatorName]?.length > 0) {
+      setIndicatorWindow(indicatorWindowOptions[indicatorName][0]);
+    }
+  }, [indicatorName]);
+  
   // Check if technical optimization is selected
   const isTechnicalOptimizationSelected = selectedAlgorithms.some(algo => 
     algo.value === 'TechnicalOptimization'
@@ -1232,15 +1253,20 @@ const HomePage: React.FC = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12} sm={3}>
-              <TextField
-                fullWidth
-                label="Window Size"
-                type="number"
-                value={indicatorWindow}
-                onChange={(e) => setIndicatorWindow(Number(e.target.value))}
-                variant="outlined"
-                InputProps={{ inputProps: { min: 1 } }}
-              />
+              <FormControl fullWidth variant="outlined">
+                <InputLabel>Window Size</InputLabel>
+                <Select
+                  value={indicatorWindow}
+                  onChange={(e) => setIndicatorWindow(Number(e.target.value))}
+                  label="Window Size"
+                >
+                  {indicatorWindowOptions[indicatorName]?.map((window) => (
+                    <MenuItem key={window} value={window}>
+                      {window}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
             {["SUPERTREND", "BOLLINGER"].includes(indicatorName) && (
               <Grid item xs={12} sm={3}>
