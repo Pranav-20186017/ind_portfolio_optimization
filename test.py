@@ -1163,8 +1163,8 @@ class TestPortfolioOptimization(unittest.TestCase):
             ],
             methods=[OptimizationMethod.TECHNICAL],
             indicators=[
-                TechnicalIndicator(name="SMA", window="20"),
-                TechnicalIndicator(name="RSI", window="14")
+                TechnicalIndicator(name="SMA", window=20),
+                TechnicalIndicator(name="RSI", window=14)
             ]
         )
         
@@ -1325,9 +1325,9 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertEqual(OptimizationMethod.TECHNICAL, "TECHNICAL")
         
         # 2. Verify TechnicalIndicator model exists and has required fields
-        indicator = TechnicalIndicator(name="RSI", window="14")
+        indicator = TechnicalIndicator(name="RSI", window=14)
         self.assertEqual(indicator.name, "RSI")
-        self.assertEqual(indicator.window, "14")
+        self.assertEqual(indicator.window, 14)
         
         # 3. Verify signals module has all required technical indicators
         required_indicators = signals.TECHNICAL_INDICATORS
