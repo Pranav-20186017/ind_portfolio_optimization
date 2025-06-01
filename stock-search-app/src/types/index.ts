@@ -160,14 +160,16 @@ export interface StockItem {
 export enum TechnicalIndicatorType {
   SMA = "SMA",
   EMA = "EMA",
+  WMA = "WMA",
   RSI = "RSI",
   WILLR = "WILLR",
+  CCI = "CCI",
+  ROC = "ROC",
   ATR = "ATR",
   SUPERTREND = "SUPERTREND",
-  MACD = "MACD",
-  STOCH = "STOCH",
-  BOLLINGER = "BOLLINGER",
-  CCI = "CCI"
+  BBANDS = "BBANDS",
+  OBV = "OBV",
+  AD = "AD"
 }
 
 export interface TechnicalIndicator {

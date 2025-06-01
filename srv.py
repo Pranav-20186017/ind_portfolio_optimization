@@ -2165,7 +2165,8 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             benchmark_returns=[BenchmarkReturn(name=request.benchmark, returns=cum_benchmark.tolist())],
             stock_yearly_returns=stock_yearly_returns,
             covariance_heatmap=cov_heatmap_b64,
-            risk_free_rate=risk_free_rate
+            risk_free_rate=risk_free_rate,
+            is_technical_only=technical_only
         )
         
         # Include a warning in the response if some methods failed
