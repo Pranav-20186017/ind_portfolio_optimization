@@ -20,10 +20,40 @@ jobs:
         with:
           python-version: "3.10"
 
+      - name: Cache TA-Lib installation
+        uses: actions/cache@v3
+        with:
+          path: ~/ta-lib
+          key: ta-lib-0.6.4-${{ runner.os }}
+
+      - name: Install TA-Lib C library
+        run: |
+          if [ ! -d "~/ta-lib" ]; then
+            wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.6.4-src.tar.gz
+            tar -xzf ta-lib-0.6.4-src.tar.gz
+            cd ta-lib-0.6.4/
+            ./configure --prefix=$HOME/ta-lib
+            make
+            make install
+            cd ..
+            rm -rf ta-lib-0.6.4 ta-lib-0.6.4-src.tar.gz
+          fi
+
+          # Set environment variables for TA-Lib
+          echo "TA_LIBRARY_PATH=$HOME/ta-lib/lib" >> $GITHUB_ENV
+          echo "TA_INCLUDE_PATH=$HOME/ta-lib/include" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$HOME/ta-lib/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          # Install TA-Lib Python package first
+          pip install TA-Lib>=0.6.3
+          # Install other requirements
           pip install -r requirements.txt
+        env:
+          TA_LIBRARY_PATH: ${{ env.TA_LIBRARY_PATH }}
+          TA_INCLUDE_PATH: ${{ env.TA_INCLUDE_PATH }}
 
       - name: Run tests
         id: run_tests
@@ -32,6 +62,7 @@ jobs:
           python test.py
         continue-on-error: false # Make the build fail if tests fail
         env:
+          LD_LIBRARY_PATH: ${{ env.LD_LIBRARY_PATH }}
           LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
           MOSEK_LICENSE_CONTENT: ${{ secrets.MOSEK_LICENSE_CONTENT }}
 
