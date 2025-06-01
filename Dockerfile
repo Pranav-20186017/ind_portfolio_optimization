@@ -3,8 +3,21 @@ FROM python:3.11.1
 
 WORKDIR /app
 
-# Install TA-Lib dependencies (simplified)
-RUN apt-get update && apt-get install -y libta-lib-dev && rm -rf /var/lib/apt/lists/*
+# Install TA-Lib from source (official method)
+RUN apt-get update && apt-get install -y \
+    wget \
+    build-essential \
+    && wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.6.4-src.tar.gz \
+    && tar -xzf ta-lib-0.6.4-src.tar.gz \
+    && cd ta-lib-0.6.4/ \
+    && ./configure --prefix=/usr \
+    && make \
+    && make install \
+    && cd .. \
+    && rm -rf ta-lib-0.6.4 ta-lib-0.6.4-src.tar.gz \
+    && apt-get remove -y wget build-essential \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
 COPY requirements.txt .
