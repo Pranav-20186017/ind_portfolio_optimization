@@ -277,16 +277,16 @@ def build_technical_scores(
 # PUBLIC: Which indicators (and which default windows) we support. Used for validation.
 # ──────────────────────────────────────────────────────────────────────────────
 TECHNICAL_INDICATORS = {
-    "SMA":        ["200", "100", "50", "20", "10"],
-    "EMA":        ["200", "100", "50", "20", "10"],
-    "WMA":        ["50", "20"],
-    "RSI":        ["14", "9", "21"],
-    "WILLR":      ["14", "9", "21"],
-    "CCI":        ["20", "14", "50"],
-    "ROC":        ["12", "20", "25"],
-    "ATR":        ["14", "7", "21"],
-    "SUPERTREND": ["10", "7", "14"],    # multiplier defaults to 3.0 unless overridden
-    "BBANDS":     ["20", "10", "50"],
-    "OBV":        [""],   # no window needed
-    "AD":         [""],   # no window needed
+    "SMA":        [200, 100, 50, 20, 10],
+    "EMA":        [200, 100, 50, 20, 10],
+    "WMA":        [50, 20],
+    "RSI":        [14, 9, 21],
+    "WILLR":      [14, 9, 21],
+    "CCI":        [20, 14, 50],
+    "ROC":        [12, 20, 25],
+    "ATR":        [14, 7, 21],
+    "SUPERTREND": [10, 7, 14],    # multiplier defaults to 3.0 unless overridden
+    "BBANDS":     [20, 10, 50],
+    "OBV":        [0],   # no window needed
+    "AD":         [0],   # no window needed
 } 

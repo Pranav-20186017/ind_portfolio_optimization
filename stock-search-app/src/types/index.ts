@@ -136,7 +136,7 @@ export enum OptimizationMethod {
   HERC2 = "HERC2",
   MinCVaR = "MinCVaR",
   MinCDaR = "MinCDaR",
-  TechnicalOptimization = "TechnicalOptimization"
+  TECHNICAL = "TECHNICAL"
 }
 
 export enum CLAOptimizationMethod {

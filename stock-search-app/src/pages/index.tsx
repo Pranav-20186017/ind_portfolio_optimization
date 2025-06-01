@@ -42,6 +42,9 @@ import GetApp from '@mui/icons-material/GetApp';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import Tooltip from '@mui/material/Tooltip';
 import Box from '@mui/material/Box';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 // Import TopNav component
 import TopNav from '../components/TopNav';
@@ -79,32 +82,32 @@ const algorithmOptions = [
   { label: 'Mean-Variance Optimization', value: 'MVO' },
   { label: 'Minimum Volatility', value: 'MinVol' },
   { label: 'Maximum Quadratic Utility', value: 'MaxQuadraticUtility' },
-  { label: 'Equally Weighted', value: 'EquiWeighted' },
+  { label: 'Equal Weighting', value: 'EquiWeighted' },
   { label: 'Critical Line Algorithm', value: 'CriticalLineAlgorithm' },
-  { label: 'Hierarchical Risk Parity (HRP)', value: 'HRP' },
-  { label: 'Hierarchical Equal Risk Contribution (HERC)', value: 'HERC' },
-  { label: 'Nested Clustered Optimization (NCO)', value: 'NCO' },
-  { label: 'Hierarchical Equal Risk Contribution 2 (HERC2)', value: 'HERC2' },
-  { label: 'Minimum Conditional Value at Risk (CVaR)', value: 'MinCVaR' },
-  { label: 'Minimum Conditional Drawdown at Risk (CDaR)', value: 'MinCDaR' },
-  { label: 'Technical Indicator Optimization', value: 'TechnicalOptimization' },
+  { label: 'Hierarchical Risk Parity', value: 'HRP' },
+  { label: 'Hierarchical Equal Risk Contribution', value: 'HERC' },
+  { label: 'Hierarchical Equal Risk Contribution 2', value: 'HERC2' },
+  { label: 'Nested Clustered Optimization', value: 'NCO' },
+  { label: 'Minimize Conditional Value-at-Risk', value: 'MinCVaR' },
+  { label: 'Minimize Conditional Drawdown-at-Risk', value: 'MinCDaR' },
+  { label: 'Technical Indicator Optimization', value: 'TECHNICAL' },
 ];
 
-// Mapping for descriptive headings in the results section
-const algoDisplayNames: { [key: string]: string } = {
+// Method Display Names
+const methodDisplayNames: Record<string, string> = {
   MVO: "Mean-Variance Optimization",
   MinVol: "Minimum Volatility",
   MaxQuadraticUtility: "Maximum Quadratic Utility",
-  EquiWeighted: "Equally Weighted",
-  CriticalLineAlgorithm_MVO: "Critical Line Algorithm (Mean-Variance Optimization)",
-  CriticalLineAlgorithm_MinVol: "Critical Line Algorithm (Minimum Volatility)",
-  HRP: "Hierarchical Risk Parity (HRP)",
-  HERC: "Hierarchical Equal Risk Contribution (HERC)",
-  NCO: "Nested Clustered Optimization (NCO)", 
-  HERC2: "Hierarchical Equal Risk Contribution 2 (HERC2)",
-  MinCVaR: "Minimum Conditional Value at Risk (CVaR)",
-  MinCDaR: "Minimum Conditional Drawdown at Risk (CDaR)",
-  TechnicalOptimization: "Technical Indicator Optimization"
+  EquiWeighted: "Equal Weighting",
+  CriticalLineAlgorithm_MVO: "Critical Line Alg. (MVO)",
+  CriticalLineAlgorithm_MinVol: "Critical Line Alg. (MinVol)",
+  HRP: "Hierarchical Risk Parity",
+  MinCVaR: "Minimum Conditional Value-at-Risk",
+  MinCDaR: "Minimum Conditional Drawdown-at-Risk",
+  HERC: "Hierarchical Equal Risk Contribution",
+  NCO: "Nested Clustered Optimization",
+  HERC2: "Hierarchical Equal Risk Contribution 2",
+  TECHNICAL: "Technical Indicator Optimization"
 };
 
 /**
@@ -171,14 +174,14 @@ const HomePage: React.FC = () => {
   
   // Check if technical optimization is selected
   const isTechnicalOptimizationSelected = selectedAlgorithms.some(algo => 
-    algo.value === 'TechnicalOptimization'
+    algo.value === 'TECHNICAL'
   );
   
   // Function to add a technical indicator
   const handleAddIndicator = () => {
     const newIndicator: TechnicalIndicator = {
       name: indicatorName,
-      window: indicatorWindow,
+      window: indicatorWindow, // Already a number
       mult: ["SUPERTREND", "BOLLINGER"].includes(indicatorName) ? indicatorMult : undefined
     };
     
@@ -458,6 +461,7 @@ const HomePage: React.FC = () => {
     
     setLoading(true);
     setError(null); // Clear any previous errors
+    
     const dataToSend = {
       stocks: selectedStocks.map((s) => ({ ticker: s.ticker, exchange: s.exchange })),
       methods: selectedAlgorithms.map((a) => a.value),
@@ -650,7 +654,7 @@ const HomePage: React.FC = () => {
         if (!methodData || !methodData.rolling_betas) return;
         
         datasets.push({
-          label: algoDisplayNames[methodKey] || methodKey,
+          label: methodDisplayNames[methodKey] || methodKey,
           data: years.map(year => methodData.rolling_betas?.[year] || null),
           borderColor: colors[methodKey as keyof typeof colors] || '#000000',
           fill: false,
@@ -1193,7 +1197,7 @@ const HomePage: React.FC = () => {
         )}
       </div>
       
-      {/* Technical Indicators Section - Only shown when TechnicalOptimization is selected */}
+      {/* Technical Indicators Section - Only shown when TECHNICAL is selected */}
       {isTechnicalOptimizationSelected && (
         <div className="mb-6" style={{ 
           background: 'white', 
@@ -1516,7 +1520,7 @@ const HomePage: React.FC = () => {
               if (!methodData) return null;
               
               // Get display name for the method
-              const displayName = algoDisplayNames[methodKey] || methodKey;
+              const displayName = methodDisplayNames[methodKey] || methodKey;
               
               return (
                 <Card 
@@ -1946,7 +1950,7 @@ const HomePage: React.FC = () => {
                           ...Object.entries(optimizationResult.results)
                             .filter(([_, methodData]) => methodData && methodData.rolling_betas)
                             .map(([methodKey, methodData]) => ({
-                              label: algoDisplayNames[methodKey] || methodKey,
+                              label: methodDisplayNames[methodKey] || methodKey,
                               data: getAllYears(optimizationResult).map(year => 
                                 methodData?.rolling_betas ? methodData.rolling_betas[year] || null : null
                               ),

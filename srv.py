@@ -1971,10 +1971,10 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                 )
             
             # Skip window validation for indicators that don't need a window
-            if name in ["OBV", "AD"] and TECHNICAL_INDICATORS[name][0] == "":
+            if name in ["OBV", "AD"]:
                 continue
                 
-            # Convert window to string if it's a number
+            # Ensure window is numeric
             if "window" in cfg and cfg["window"] is not None:
                 # No need to validate specific window values - any reasonable window is acceptable
                 pass

@@ -156,7 +156,7 @@ class StockItem(BaseModel):
 
 class TechnicalIndicator(BaseModel):
     name: str
-    window: str  # Required field for most indicators
+    window: int  # Required field for most indicators
     mult: Optional[float] = None  # Optional only for SUPERTREND
 
 class TickerRequest(BaseModel):
