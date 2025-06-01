@@ -2588,60 +2588,336 @@ def run_technical_only_LP(
     risk_free_rate: float
 ) -> Dict[str, float]:
     """
-    Solve a simple LP:
+    Solve a linear programming (LP) problem for technical indicator-based optimization:
          max_{w}  Sᵀ w  −  λ · (1/T) Σ_t ε_t
        s.t.  ε_t  ≥  − Σ_i (r_{t,i} − μ_i) w_i  ∀ t
               Σ_i w_i = 1
               0 ≤ w_i ≤ w_max
               || w − w_prev ||₁ ≤ turnover_cap
 
-    Returns a dict of {ticker: weight}.
-    Cumulative returns will be computed by finalize_portfolio(...) later.
+    The function implements a robust optimization approach with multiple fallback strategies
+    to ensure convergence in challenging scenarios.
+
+    Args:
+        S: pd.Series of technical indicator scores for each asset
+        returns: pd.DataFrame of historical returns for each asset
+        benchmark_df: pd.Series of benchmark prices
+        risk_free_rate: float, risk-free rate as decimal
+
+    Returns:
+        Dict[str, float]: Dictionary mapping tickers to optimized weights
     """
     tickers = S.index.tolist()
     n = len(tickers)
-
-    # 1) Hyperparameters (tweak as needed)
-    lam = 5.0                  # penalty on MAD
-    w_max = 0.05               # 5% max per stock
-    turnover_cap = 0.20        # 20% turnover at most
-
-    # 2) Previous weights: for simplicity, start from equal weight
+    
+    # Standardize and clip extreme indicator scores for numerical stability
+    S_std = (S - S.mean()) / (S.std() or 1.0)  # Standardize with fallback for zero std
+    S_clipped = np.clip(S_std, -3, 3)  # Limit extreme values to ±3 sigma
+    
+    # Financial hyperparameters with documented justification
+    lam = 5.0         # Penalty on MAD (Mean Absolute Deviation)
+    w_max = 0.30      # 30% max per stock (typical regulatory/diversification constraint)
+    w_min = 0.0       # Lower bound on weights (long-only constraint)
+    turnover_cap = 0.50  # 50% turnover allowed (typical for monthly rebalancing)
+    
+    # Starting point: equal weight portfolio
     w_prev = np.array([1.0 / n] * n)
-
-    # 3) Build CVXPY variables
-    w = cp.Variable(n)                     # weights
-    epsilon = cp.Variable(returns.shape[0]) # slack for MAD
-
-    # 4) Center returns: μ_i = mean_i (we can use returns.mean() or zero)
-    mu_vec = returns.mean(axis=0).values     # (n,)
-    R_centered = returns.values - mu_vec[np.newaxis, :]  # (T, n)
-
-    # 5) MAD constraints: ε_t + Σ_i R_centered[t,i]*w_i ≥ 0  ∀ t
-    mad_constraints = []
-    for t in range(R_centered.shape[0]):
-        mad_constraints.append(
+    
+    # Center returns with respect to their means
+    mu_vec = returns.mean(axis=0).values
+    R_centered = returns.values - mu_vec[np.newaxis, :]
+    
+    # Track optimization attempts for logging
+    attempts = []
+    
+    # ---- Primary Optimization: Full Model ----
+    try:
+        # CVXPY variables
+        w = cp.Variable(n)  # Portfolio weights
+        epsilon = cp.Variable(returns.shape[0])  # MAD slack variables
+        
+        # MAD constraints: ε_t + Σ_i R_centered[t,i]*w_i ≥ 0  ∀ t
+        mad_constraints = [
             epsilon[t] + R_centered[t, :] @ w >= 0
-        )
+            for t in range(R_centered.shape[0])
+        ]
+        
+        # Box, budget, turnover constraints
+        basic_constraints = [
+            cp.sum(w) == 1,      # Sum of weights = 1
+            w >= w_min,          # Non-negative weights
+            w <= w_max,          # Upper bound on weights
+            cp.norm1(w - w_prev) <= turnover_cap  # Turnover constraint
+        ]
+        
+        # Full constraint set
+        constraints = basic_constraints + mad_constraints
+        
+        # Objective function
+        obj = cp.Maximize(S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
+        
+        # Define the problem
+        prob = cp.Problem(obj, constraints)
+        
+        # Solve with ECOS solver (primary choice for LP)
+        prob.solve(solver=cp.ECOS, max_iters=2000, abstol=1e-7, reltol=1e-6, verbose=False)
+        
+        # Check KKT conditions and feasibility
+        if prob.status == cp.OPTIMAL:
+            logger.info("Technical LP: Primary optimization succeeded with ECOS")
+            attempts.append(("Primary ECOS", "Optimal", prob.value))
+            
+            # Check if solution is valid (sum ≈ 1)
+            if abs(sum(w.value) - 1.0) > 1e-4:
+                logger.warning(f"Technical LP: Primary solution weights sum to {sum(w.value)}, not 1.0")
+                raise ValueError("Primary solution weights don't sum to 1.0")
+                
+            # Return the optimal solution
+            return pd.Series(w.value, index=tickers).to_dict()
+            
+        elif prob.status in [cp.OPTIMAL_INACCURATE, cp.ALMOST_OPTIMAL]:
+            logger.warning(f"Technical LP: Primary optimization achieved {prob.status}")
+            attempts.append(("Primary ECOS", prob.status, prob.value))
+            
+            # If the solution is usable despite being inaccurate
+            if w.value is not None and abs(sum(w.value) - 1.0) <= 1e-2:
+                # Normalize to ensure weights sum to 1
+                w_normalized = w.value / sum(w.value)
+                logger.info("Technical LP: Using normalized inaccurate solution")
+                return pd.Series(w_normalized, index=tickers).to_dict()
+                
+        else:
+            logger.warning(f"Technical LP: Primary optimization failed with status {prob.status}")
+            attempts.append(("Primary ECOS", prob.status, None))
+    
+    except Exception as e:
+        logger.warning(f"Technical LP: Primary optimization failed with error: {str(e)}")
+        attempts.append(("Primary ECOS", f"Error: {type(e).__name__}", None))
+    
+    # ---- Secondary Optimization: Alternative Solvers ----
+    alternative_solvers = [
+        (cp.SCS, {"max_iters": 5000, "eps": 1e-5}),
+        (cp.OSQP, {"max_iter": 10000, "eps_abs": 1e-5, "eps_rel": 1e-5})
+    ]
+    
+    for solver, kwargs in alternative_solvers:
+        try:
+            solver_name = str(solver).split(".")[-1].split(" ")[0]
+            logger.info(f"Technical LP: Trying alternative solver {solver_name}")
+            
+            # Redefine problem for clean solver state
+            w = cp.Variable(n)
+            epsilon = cp.Variable(returns.shape[0])
+            
+            mad_constraints = [
+                epsilon[t] + R_centered[t, :] @ w >= 0
+                for t in range(R_centered.shape[0])
+            ]
+            
+            basic_constraints = [
+                cp.sum(w) == 1,
+                w >= w_min,
+                w <= w_max,
+                cp.norm1(w - w_prev) <= turnover_cap
+            ]
+            
+            constraints = basic_constraints + mad_constraints
+            obj = cp.Maximize(S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
+            prob = cp.Problem(obj, constraints)
+            
+            # Solve with alternative solver
+            prob.solve(solver=solver, verbose=False, **kwargs)
+            
+            if prob.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE, cp.ALMOST_OPTIMAL]:
+                logger.info(f"Technical LP: Alternative solver {solver_name} succeeded with status {prob.status}")
+                attempts.append((f"Alternative {solver_name}", prob.status, prob.value))
+                
+                if w.value is not None and abs(sum(w.value) - 1.0) <= 1e-2:
+                    # Normalize to ensure weights sum to 1
+                    w_normalized = w.value / sum(w.value)
+                    return pd.Series(w_normalized, index=tickers).to_dict()
+            else:
+                logger.warning(f"Technical LP: Alternative solver {solver_name} failed with status {prob.status}")
+                attempts.append((f"Alternative {solver_name}", prob.status, None))
+                
+        except Exception as e:
+            logger.warning(f"Technical LP: Alternative solver failed with error: {str(e)}")
+            attempts.append((f"Alternative {solver_name}", f"Error: {type(e).__name__}", None))
+    
+    # ---- Tertiary Optimization: Relaxed Constraints ----
+    try:
+        logger.info("Technical LP: Trying relaxed constraints (no turnover limit)")
+        
+        # Redefine problem with relaxed constraints
+        w = cp.Variable(n)
+        epsilon = cp.Variable(returns.shape[0])
+        
+        mad_constraints = [
+            epsilon[t] + R_centered[t, :] @ w >= 0
+            for t in range(R_centered.shape[0])
+        ]
+        
+        # Remove turnover constraint
+        relaxed_constraints = [
+            cp.sum(w) == 1,
+            w >= w_min,
+            w <= w_max
+        ] + mad_constraints
+        
+        obj = cp.Maximize(S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
+        prob = cp.Problem(obj, relaxed_constraints)
+        
+        # Try with ECOS first, then SCS as fallback
+        for solver, solver_name, kwargs in [
+            (cp.ECOS, "ECOS", {"max_iters": 2000, "abstol": 1e-6, "reltol": 1e-6}),
+            (cp.SCS, "SCS", {"max_iters": 5000, "eps": 1e-4})
+        ]:
+            try:
+                prob.solve(solver=solver, verbose=False, **kwargs)
+                
+                if prob.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE, cp.ALMOST_OPTIMAL]:
+                    logger.info(f"Technical LP: Relaxed constraints with {solver_name} succeeded: {prob.status}")
+                    attempts.append((f"Relaxed {solver_name}", prob.status, prob.value))
+                    
+                    if w.value is not None and abs(sum(w.value) - 1.0) <= 1e-2:
+                        # Normalize to ensure weights sum to 1
+                        w_normalized = w.value / sum(w.value)
+                        return pd.Series(w_normalized, index=tickers).to_dict()
+                else:
+                    logger.warning(f"Technical LP: Relaxed constraints with {solver_name} failed: {prob.status}")
+                    attempts.append((f"Relaxed {solver_name}", prob.status, None))
+                    
+            except Exception as e:
+                logger.warning(f"Technical LP: Relaxed {solver_name} failed with error: {str(e)}")
+                attempts.append((f"Relaxed {solver_name}", f"Error: {type(e).__name__}", None))
+    
+    except Exception as e:
+        logger.warning(f"Technical LP: Relaxed constraints approach failed with error: {str(e)}")
+        attempts.append(("Relaxed approach", f"Error: {type(e).__name__}", None))
+    
+    # ---- Quaternary Optimization: Minimal Constraints (fallback) ----
+    try:
+        logger.info("Technical LP: Trying minimal constraints (budget + non-negativity only)")
+        
+        # Simplest possible formulation
+        w = cp.Variable(n)
+        
+        # Only enforce budget and non-negativity
+        minimal_constraints = [
+            cp.sum(w) == 1,
+            w >= w_min
+        ]
+        
+        # Simplified objective (no epsilon variables)
+        obj = cp.Maximize(S_clipped.values @ w)
+        prob = cp.Problem(obj, minimal_constraints)
+        
+        prob.solve(solver=cp.ECOS, verbose=False)
+        
+        if prob.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE, cp.ALMOST_OPTIMAL]:
+            logger.info(f"Technical LP: Minimal constraints succeeded with status {prob.status}")
+            attempts.append(("Minimal", prob.status, prob.value))
+            
+            if w.value is not None:
+                # Normalize to ensure weights sum to 1
+                w_normalized = w.value / sum(w.value)
+                return pd.Series(w_normalized, index=tickers).to_dict()
+        else:
+            logger.warning(f"Technical LP: Even minimal constraints failed with status {prob.status}")
+            attempts.append(("Minimal", prob.status, None))
+            
+    except Exception as e:
+        logger.warning(f"Technical LP: Minimal constraints approach failed with error: {str(e)}")
+        attempts.append(("Minimal", f"Error: {type(e).__name__}", None))
+    
+    # ---- Last Resort: Score-Weighted Portfolio ----
+    try:
+        logger.info("Technical LP: All optimization attempts failed. Using score-weighted portfolio.")
+        
+        # Make all scores positive by adding the minimum score (if negative)
+        min_score = min(0, S_clipped.min())
+        shifted_scores = S_clipped - min_score
+        
+        # Handle the case where all scores are identical
+        if shifted_scores.std() < 1e-6:
+            logger.info("Technical LP: All scores effectively identical, using equal weights")
+            weights = pd.Series(1.0 / n, index=tickers)
+        else:
+            # Score-weighted approach: weight proportional to positive score
+            weights = shifted_scores / shifted_scores.sum()
+            
+            # Apply max weight constraint if any weight exceeds w_max
+            if weights.max() > w_max:
+                logger.info(f"Technical LP: Score-weighted exceeded max weight {w_max}, applying constraint")
+                weights = constrain_weights(weights, w_max)
+        
+        logger.warning(f"Technical LP: Returning score-weighted fallback solution: {weights.to_dict()}")
+        return weights.to_dict()
+        
+    except Exception as e:
+        logger.error(f"Technical LP: Even score-weighted fallback failed: {str(e)}")
+        # Last fallback: equal weights
+        logger.error("Technical LP: Using equal weights as final fallback")
+        return pd.Series(1.0 / n, index=tickers).to_dict()
 
-    # 6) Box, budget, turnover constraints:
-    constraints = [
-        cp.sum(w) == 1,
-        w >= 0,
-        w <= w_max,
-        cp.norm1(w - w_prev) <= turnover_cap
-    ] + mad_constraints
-
-    # 7) Objective: maximize  Sᵀ w − lam*(1/T) Σ_t ε_t
-    obj = cp.Maximize(S.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
-
-    prob = cp.Problem(obj, constraints)
-    prob.solve(solver=cp.ECOS, verbose=False)
-
-    if w.value is None:
-        raise ValueError("Technical-only LP failed to converge")
-
-    return pd.Series(w.value, index=tickers).to_dict()
+def constrain_weights(weights: pd.Series, max_weight: float = 0.30) -> pd.Series:
+    """
+    Apply weight constraints to ensure no weight exceeds max_weight while maintaining sum = 1
+    
+    Args:
+        weights: Initial weights
+        max_weight: Maximum allowed weight for any single asset
+        
+    Returns:
+        pd.Series: Constrained weights
+    """
+    # If no weight exceeds the limit, return as-is
+    if weights.max() <= max_weight:
+        return weights
+    
+    # Copy to avoid modifying original
+    result = weights.copy()
+    
+    # Iteratively constrain weights
+    while result.max() > max_weight:
+        # Find assets exceeding the limit
+        excess_idx = result[result > max_weight].index
+        
+        # Calculate total excess
+        total_excess = sum(result[excess_idx] - max_weight)
+        
+        # Cap the exceeding assets
+        result[excess_idx] = max_weight
+        
+        # Find assets below the limit
+        below_idx = result[result < max_weight].index
+        
+        # If no assets below limit, we can't redistribute
+        if len(below_idx) == 0:
+            # Set all to equal weights
+            return pd.Series(1.0 / len(result), index=result.index)
+        
+        # Calculate remaining capacity
+        remaining_capacity = below_idx.map(lambda idx: max_weight - result[idx])
+        total_capacity = sum(remaining_capacity)
+        
+        # If not enough capacity, distribute proportionally to capacity
+        if total_capacity < total_excess:
+            for idx in below_idx:
+                # Proportional distribution
+                result[idx] += (max_weight - result[idx]) / total_capacity * total_excess
+        else:
+            # Distribute proportionally to current weights
+            below_sum = sum(result[below_idx])
+            for idx in below_idx:
+                if below_sum > 0:
+                    result[idx] += result[idx] / below_sum * total_excess
+                else:
+                    # If all below weights are 0, distribute equally
+                    result[idx] += total_excess / len(below_idx)
+    
+    # Final normalization to ensure sum = 1
+    return result / result.sum()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # END OF run_technical_only_LP

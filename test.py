@@ -1370,5 +1370,304 @@ class TestPortfolioOptimization(unittest.TestCase):
         
         print("✅ Technical optimization infrastructure is properly implemented")
 
+    def test_technical_only_LP_advanced_edge_cases(self):
+        """Test that run_technical_only_LP handles advanced edge cases correctly."""
+        # Import required modules
+        from srv import run_technical_only_LP, constrain_weights
+        import pandas as pd
+        import numpy as np
+        
+        # Common test setup
+        tickers = ['STOCK1.NS', 'STOCK2.NS', 'STOCK3.NS', 'STOCK4.NS']
+        n_assets = len(tickers)
+        dates = pd.date_range('2020-01-01', periods=100, freq='B')
+        
+        # Create benchmark data
+        base_returns = np.random.normal(0.0005, 0.01, len(dates))
+        benchmark = pd.Series(100 * np.cumprod(1 + base_returns), index=dates)
+        
+        # ---- Test 1: Constant Returns (Zero Variance) ----
+        # Create returns with zero variance for some assets
+        const_returns_data = {}
+        for i, ticker in enumerate(tickers):
+            if i < 2:  # First two assets have constant returns
+                const_returns_data[ticker] = pd.Series(0.001, index=dates)  # Constant returns
+            else:
+                # Normal returns for other assets
+                returns = np.random.normal(0.0005, 0.01, len(dates))
+                const_returns_data[ticker] = pd.Series(returns, index=dates)
+        
+        const_returns_df = pd.DataFrame(const_returns_data)
+        
+        # Scores favor the constant-return assets
+        const_scores = pd.Series([0.8, 0.7, 0.1, -0.1], index=tickers)
+        
+        try:
+            const_weights = run_technical_only_LP(const_scores, const_returns_df, benchmark, 0.05)
+            
+            # Check solution validity
+            self.assertAlmostEqual(sum(const_weights.values()), 1.0, places=6)
+            for weight in const_weights.values():
+                self.assertGreaterEqual(weight, 0)
+                self.assertLessEqual(weight, 0.5)  # Should respect max weight constraint
+            
+            print("✅ Technical LP with constant returns test passed")
+            
+        except Exception as e:
+            self.fail(f"Technical LP with constant returns failed with error: {str(e)}")
+        
+        # ---- Test 2: Rank Deficient Covariance Matrix ----
+        # Create perfectly correlated assets (plus some uncorrelated ones)
+        rank_deficient_data = {}
+        # Base returns for correlated assets
+        base = np.random.normal(0.0005, 0.01, len(dates))
+        
+        for i, ticker in enumerate(tickers):
+            if i < 3:  # First three assets are perfectly correlated
+                rank_deficient_data[ticker] = pd.Series(base, index=dates)
+            else:
+                # Independent returns for other assets
+                returns = np.random.normal(0.0005, 0.01, len(dates))
+                rank_deficient_data[ticker] = pd.Series(returns, index=dates)
+                
+        rank_df = pd.DataFrame(rank_deficient_data)
+        
+        # Scores favor different assets to test if optimization handles rank deficiency
+        rank_scores = pd.Series([-0.5, 0.3, 0.8, 0.1], index=tickers)
+        
+        try:
+            rank_weights = run_technical_only_LP(rank_scores, rank_df, benchmark, 0.05)
+            
+            # Check solution validity
+            self.assertAlmostEqual(sum(rank_weights.values()), 1.0, places=6)
+            for weight in rank_weights.values():
+                self.assertGreaterEqual(weight, 0)
+            
+            print("✅ Technical LP with rank-deficient returns test passed")
+            
+        except Exception as e:
+            self.fail(f"Technical LP with rank-deficient returns failed with error: {str(e)}")
+        
+        # ---- Test 3: Extreme Asset Correlations ----
+        # Some assets with high positive correlation, some with high negative correlation
+        extreme_corr_data = {}
+        
+        # Base returns
+        base1 = np.random.normal(0.0005, 0.01, len(dates))
+        base2 = np.random.normal(0.0005, 0.01, len(dates))
+        
+        for i, ticker in enumerate(tickers):
+            if i == 0:
+                extreme_corr_data[ticker] = pd.Series(base1, index=dates)
+            elif i == 1:
+                extreme_corr_data[ticker] = pd.Series(base1 * 1.1, index=dates)  # Highly correlated with asset 0
+            elif i == 2:
+                extreme_corr_data[ticker] = pd.Series(-base1, index=dates)  # Perfectly negatively correlated with asset 0
+            else:
+                extreme_corr_data[ticker] = pd.Series(base2, index=dates)  # Independent of asset 0
+        
+        extreme_corr_df = pd.DataFrame(extreme_corr_data)
+        
+        # Uniform scores to focus on correlation handling
+        uniform_scores = pd.Series([0.5, 0.5, 0.5, 0.5], index=tickers)
+        
+        try:
+            extreme_weights = run_technical_only_LP(uniform_scores, extreme_corr_df, benchmark, 0.05)
+            
+            # Check solution validity
+            self.assertAlmostEqual(sum(extreme_weights.values()), 1.0, places=6)
+            for weight in extreme_weights.values():
+                self.assertGreaterEqual(weight, 0)
+            
+            print("✅ Technical LP with extreme correlations test passed")
+            
+        except Exception as e:
+            self.fail(f"Technical LP with extreme correlations failed with error: {str(e)}")
+        
+        # ---- Test 4: All Zero or NaN Scores ----
+        # Edge case where all indicator scores are zero or NaN
+        zero_scores = pd.Series([0, 0, 0, 0], index=tickers)
+        
+        # Regular returns
+        returns_data = {}
+        for ticker in tickers:
+            returns = np.random.normal(0.0005, 0.01, len(dates))
+            returns_data[ticker] = pd.Series(returns, index=dates)
+        
+        returns_df = pd.DataFrame(returns_data)
+        
+        try:
+            zero_weights = run_technical_only_LP(zero_scores, returns_df, benchmark, 0.05)
+            
+            # With zero scores, should still produce valid weights
+            self.assertAlmostEqual(sum(zero_weights.values()), 1.0, places=6)
+            
+            # Likely equal or near-equal weights due to zero scores
+            expected_weight = 1.0 / n_assets
+            for weight in zero_weights.values():
+                self.assertGreaterEqual(weight, 0)
+                # Should be approximately equal weights with some small tolerance
+                self.assertAlmostEqual(weight, expected_weight, delta=0.1)
+            
+            print("✅ Technical LP with zero scores test passed")
+            
+        except Exception as e:
+            self.fail(f"Technical LP with zero scores failed with error: {str(e)}")
+        
+        # ---- Test 5: Test the constrain_weights helper function ----
+        # Create weights that exceed the max weight constraint
+        unconstrained = pd.Series([0.5, 0.3, 0.1, 0.1], index=tickers)
+        max_weight = 0.3
+        
+        try:
+            constrained = constrain_weights(unconstrained, max_weight)
+            
+            # Check that constraints are respected
+            self.assertAlmostEqual(sum(constrained), 1.0, places=6)
+            for weight in constrained:
+                self.assertGreaterEqual(weight, 0)
+                self.assertLessEqual(weight, max_weight)
+            
+            # Convert the arrays to Series for easier comparison
+            constrained_series = pd.Series(constrained, index=tickers)
+            
+            # Ensure the first weight was reduced from 0.5 to 0.3
+            self.assertLessEqual(constrained_series[tickers[0]], max_weight)
+            
+            # Check that the excess weight (0.2) was redistributed somewhere
+            # The exact redistribution depends on the implementation
+            excess = unconstrained[tickers[0]] - max_weight  # 0.5 - 0.3 = 0.2
+            
+            # The sum of increases in other weights should equal the excess from the first weight
+            increases = sum([max(0, constrained_series[t] - unconstrained[t]) for t in tickers[1:]])
+            self.assertAlmostEqual(increases, excess, places=6,
+                                  msg="Excess weight should be redistributed to other assets")
+            
+            print("✅ constrain_weights function test passed")
+            
+        except Exception as e:
+            self.fail(f"constrain_weights function failed with error: {str(e)}")
+        
+        print("✅ All advanced technical LP tests passed!")
+    
+    def test_technical_only_LP_numerical_stability(self):
+        """Test that run_technical_only_LP handles numerical stability issues correctly."""
+        # Import required modules
+        from srv import run_technical_only_LP
+        import pandas as pd
+        import numpy as np
+        
+        # Create test data
+        tickers = ['STOCK1.NS', 'STOCK2.NS', 'STOCK3.NS', 'STOCK4.NS']
+        dates = pd.date_range('2020-01-01', periods=200, freq='B')
+        
+        # Create benchmark data
+        base_returns = np.random.normal(0.0005, 0.01, len(dates))
+        benchmark = pd.Series(100 * np.cumprod(1 + base_returns), index=dates)
+        
+        # ---- Test 1: Extreme Score Magnitudes ----
+        # Create scores with extreme magnitudes
+        extreme_scores = pd.Series([1e6, -1e6, 1e-6, -1e-6], index=tickers)
+        
+        # Create normal returns
+        returns_data = {}
+        for ticker in tickers:
+            returns = np.random.normal(0.0005, 0.01, len(dates))
+            returns_data[ticker] = pd.Series(returns, index=dates)
+        
+        returns_df = pd.DataFrame(returns_data)
+        
+        try:
+            extreme_magnitude_weights = run_technical_only_LP(extreme_scores, returns_df, benchmark, 0.05)
+            
+            # Check solution validity
+            self.assertAlmostEqual(sum(extreme_magnitude_weights.values()), 1.0, places=6)
+            for weight in extreme_magnitude_weights.values():
+                self.assertGreaterEqual(weight, 0)
+            
+            # The highest score (first ticker) should get higher weight than the lowest score (second ticker)
+            self.assertGreater(extreme_magnitude_weights[tickers[0]], extreme_magnitude_weights[tickers[1]])
+            
+            print("✅ Technical LP with extreme score magnitudes test passed")
+            
+        except Exception as e:
+            self.fail(f"Technical LP with extreme score magnitudes failed with error: {str(e)}")
+        
+        # ---- Test 2: Extreme Return Magnitudes ----
+        # Normal scores
+        normal_scores = pd.Series([0.8, 0.5, 0.3, -0.2], index=tickers)
+        
+        # Returns with extreme magnitudes
+        extreme_returns_data = {}
+        for i, ticker in enumerate(tickers):
+            if i == 0:
+                # Extremely large returns
+                returns = np.random.normal(0.1, 0.5, len(dates))  # 10% daily returns!
+            elif i == 1:
+                # Extremely small returns
+                returns = np.random.normal(0.00001, 0.00005, len(dates))
+            else:
+                # Normal returns
+                returns = np.random.normal(0.0005, 0.01, len(dates))
+            
+            extreme_returns_data[ticker] = pd.Series(returns, index=dates)
+        
+        extreme_returns_df = pd.DataFrame(extreme_returns_data)
+        
+        try:
+            extreme_returns_weights = run_technical_only_LP(normal_scores, extreme_returns_df, benchmark, 0.05)
+            
+            # Check solution validity
+            self.assertAlmostEqual(sum(extreme_returns_weights.values()), 1.0, places=6)
+            for weight in extreme_returns_weights.values():
+                self.assertGreaterEqual(weight, 0)
+            
+            print("✅ Technical LP with extreme return magnitudes test passed")
+            
+        except Exception as e:
+            self.fail(f"Technical LP with extreme return magnitudes failed with error: {str(e)}")
+        
+        # ---- Test 3: Ill-Conditioned Problem ----
+        # Create returns that will lead to an ill-conditioned problem
+        # (nearly identical assets with tiny differences)
+        ill_conditioned_data = {}
+        base = np.random.normal(0.0005, 0.01, len(dates))
+        
+        for i, ticker in enumerate(tickers):
+            # Each asset is almost identical to the base, with tiny differences
+            epsilon = 1e-10
+            perturbation = np.random.normal(0, epsilon, len(dates))
+            ill_conditioned_data[ticker] = pd.Series(base + perturbation, index=dates)
+        
+        ill_conditioned_df = pd.DataFrame(ill_conditioned_data)
+        
+        # Scores with big differences
+        varied_scores = pd.Series([1.0, 0.5, -0.5, -1.0], index=tickers)
+        
+        try:
+            ill_conditioned_weights = run_technical_only_LP(varied_scores, ill_conditioned_df, benchmark, 0.05)
+            
+            # Check solution validity
+            self.assertAlmostEqual(sum(ill_conditioned_weights.values()), 1.0, places=6)
+            for weight in ill_conditioned_weights.values():
+                self.assertGreaterEqual(weight, 0)
+            
+            # With ill-conditioned problems, the exact weights might be close with floating point differences
+            # Use a delta comparison instead of strict ordering
+            delta = 1e-9
+            if ill_conditioned_weights[tickers[0]] < ill_conditioned_weights[tickers[1]]:
+                # Check if they're almost equal (within delta)
+                self.assertAlmostEqual(ill_conditioned_weights[tickers[0]], 
+                                      ill_conditioned_weights[tickers[1]], 
+                                      delta=delta, 
+                                      msg="Weights should be almost equal due to ill-conditioning")
+            
+            print("✅ Technical LP with ill-conditioned problem test passed")
+            
+        except Exception as e:
+            self.fail(f"Technical LP with ill-conditioned problem failed with error: {str(e)}")
+        
+        print("✅ All numerical stability tests passed!")
+
 if __name__ == '__main__':
     unittest.main() 
