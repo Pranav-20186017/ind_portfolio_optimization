@@ -45,6 +45,7 @@ import Box from '@mui/material/Box';
 import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import CheckCircleOutline from '@mui/icons-material/CheckCircleOutline';
 
 // Import TopNav component
 import TopNav from '../components/TopNav';
@@ -1553,12 +1554,12 @@ const HomePage: React.FC = () => {
                     <Grid container spacing={2}>
                       <Grid item xs={12} md={6}>
                         <Typography variant="body1">
-                          <strong>Period:</strong> {formatDate(optimizationResult.start_date)} to {formatDate(optimizationResult.end_date)}
+                          <strong>Period:</strong> {formatDate(optimizationResult.technical_start_date || optimizationResult.start_date)} to {formatDate(optimizationResult.technical_end_date || optimizationResult.end_date)}
                         </Typography>
                       </Grid>
                       <Grid item xs={12} md={6}>
                         <Typography variant="body1">
-                          <strong>Risk-Free Rate:</strong> {((optimizationResult.risk_free_rate || 0) * 100).toFixed(2)}%
+                          <strong>Risk-Free Rate:</strong> {((optimizationResult.technical_risk_free_rate || optimizationResult.risk_free_rate || 0) * 100).toFixed(2)}%
                         </Typography>
                       </Grid>
                       <Grid item xs={12}>
@@ -1574,12 +1575,12 @@ const HomePage: React.FC = () => {
             
             {/* Technical Optimization Badge */}
             {isTechnicalOptimizationResult && (
-              <Card style={{ marginBottom: '20px', backgroundColor: '#f0f8ff', border: '1px solid #b3d8ff' }}>
+              <Card style={{ marginBottom: '20px', backgroundColor: '#f0fff4', border: '1px solid #8eedc7' }}>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <InfoOutlined style={{ marginRight: '10px', color: '#0066cc' }} />
+                    <CheckCircleOutline style={{ marginRight: '10px', color: '#38a169' }} />
                     <div>
-                      <Typography variant="subtitle1" fontWeight="bold" color="#0066cc">
+                      <Typography variant="subtitle1" fontWeight="bold" color="#38a169">
                         Technical Indicator Optimization
                       </Typography>
                       <Typography variant="body2">
@@ -1679,8 +1680,8 @@ const HomePage: React.FC = () => {
                                   </TableRow>
                                 )}
                                 
-                                {/* Only show beta metrics for non-technical optimization methods */}
-                                {methodKey !== "TECHNICAL" && (
+                                {/* Only hide specific beta-related metrics for TECHNICAL method */}
+                                {methodKey !== "TECHNICAL" ? (
                                   <>
                                     <TableRow>
                                       <TableCell>
@@ -1711,6 +1712,13 @@ const HomePage: React.FC = () => {
                                       </TableCell>
                                     </TableRow>
                                   </>
+                                ) : (
+                                  // Add a special message for technical method explaining why beta metrics are omitted
+                                  <TableRow>
+                                    <TableCell colSpan={2} sx={{ color: 'text.secondary', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                                      Note: Beta-related metrics (Beta, Alpha, R-Squared) are not applicable for technical optimization as it does not use CAPM model.
+                                    </TableCell>
+                                  </TableRow>
                                 )}
                                 <TableRow>
                                   <TableCell>VaR (95%)</TableCell>
@@ -1737,20 +1745,18 @@ const HomePage: React.FC = () => {
                                   </TableCell>
                                 </TableRow>
                                 
-                                {/* Only show Treynor for non-technical optimization methods */}
-                                {methodKey !== "TECHNICAL" && (
-                                  <TableRow>
-                                    <TableCell>
-                                      Treynor Ratio
-                                      <Tooltip title="The Treynor Ratio measures excess return per unit of market risk. It's calculated as (Portfolio Return - Risk-Free Rate) / Portfolio Beta. A higher Treynor Ratio indicates better risk-adjusted performance relative to market risk.">
-                                        <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                      </Tooltip>
-                                    </TableCell>
-                                    <TableCell align="right">
-                                      {methodData.performance.treynor_ratio.toFixed(4)}
-                                    </TableCell>
-                                  </TableRow>
-                                )}
+                                {/* Show Treynor for all methods including technical optimization */}
+                                <TableRow>
+                                  <TableCell>
+                                    Treynor Ratio
+                                    <Tooltip title="The Treynor Ratio measures excess return per unit of market risk. It's calculated as (Portfolio Return - Risk-Free Rate) / Portfolio Beta. A higher Treynor Ratio indicates better risk-adjusted performance relative to market risk.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.treynor_ratio.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
                                 <TableRow>
                                   <TableCell>
                                     Information Ratio
@@ -1760,6 +1766,41 @@ const HomePage: React.FC = () => {
                                   </TableCell>
                                   <TableCell align="right">
                                     {methodData.performance.information_ratio.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                
+                                {/* Add more general risk metrics for all methods */}
+                                <TableRow>
+                                  <TableCell>
+                                    Calmar Ratio
+                                    <Tooltip title="The Calmar Ratio is the annualized return divided by the maximum drawdown. It measures return per unit of downside risk.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.calmar_ratio.toFixed(3)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Omega Ratio
+                                    <Tooltip title="The Omega Ratio measures the probability-weighted ratio of gains versus losses for a given return threshold. Higher values are better.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {Number.isFinite(methodData.performance.omega_ratio) ? methodData.performance.omega_ratio.toFixed(3) : '∞'}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Ulcer Index
+                                    <Tooltip title="The Ulcer Index measures the depth and duration of drawdowns in asset prices. Lower values indicate less drawdown risk.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.ulcer_index.toFixed(4)}
                                   </TableCell>
                                 </TableRow>
                               </>

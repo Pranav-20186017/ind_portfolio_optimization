@@ -5,7 +5,7 @@ import os
 import time
 import uuid
 import warnings
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 from typing import List, Dict, Optional, Tuple, Union
 import re
@@ -39,6 +39,7 @@ from pypfopt.risk_models import CovarianceShrinkage
 from scipy.optimize import minimize_scalar
 from scipy.stats import entropy
 import cvxpy as cp
+import matplotlib.dates as mdates
 
 # Local imports
 from data import (
@@ -1258,63 +1259,77 @@ def generate_plots(port_returns: pd.Series, method: str, benchmark_df: pd.Series
     below_90 = port_returns[port_returns <= var_90]
     cvar_90 = below_90.mean() if not below_90.empty else var_90
     
-    plt.axvline(var_95, color='r', linestyle='--', label=f"VaR 95%: {var_95:.4f}")
-    plt.axvline(cvar_95, color='r', linestyle='-', label=f"CVaR 95%: {cvar_95:.4f}")
-    plt.axvline(var_90, color='g', linestyle='--', label=f"VaR 90%: {var_90:.4f}")
-    plt.axvline(cvar_90, color='g', linestyle='-', label=f"CVaR 90%: {cvar_90:.4f}")
+    plt.axvline(var_95, color='r', linestyle='--', alpha=0.7, label=f'VaR 95%: {var_95:.4f}')
+    plt.axvline(cvar_95, color='darkred', linestyle='--', alpha=0.7, label=f'CVaR 95%: {cvar_95:.4f}')
+    plt.axvline(var_90, color='orange', linestyle='--', alpha=0.7, label=f'VaR 90%: {var_90:.4f}')
+    plt.axvline(cvar_90, color='darkorange', linestyle='--', alpha=0.7, label=f'CVaR 90%: {cvar_90:.4f}')
+    
     plt.legend()
-
-    dist_file = os.path.join(output_dir, f"{method.lower()}_dist.png")
-    plt.savefig(dist_file, bbox_inches='tight')
+    
+    # Save distribution plot
+    output_dir = settings.output_dir
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        
+    dist_filepath = os.path.join(output_dir, f"{method.lower()}_dist.png")
+    plt.savefig(dist_filepath, bbox_inches="tight")
     plt.close()
-    dist_b64 = file_to_base64(dist_file)
-
+    
     # Plot drawdown
-    cum = (1 + port_returns).cumprod()
-    peak = cum.cummax()
-    drawdown = (cum - peak) / peak
+    cumulative = (1 + port_returns).cumprod()
+    rolling_max = cumulative.cummax()
+    drawdown = (cumulative / rolling_max) - 1
+    
     plt.figure(figsize=(10, 6))
     
-    # Ensure proper date formatting on x-axis
-    if isinstance(drawdown.index, pd.DatetimeIndex):
-        plt.plot(drawdown.index, drawdown.values, color='red', label='Portfolio Drawdown')
-    else:
-        # If index is not DatetimeIndex (shouldn't happen), use numeric indices
-        plt.plot(drawdown.values, color='red', label='Portfolio Drawdown')
-    
-    # Add benchmark drawdown if available
-    if benchmark_df is not None:
-        # Calculate benchmark returns and drawdown
-        benchmark_ret = benchmark_df.pct_change().dropna()
-        # Align with portfolio returns
-        common_dates = drawdown.index.intersection(benchmark_ret.index)
-        if len(common_dates) > 0:
-            benchmark_ret = benchmark_ret.loc[common_dates]
-            cum_benchmark = (1 + benchmark_ret).cumprod()
-            peak_benchmark = cum_benchmark.cummax()
-            drawdown_benchmark = (cum_benchmark - peak_benchmark) / peak_benchmark
+    # For technical optimization, ensure we use date formatting on x-axis
+    if is_technical:
+        # Plot using the actual dates instead of integer indices
+        plt.plot(drawdown.index, drawdown.values * 100, label=f"{method_display} Drawdown", color='blue')
+        
+        # If benchmark is provided, calculate and plot its drawdown too
+        if benchmark_df is not None:
+            # Calculate benchmark returns
+            bench_returns = benchmark_df.pct_change().dropna()
             
-            if isinstance(drawdown_benchmark.index, pd.DatetimeIndex):
-                plt.plot(drawdown_benchmark.index, drawdown_benchmark.values, color='blue', label='Benchmark Drawdown')
-            else:
-                plt.plot(drawdown_benchmark.values, color='blue', label='Benchmark Drawdown')
+            # Align the benchmark returns to the portfolio returns period
+            common_dates = port_returns.index.intersection(bench_returns.index)
+            if len(common_dates) > 0:
+                bench_returns = bench_returns.loc[common_dates]
+                
+                # Calculate benchmark drawdown
+                bench_cumulative = (1 + bench_returns).cumprod()
+                bench_rolling_max = bench_cumulative.cummax()
+                bench_drawdown = (bench_cumulative / bench_rolling_max) - 1
+                
+                # Plot benchmark drawdown
+                plt.plot(bench_drawdown.index, bench_drawdown.values * 100, label="Benchmark Drawdown", color='gray', alpha=0.7)
+    else:
+        # Standard plot using default indexing
+        plt.plot(drawdown * 100, label=f"{method_display} Drawdown", color='blue')
     
-    plt.title(f"Drawdown Comparison - {method_display} Portfolio")
+    plt.fill_between(drawdown.index, 0, drawdown.values * 100, color='red', alpha=0.2)
+    plt.title(f"{method_display} Portfolio Drawdown")
     plt.xlabel("Date")
-    plt.ylabel("Drawdown")
+    plt.ylabel("Drawdown (%)")
     plt.grid(True)
     plt.legend()
     
-    # Format x-axis dates if we have a DatetimeIndex
-    if isinstance(drawdown.index, pd.DatetimeIndex):
-        plt.gcf().autofmt_xdate()
-        
-    dd_file = os.path.join(output_dir, f"{method.lower()}_drawdown.png")
-    plt.savefig(dd_file, bbox_inches='tight')
-    plt.close()
-    dd_b64 = file_to_base64(dd_file)
+    # Format x-axis with dates - use auto formatting for better readability
+    plt.gcf().autofmt_xdate()
     
-    return dist_b64, dd_b64
+    # Calculate max drawdown
+    max_dd = drawdown.min() * 100
+    plt.axhline(max_dd, color='r', linestyle='--', alpha=0.7, label=f'Max DD: {max_dd:.2f}%')
+    plt.legend()
+    
+    # Save drawdown plot
+    dd_filepath = os.path.join(output_dir, f"{method.lower()}_drawdown.png")
+    plt.savefig(dd_filepath, bbox_inches="tight")
+    plt.close()
+    
+    # Return base64 encoded images
+    return file_to_base64(dist_filepath), file_to_base64(dd_filepath)
 
 def run_optimization(method: OptimizationMethod, mu, S, returns, benchmark_df, risk_free_rate=0.05):
     """Run a specific optimization method (non-CLA, non-HRP) and return the results"""
@@ -1903,68 +1918,65 @@ def run_optimization_MIN_CDAR(mu, returns, benchmark_df, risk_free_rate=0.05):
 @app.post("/optimize")
 async def optimize_portfolio(request: TickerRequest = Body(...), background_tasks: BackgroundTasks = None):
     try:
-        # Format tickers
-        formatted_tickers = format_tickers(request.stocks)
-        print(f"OPTIMIZE: Starting with {len(formatted_tickers)} formatted tickers")
-        logger.info("Stock tickers chosen: %s", formatted_tickers)
-        # Log optimization methods chosen
-        method_values = [method.value for method in request.methods]
-        logger.info("OPTIMIZATION METHODS [%d]: %s", len(method_values), ", ".join(method_values))
-        if len(formatted_tickers) < 2:
-            print(f"OPTIMIZE: Insufficient stocks: {len(formatted_tickers)}")
+        # Get formatted ticker list
+        tickers = format_tickers(request.stocks)
+        if not tickers:
             raise APIError(
-                code=ErrorCode.INSUFFICIENT_STOCKS,
-                message="Minimum of 2 stocks required for portfolio optimization",
-                details={"provided_count": len(formatted_tickers)}
+                code=ErrorCode.INSUFFICIENT_STOCKS, 
+                message="Please select at least 2 valid stocks",
+                details={"min_stocks": 2}
             )
         
-        # Get benchmark ticker
+        # Get benchmark ticker from enum
         benchmark_ticker = Benchmarks.get_ticker(request.benchmark)
-        print(f"OPTIMIZE: Using benchmark {benchmark_ticker}")
-        logger.info("Using benchmark: %s (ticker: %s)", request.benchmark.value, benchmark_ticker)
         
-        # Determine whether we need to sanitize BSE names
-        sanitize_bse = any(s.exchange == ExchangeEnum.BSE for s in request.stocks)
-        print(f"OPTIMIZE: sanitize_bse={sanitize_bse}")
+        # Determine lookback period based on methods
+        # Default: 5 years for return-based methods, 1 year for technical-only methods
+        is_technical_only = all(method == OptimizationMethod.TECHNICAL for method in request.methods)
         
-        # Fetch & align data (with optional BSE sanitization)
-        try:
-            print("OPTIMIZE: Calling fetch_and_align_data")
-            df, benchmark_df = await run_in_threadpool(
-                fetch_and_align_data,
-                formatted_tickers,
-                benchmark_ticker,
-                sanitize_bse
-            )
-            print(f"OPTIMIZE: fetch_and_align complete, df shape={df.shape}")
-        except ValueError as e:
-            if "No valid data available" in str(e):
-                print(f"OPTIMIZE: No valid data available error: {str(e)}")
-                raise APIError(
-                    code=ErrorCode.NO_DATA_FOUND,
-                    message="No valid data available for the provided tickers",
-                    details={"tickers": formatted_tickers}
-                )
-            raise  # Re-raise if it's a different ValueError
+        # For technical-only methods, use a shorter lookback period
+        if is_technical_only:
+            # Find max window size from indicators
+            max_window = 0
+            for indicator in request.indicators:
+                if hasattr(indicator, "window") and indicator.window:
+                    max_window = max(max_window, indicator.window)
             
+            # Ensure we have enough data for the indicators but don't go back excessively
+            # Get max window (default to 200 if no indicators provided)
+            max_window = max([cfg.get("window", 200) for cfg in indicator_cfgs]) if indicator_cfgs else 200
+            
+            # Use 252 trading days (1 year) + max window size + small buffer
+            # This is more reasonable than using 2 years of data for technical indicators
+            lookback_days = min(252 + max_window + 20, 504)  # Cap at ~2 years max
+            
+            start_date = datetime.now() - timedelta(days=lookback_days * 1.4)  # Add 40% for weekends/holidays
+            end_date = datetime.now()
+            print(f"OPTIMIZE: Using reasonable lookback of {lookback_days} trading days for technical-only optimization")
+        else:
+            # For return-based methods, use standard 5-year lookback
+            start_date = datetime.now() - timedelta(days=365*5)
+            end_date = datetime.now()
+            print(f"OPTIMIZE: Using standard 5-year lookback for return-based optimization")
+        
+        # Fetch and align price data
+        df, benchmark_df = fetch_and_align_data(tickers, benchmark_ticker, sanitize_bse=True)
+        
         if df.empty:
-            print("OPTIMIZE: Empty dataframe returned")
             raise APIError(
                 code=ErrorCode.NO_DATA_FOUND,
-                message="No data found for the given tickers",
-                details={"tickers": formatted_tickers}
+                message="No price data found for the selected stocks",
+                details={"tickers": tickers}
             )
         
-        # Start/end date
-        start_date = df.index.min().date()
-        end_date = df.index.max().date()
-        print(f"OPTIMIZE: Date range = {start_date} to {end_date}")
-
-        # Get risk-free rate - still need to call the synchronous version
+        print(f"OPTIMIZE: Fetched data for {len(df.columns)} stocks from {df.index[0]} to {df.index[-1]}")
+        
+        # Get risk-free rate for the analysis period
+        rf_start = df.index[0]
+        rf_end = df.index[-1]
+        
         try:
-            print("OPTIMIZE: Fetching risk-free rate")
-            risk_free_rate = await run_in_threadpool(risk_free_rate_manager.fetch_and_set, start_date, end_date)
-            print(f"OPTIMIZE: risk_free_rate = {risk_free_rate:.4f}")
+            risk_free_rate = get_risk_free_rate(rf_start, rf_end)
         except Exception as e:
             print(f"OPTIMIZE: Error fetching risk-free rate: {str(e)}")
             logger.warning("Error fetching risk-free rate: %s. Using default 0.05", str(e))
@@ -1975,7 +1987,27 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
 
         # Check if any return-based method is requested
         user_methods = set(request.methods)
-        technical_only = user_methods.isdisjoint(RETURN_BASED_METHODS)
+        is_technical_only = user_methods.isdisjoint(RETURN_BASED_METHODS)
+
+        # Store technical optimization parameters separately
+        technical_start_date = None
+        technical_end_date = None
+        technical_risk_free_rate = None
+        
+        if OptimizationMethod.TECHNICAL in request.methods:
+            # If technical optimization is included, store its parameters
+            technical_start_date = start_date
+            technical_end_date = end_date
+            technical_risk_free_rate = risk_free_rate
+            
+            # If it's not technical only, get standard parameters for other methods
+            if not is_technical_only:
+                # For mixed optimization (technical + return-based),
+                # set the main parameters to the standard 5-year lookback
+                start_date = datetime.now() - timedelta(days=365*5)
+                end_date = datetime.now()
+                
+                # The risk-free rate stays the same
 
         # Validate selected indicators (if any)
         indicator_cfgs = [i.dict() for i in request.indicators]
@@ -1998,7 +2030,7 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                 pass
 
         # If "technical-only", skip mu/cov entirely; else compute as before
-        if technical_only:
+        if is_technical_only:
             mu = None
             cov = None
             # Build composite indicator scores S
@@ -2048,7 +2080,7 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             cum_returns = None
             
             try:
-                if method in RETURN_BASED_METHODS and not technical_only:
+                if method in RETURN_BASED_METHODS and not is_technical_only:
                     # ─ Return-based methods (exactly as before) ─
                     if method == OptimizationMethod.HRP:
                         # For HRP, use sample covariance matrix (returns.cov())
@@ -2184,7 +2216,10 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             stock_yearly_returns=stock_yearly_returns,
             covariance_heatmap=cov_heatmap_b64,
             risk_free_rate=risk_free_rate,
-            is_technical_only=technical_only
+            is_technical_only=is_technical_only,
+            technical_start_date=technical_start_date,
+            technical_end_date=technical_end_date,
+            technical_risk_free_rate=technical_risk_free_rate
         )
         
         # Include a warning in the response if some methods failed
@@ -2941,3 +2976,202 @@ def constrain_weights(weights: pd.Series, max_weight: float = 0.30) -> pd.Series
 # ──────────────────────────────────────────────────────────────────────────────
 # END OF run_technical_only_LP
 # ──────────────────────────────────────────────────────────────────────────────
+
+def build_technical_scores(
+    prices: pd.DataFrame,
+    highs: pd.DataFrame,
+    lows: pd.DataFrame,
+    volume: pd.DataFrame,
+    indicator_cfgs: List[Dict],
+    blend: str = "equal",           # or accept a dict of custom weights
+) -> pd.Series:
+    """
+    Builds a composite technical indicator score across all stocks
+    for a given set of technical indicators.
+    
+    Args:
+        prices: DataFrame of close prices
+        highs: DataFrame of high prices
+        lows: DataFrame of low prices
+        volume: DataFrame of volume data
+        indicator_cfgs: List of indicator configurations (name, window, etc.)
+        blend: How to blend multiple indicators ('equal' weights all equally)
+        
+    Returns:
+        pd.Series of normalized scores for each stock
+    """
+    if not indicator_cfgs:
+        # If no indicators were provided, return zero scores (no signal)
+        return pd.Series(0.0, index=prices.columns)
+    
+    # Convert everything to float64 to avoid mixed dtypes with TA-Lib
+    prices = prices.astype(np.float64)
+    highs = highs.astype(np.float64)
+    lows = lows.astype(np.float64)
+    volume = volume.astype(np.float64)
+    
+    # Find the maximum lookback window needed across all indicators
+    max_window = 0
+    for cfg in indicator_cfgs:
+        if "window" in cfg and cfg["window"] is not None:
+            max_window = max(max_window, int(cfg["window"]))
+    
+    # Ensure we have enough data for the indicators by limiting the window size
+    # For large windows like 200, we'll use what we have but not demand excessively long histories
+    max_allowed_window = min(max_window, max(100, len(prices) // 2))
+    if max_allowed_window < max_window:
+        logger.warning(f"Limiting technical indicator window from {max_window} to {max_allowed_window} due to data availability")
+    
+    # Initialize signal DataFrame
+    signals = pd.DataFrame(index=prices.index, columns=prices.columns)
+    
+    # Create separate signals for each indicator
+    all_signals = []
+    
+    for idx, cfg in enumerate(indicator_cfgs):
+        # Get indicator type
+        indicator_type = cfg["name"].upper()
+        
+        # Skip if not supported
+        if indicator_type not in TECHNICAL_INDICATORS:
+            logger.warning(f"Skipping unsupported indicator type: {indicator_type}")
+            continue
+            
+        # Default window=10 for indicators that need a window
+        window = int(cfg.get("window", 10))
+        
+        # For large windows, limit to the max allowed
+        window = min(window, max_allowed_window)
+        
+        # Get a multiplier if specified (for SUPERTREND)
+        mult = float(cfg.get("mult", 3.0))
+        
+        signal = None
+        
+        # Compute signals based on indicator type - using TA-Lib
+        try:
+            if indicator_type == "SMA":
+                signal = talib.SMA(prices.values, timeperiod=window)
+                
+            elif indicator_type == "EMA":
+                signal = talib.EMA(prices.values, timeperiod=window)
+                
+            elif indicator_type == "WMA":
+                signal = talib.WMA(prices.values, timeperiod=window)
+                
+            elif indicator_type == "RSI":
+                signal = talib.RSI(prices.values, timeperiod=window)
+                
+                # Normalize RSI: RSI ranges from 0-100, center at 50
+                # Signal: above 50 = positive, below 50 = negative
+                signal = (signal - 50) / 25  # Scale to roughly -2 to +2
+                
+            elif indicator_type == "WILLR":
+                signal = talib.WILLR(highs.values, lows.values, prices.values, timeperiod=window)
+                
+                # Normalize Williams %R: ranges from -100 to 0
+                # Signal: above -50 = negative, below -50 = positive (inverse like RSI)
+                signal = (signal + 50) / 25  # Scale to roughly -2 to +2
+                
+            elif indicator_type == "CCI":
+                signal = talib.CCI(highs.values, lows.values, prices.values, timeperiod=window)
+                
+                # Normalize CCI: typically ranges from -300 to +300, center at 0
+                # Signal: positive = positive, negative = negative
+                signal = signal / 100  # Scale to roughly -3 to +3
+                
+            elif indicator_type == "ROC":
+                signal = talib.ROC(prices.values, timeperiod=window)
+                
+                # ROC is already a percentage change, just scale down
+                signal = signal / 5  # Rough scaling to match other indicators
+                
+            elif indicator_type == "ATR":
+                atr = talib.ATR(highs.values, lows.values, prices.values, timeperiod=window)
+                
+                # Convert ATR to a % of price for normalization
+                signal = atr / prices.values * 100
+                
+                # Center around typical volatility (2% ATR)
+                signal = (signal - 2) / 2  # Rough normalization
+                
+            elif indicator_type == "SUPERTREND":
+                # This uses mult parameter - implement basic Supertrend logic
+                atr = talib.ATR(highs.values, lows.values, prices.values, timeperiod=window)
+                
+                # Simple Supertrend: basic upper/lower bands using ATR * multiplier
+                upper_band = (highs.values + lows.values) / 2 + mult * atr
+                lower_band = (highs.values + lows.values) / 2 - mult * atr
+                
+                # Compute signal based on close price vs. bands
+                signal = np.zeros_like(prices.values)
+                for i in range(window, len(prices)):
+                    for j in range(prices.shape[1]):
+                        # +1 when price above midpoint, -1 when below
+                        mid = (upper_band[i, j] + lower_band[i, j]) / 2
+                        signal[i, j] = 1 if prices.values[i, j] > mid else -1
+                
+            elif indicator_type == "BBANDS":
+                upper, middle, lower = talib.BBANDS(prices.values, timeperiod=window)
+                
+                # Calculate %B indicator: (price - lower) / (upper - lower)
+                # %B: 0 = at lower band, 0.5 = at middle band, 1 = at upper band
+                band_width = upper - lower
+                signal = (prices.values - lower) / band_width
+                
+                # Center around 0.5 and scale
+                signal = (signal - 0.5) * 4  # Scale to roughly -2 to +2
+                
+            elif indicator_type == "OBV":
+                # On-Balance Volume
+                signal = talib.OBV(prices.values, volume.values)
+                
+                # Normalize by comparing to SMA of OBV
+                obv_sma = talib.SMA(signal, timeperiod=20)  # Use 20-day average as baseline
+                obv_signal = (signal - obv_sma) / (np.abs(obv_sma) + 1e-10)  # Avoid divide by zero
+                signal = np.clip(obv_signal, -3, 3)  # Limit extreme values
+                
+            elif indicator_type == "AD":
+                # Accumulation/Distribution Line
+                signal = talib.AD(highs.values, lows.values, prices.values, volume.values)
+                
+                # Normalize similarly to OBV
+                ad_sma = talib.SMA(signal, timeperiod=20)
+                ad_signal = (signal - ad_sma) / (np.abs(ad_sma) + 1e-10)
+                signal = np.clip(ad_signal, -3, 3)
+                
+            else:
+                logger.warning(f"Unhandled indicator type: {indicator_type}")
+                continue
+                
+        except Exception as e:
+            logger.error(f"Error computing {indicator_type} signal: {str(e)}")
+            continue
+            
+        # Create DataFrame from the signal array
+        if signal is not None:
+            signal_df = pd.DataFrame(signal, index=prices.index, columns=prices.columns)
+            
+            # Store in list for later cross-sectional standardization
+            all_signals.append(signal_df)
+    
+    # Skip computations if no valid signals were generated
+    if not all_signals:
+        logger.warning("No valid technical signals were generated")
+        return pd.Series(0.0, index=prices.columns)
+    
+    # Combine all signals using the selected blending method
+    if blend == "equal":
+        # Equal weighting: average all signals
+        combined = pd.concat(all_signals).groupby(level=0).mean()
+    else:
+        # Default to equal weighting
+        combined = pd.concat(all_signals).groupby(level=0).mean()
+    
+    # Use only the last row (current values) for signals
+    latest_signals = combined.iloc[-1]
+    
+    # Z-score standardization across stocks (cross-sectional)
+    scores = zscore_cross_section(latest_signals.to_frame().T).iloc[0]
+    
+    return scores

@@ -147,8 +147,11 @@ class PortfolioOptimizationResponse(BaseModel):
     benchmark_returns: List[BenchmarkReturn]
     stock_yearly_returns: Optional[Dict[str, Dict[str, float]]]
     covariance_heatmap: Optional[str] = None
-    risk_free_rate : float
+    risk_free_rate: float
     is_technical_only: bool = False  # True if only technical methods were used
+    technical_start_date: Optional[datetime] = None  # Start date for technical optimization
+    technical_end_date: Optional[datetime] = None  # End date for technical optimization
+    technical_risk_free_rate: Optional[float] = None  # Risk-free rate for technical optimization
 
 class StockItem(BaseModel):
     ticker: str

@@ -117,6 +117,11 @@ export interface PortfolioOptimizationResponse {
     
     // Flag to indicate if the response is for technical indicators optimization
     is_technical_only?: boolean;
+    
+    // Technical optimization specific fields
+    technical_start_date?: string;  // e.g. "2020-01-01"
+    technical_end_date?: string;    // e.g. "2025-01-01"
+    technical_risk_free_rate?: number;
 }
 
 export enum ExchangeEnum {
