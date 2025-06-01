@@ -637,7 +637,12 @@ const HomePage: React.FC = () => {
     return { labels, datasets };
   };
 
-  // Prepare chart data for Rolling Betas
+  // Add a helper to safely get the method display name
+  const getMethodDisplayName = (methodKey: string): string => {
+    return methodDisplayNames[methodKey] || methodKey;
+  };
+
+  // Then update the prepareBetaChartData function
   const prepareBetaChartData = (res: PortfolioOptimizationResponse) => {
     const years = getAllYears(res);
     const yearLabels = years.map(year => year.toString());
@@ -655,14 +660,14 @@ const HomePage: React.FC = () => {
       }
     ];
     
-    // Add datasets for each method that has rolling betas
+    // Add datasets for each method that has rolling betas, filtering out TECHNICAL
     Object.entries(res.results)
-      .filter(([_, methodData]) => methodData && methodData.rolling_betas)
+      .filter(([methodKey, methodData]) => methodKey !== "TECHNICAL" && methodData && methodData.rolling_betas)
       .forEach(([methodKey, methodData]) => {
         if (!methodData || !methodData.rolling_betas) return;
         
         datasets.push({
-          label: methodDisplayNames[methodKey] || methodKey,
+          label: getMethodDisplayName(methodKey),
           data: years.map(year => methodData.rolling_betas?.[year] || null),
           borderColor: colors[methodKey as keyof typeof colors] || '#000000',
           fill: false,
@@ -1514,13 +1519,57 @@ const HomePage: React.FC = () => {
             </Box>
             
             {/* Date Range and Risk-Free Rate Information */}
-            <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                <strong>Period:</strong> {formatDate(optimizationResult.start_date)} to {formatDate(optimizationResult.end_date)}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                <strong>Risk-Free Rate:</strong> {((optimizationResult.risk_free_rate || 0) * 100).toFixed(2)}%
-              </Typography>
+            <Box sx={{ mb: 3 }}>
+              {/* For non-technical optimization or mixed optimization */}
+              {!isTechnicalOptimizationResult && (
+                <Card sx={{ mb: 2, backgroundColor: '#f5f9ff', border: '1px solid #d0e8fa' }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 1, fontWeight: 600, fontSize: '1.1rem' }}>
+                      Return-Based Optimization Parameters
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} md={6}>
+                        <Typography variant="body1">
+                          <strong>Period:</strong> {formatDate(optimizationResult.start_date)} to {formatDate(optimizationResult.end_date)}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12} md={6}>
+                        <Typography variant="body1">
+                          <strong>Risk-Free Rate:</strong> {((optimizationResult.risk_free_rate || 0) * 100).toFixed(2)}%
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* For technical-only optimization or mixed optimization with technical */}
+              {selectedAlgorithms.some(algo => algo.value === "TECHNICAL") && (
+                <Card sx={{ backgroundColor: '#f0f8ff', border: '1px solid #b3d8ff' }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 1, fontWeight: 600, fontSize: '1.1rem' }}>
+                      Technical Optimization Parameters
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} md={6}>
+                        <Typography variant="body1">
+                          <strong>Period:</strong> {formatDate(optimizationResult.start_date)} to {formatDate(optimizationResult.end_date)}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12} md={6}>
+                        <Typography variant="body1">
+                          <strong>Risk-Free Rate:</strong> {((optimizationResult.risk_free_rate || 0) * 100).toFixed(2)}%
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Typography variant="body2">
+                          Technical indicator optimization uses cross-sectional signal z-scores to form portfolios.
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+              )}
             </Box>
             
             {/* Technical Optimization Badge */}
@@ -1619,7 +1668,7 @@ const HomePage: React.FC = () => {
                                 </TableRow>
                                 
                                 {/* Add cumulative return for technical optimization */}
-                                {isTechnicalOptimizationResult && optimizationResult?.cumulative_returns[methodKey] && (
+                                {methodKey === "TECHNICAL" && optimizationResult?.cumulative_returns[methodKey] && (
                                   <TableRow>
                                     <TableCell>Cumulative Return</TableCell>
                                     <TableCell align="right" style={getReturnCellStyle(calculateFinalCumulativeReturn(optimizationResult.cumulative_returns[methodKey]) || 0)}>
@@ -1630,8 +1679,8 @@ const HomePage: React.FC = () => {
                                   </TableRow>
                                 )}
                                 
-                                {/* Only show beta metrics for non-technical optimization */}
-                                {!isTechnicalOptimizationResult && (
+                                {/* Only show beta metrics for non-technical optimization methods */}
+                                {methodKey !== "TECHNICAL" && (
                                   <>
                                     <TableRow>
                                       <TableCell>
@@ -1688,8 +1737,8 @@ const HomePage: React.FC = () => {
                                   </TableCell>
                                 </TableRow>
                                 
-                                {/* Only show Treynor for non-technical optimization */}
-                                {!isTechnicalOptimizationResult && (
+                                {/* Only show Treynor for non-technical optimization methods */}
+                                {methodKey !== "TECHNICAL" && (
                                   <TableRow>
                                     <TableCell>
                                       Treynor Ratio
@@ -1719,23 +1768,116 @@ const HomePage: React.FC = () => {
                         </Table>
                       </Grid>
                       
+                      {/* Advanced Beta and Cross-Moment Metrics */}
+                      {methodKey !== "TECHNICAL" && (
+                        <Grid item xs={12} md={4}>
+                          <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+                            Advanced Beta & Cross-Moment Metrics
+                          </Typography>
+                          <Table size="small">
+                            <TableBody>
+                              <TableRow>
+                                <TableCell>
+                                  <strong>Welch Beta</strong>
+                                  <Tooltip title="Alternative beta calculation that filters out unusual returns using a trimming approach specific to how extreme the market returns were. Robust to outliers and extreme market conditions.">
+                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                  </Tooltip>
+                                </TableCell>
+                                <TableCell align="right">
+                                  {methodData.performance.welch_beta !== undefined ? methodData.performance.welch_beta.toFixed(3) : 'N/A'}
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell>
+                                  <strong>Semi Beta</strong>
+                                  <Tooltip title="Downside beta that only considers periods when the market return is below a threshold (usually zero). Measures sensitivity to market downturns specifically.">
+                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                  </Tooltip>
+                                </TableCell>
+                                <TableCell align="right">
+                                  {methodData.performance.semi_beta !== undefined ? methodData.performance.semi_beta.toFixed(3) : 'N/A'}
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell>
+                                  <strong>Blume-Adjusted Beta</strong>
+                                  <Tooltip title="Beta adjusted using Blume's technique which addresses the tendency of beta to revert to 1.0 over time. Calculated as: 0.67 × Beta + 0.33 × 1.0">
+                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                  </Tooltip>
+                                </TableCell>
+                                <TableCell align="right">
+                                  {methodData.performance.blume_adjusted_beta.toFixed(3)}
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell>
+                                  <strong>Beta p-value</strong>
+                                  <Tooltip title="Statistical significance of the beta estimate. Lower values indicate higher confidence in the beta value (reject null hypothesis of β=0).">
+                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                  </Tooltip>
+                                </TableCell>
+                                <TableCell align="right">
+                                  {methodData.performance.beta_pvalue.toFixed(4)}
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell>
+                                  <strong>Coskewness</strong>
+                                  <Tooltip title="Measures the relationship between portfolio returns and squared market returns. Negative values suggest the portfolio tends to have negative returns when market volatility increases.">
+                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                  </Tooltip>
+                                </TableCell>
+                                <TableCell align="right">
+                                  {methodData.performance.coskewness !== undefined ? methodData.performance.coskewness.toFixed(4) : 'N/A'}
+                                </TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell>
+                                  <strong>Cokurtosis</strong>
+                                  <Tooltip title="Fourth cross-moment measuring the relationship between portfolio returns and extreme market returns. A high positive value indicates portfolio returns amplify extreme market movements.">
+                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                  </Tooltip>
+                                </TableCell>
+                                <TableCell align="right">
+                                  {methodData.performance.cokurtosis !== undefined ? methodData.performance.cokurtosis.toFixed(4) : 'N/A'}
+                                </TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </Grid>
+                      )}
+                      
                       {/* Visualizations - Returns Distribution and Drawdown */}
                       <Grid item xs={12} md={8}>
                         {methodData.returns_dist && (
                           <Box>
                             <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                              Returns Distribution
+                              {methodKey === "TECHNICAL" ? "Technical Strategy Returns Distribution" : "Returns Distribution"}
                             </Typography>
-                            <ImageComponent base64String={methodData.returns_dist} altText="Returns Distribution" />
+                            <Box sx={{ border: '1px solid #eaeaea', borderRadius: '4px', overflow: 'hidden' }}>
+                              <ImageComponent base64String={methodData.returns_dist} altText="Returns Distribution" />
+                            </Box>
+                            {methodKey === "TECHNICAL" && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                This distribution shows the daily returns of the technical indicator-based portfolio.
+                              </Typography>
+                            )}
                           </Box>
                         )}
                         
                         {methodData.max_drawdown_plot && (
-                          <Box>
+                          <Box sx={{ mt: 3 }}>
                             <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                              Maximum Drawdown
+                              {methodKey === "TECHNICAL" ? "Technical Strategy Drawdown" : "Maximum Drawdown"}
                             </Typography>
-                            <ImageComponent base64String={methodData.max_drawdown_plot} altText="Maximum Drawdown" />
+                            <Box sx={{ border: '1px solid #eaeaea', borderRadius: '4px', overflow: 'hidden' }}>
+                              <ImageComponent base64String={methodData.max_drawdown_plot} altText="Maximum Drawdown" />
+                            </Box>
+                            {methodKey === "TECHNICAL" && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                This chart compares the drawdown of the technical indicator-based portfolio against the benchmark.
+                              </Typography>
+                            )}
                           </Box>
                         )}
                       </Grid>
@@ -1802,7 +1944,11 @@ const HomePage: React.FC = () => {
             )}
             
             {/* Rolling Betas Visualization */}
-            {optimizationResult && !isTechnicalOptimizationResult && optimizationResult.results && Object.values(optimizationResult.results).some(method => method && method.rolling_betas) && (
+            {optimizationResult && optimizationResult.results && 
+              // Filter to check if there are any non-TECHNICAL methods with rolling betas
+              Object.entries(optimizationResult.results)
+                .filter(([methodKey, methodData]) => methodKey !== "TECHNICAL" && methodData && methodData.rolling_betas)
+                .length > 0 && (
               <Card style={{ marginTop: '2rem' }}>
                 <CardContent>
                   <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
@@ -1813,88 +1959,18 @@ const HomePage: React.FC = () => {
                   </Typography>
                   <div style={{ height: '400px' }}>
                     <Line
-                      data={{
-                        labels: getAllYears(optimizationResult).map(String),
-                        datasets: [
-                          // Reference line for market beta (1.0)
-                          {
-                            label: 'Market Beta (1.0)',
-                            data: Array(getAllYears(optimizationResult).length).fill(1),
-                            borderColor: 'rgba(128, 128, 128, 0.7)',
-                            borderWidth: 1,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            fill: false
-                          },
-                          // Actual beta values for each method
-                          ...Object.entries(optimizationResult.results)
-                            .filter(([_, methodData]) => methodData && methodData.rolling_betas)
-                            .map(([methodKey, methodData]) => ({
-                              label: methodDisplayNames[methodKey] || methodKey,
-                              data: getAllYears(optimizationResult).map(year => 
-                                methodData?.rolling_betas ? methodData.rolling_betas[year] || null : null
-                              ),
-                              borderColor: colors[methodKey as keyof typeof colors] || '#000000',
-                              // Remove backgroundColor as it's not in the type definition
-                              fill: false,
-                              pointRadius: 3,
-                              borderWidth: 2
-                            }))
-                        ]
-                      }}
+                      data={prepareBetaChartData(optimizationResult)}
                       options={{
                         responsive: true,
                         maintainAspectRatio: false,
+                        plugins: {
+                          legend: { position: 'top' as const },
+                          tooltip: { mode: 'index' as const, intersect: false }
+                        },
                         scales: {
                           y: {
-                            beginAtZero: false,
-                            grid: {
-                              color: 'rgba(0, 0, 0, 0.1)'
-                            },
-                            title: {
-                              display: true,
-                              text: 'Beta Value',
-                              font: {
-                                weight: 'bold'
-                              }
-                            }
-                          },
-                          x: {
-                            grid: {
-                              color: 'rgba(0, 0, 0, 0.1)'
-                            },
-                            title: {
-                              display: true,
-                              text: 'Year',
-                              font: {
-                                weight: 'bold'
-                              }
-                            }
-                          }
-                        },
-                        plugins: {
-                          legend: {
                             display: true,
-                            position: 'top'
-                          },
-                          tooltip: {
-                            callbacks: {
-                              label: function(context: any) {
-                                const value = context.raw;
-                                const formattedBeta = typeof value === 'number' ? value.toFixed(2) : 'N/A';
-                                let riskLevel = '';
-                                if (typeof value === 'number') {
-                                  if (value > 1.2) {
-                                    riskLevel = '🔴 High Risk';
-                                  } else if (value > 0.8) {
-                                    riskLevel = '🟡 Medium Risk';
-                                  } else {
-                                    riskLevel = '🟢 Low Risk';
-                                  }
-                                }
-                                return [`${context.dataset.label}: ${formattedBeta}`, riskLevel];
-                              }
-                            }
+                            title: { display: true, text: 'Beta Value' },
                           }
                         }
                       }}
@@ -1904,8 +1980,8 @@ const HomePage: React.FC = () => {
               </Card>
             )}
             
-            {/* Yearly Returns Table - Only shown for non-technical optimization */}
-            {optimizationResult && !isTechnicalOptimizationResult && optimizationResult.stock_yearly_returns && Object.keys(optimizationResult.stock_yearly_returns).length > 0 && (
+            {/* Yearly Stock Returns */}
+            {optimizationResult && optimizationResult.stock_yearly_returns && Object.keys(optimizationResult.stock_yearly_returns).length > 0 && (
               <div className="yearly-returns-section" style={{ marginTop: '2rem' }}>
                 <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
                   Yearly Stock Returns
@@ -1944,8 +2020,8 @@ const HomePage: React.FC = () => {
               </div>
             )}
             
-            {/* Covariance Heatmap - Only shown for non-technical optimization */}
-            {optimizationResult && !isTechnicalOptimizationResult && optimizationResult.covariance_heatmap && (
+            {/* Covariance Heatmap - Only show for non-TECHNICAL methods */}
+            {optimizationResult && !selectedAlgorithms.every(algo => algo.value === "TECHNICAL") && optimizationResult.covariance_heatmap && (
               <div style={{ marginTop: '2rem' }}>
                 <Typography variant="h6" gutterBottom sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
                   Variance-Covariance Matrix

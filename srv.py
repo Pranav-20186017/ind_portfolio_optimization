@@ -1236,11 +1236,15 @@ def generate_plots(port_returns: pd.Series, method: str, benchmark_df: pd.Series
     # Configure matplotlib backend
     plt.switch_backend('Agg')
     
-    bins = freedman_diaconis_bins(port_returns)
+    # Check if this is a technical optimization - modify the title accordingly
+    is_technical = method.upper() == "TECHNICAL"
+    method_display = "Technical Indicator" if is_technical else method
+    
     # Plot distribution (histogram)
+    bins = freedman_diaconis_bins(port_returns)
     plt.figure(figsize=(10, 6))
     plt.hist(port_returns, bins=bins, edgecolor='black', alpha=0.7, label='Daily Returns')
-    plt.title(f"Distribution of {method} Portfolio Returns")
+    plt.title(f"Distribution of {method_display} Portfolio Returns")
     plt.xlabel("Returns")
     plt.ylabel("Frequency")
     plt.grid(True)
@@ -1261,7 +1265,7 @@ def generate_plots(port_returns: pd.Series, method: str, benchmark_df: pd.Series
     plt.legend()
 
     dist_file = os.path.join(output_dir, f"{method.lower()}_dist.png")
-    plt.savefig(dist_file)
+    plt.savefig(dist_file, bbox_inches='tight')
     plt.close()
     dist_b64 = file_to_base64(dist_file)
 
@@ -1270,7 +1274,13 @@ def generate_plots(port_returns: pd.Series, method: str, benchmark_df: pd.Series
     peak = cum.cummax()
     drawdown = (cum - peak) / peak
     plt.figure(figsize=(10, 6))
-    plt.plot(drawdown, color='red', label='Portfolio Drawdown')
+    
+    # Ensure proper date formatting on x-axis
+    if isinstance(drawdown.index, pd.DatetimeIndex):
+        plt.plot(drawdown.index, drawdown.values, color='red', label='Portfolio Drawdown')
+    else:
+        # If index is not DatetimeIndex (shouldn't happen), use numeric indices
+        plt.plot(drawdown.values, color='red', label='Portfolio Drawdown')
     
     # Add benchmark drawdown if available
     if benchmark_df is not None:
@@ -1283,16 +1293,24 @@ def generate_plots(port_returns: pd.Series, method: str, benchmark_df: pd.Series
             cum_benchmark = (1 + benchmark_ret).cumprod()
             peak_benchmark = cum_benchmark.cummax()
             drawdown_benchmark = (cum_benchmark - peak_benchmark) / peak_benchmark
-            plt.plot(drawdown_benchmark, color='blue', label='Benchmark Drawdown')
+            
+            if isinstance(drawdown_benchmark.index, pd.DatetimeIndex):
+                plt.plot(drawdown_benchmark.index, drawdown_benchmark.values, color='blue', label='Benchmark Drawdown')
+            else:
+                plt.plot(drawdown_benchmark.values, color='blue', label='Benchmark Drawdown')
     
-    plt.title(f"Drawdown Comparison - {method} Portfolio")
+    plt.title(f"Drawdown Comparison - {method_display} Portfolio")
     plt.xlabel("Date")
     plt.ylabel("Drawdown")
     plt.grid(True)
     plt.legend()
     
+    # Format x-axis dates if we have a DatetimeIndex
+    if isinstance(drawdown.index, pd.DatetimeIndex):
+        plt.gcf().autofmt_xdate()
+        
     dd_file = os.path.join(output_dir, f"{method.lower()}_drawdown.png")
-    plt.savefig(dd_file)
+    plt.savefig(dd_file, bbox_inches='tight')
     plt.close()
     dd_b64 = file_to_base64(dd_file)
     
