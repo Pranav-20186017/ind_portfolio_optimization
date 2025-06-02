@@ -73,37 +73,49 @@ class CustomJSONEncoderMeta(type):
 
 class CustomJSONEncoder(JSONEncoder, metaclass=CustomJSONEncoderMeta):
     def default(self, obj):
-        if isinstance(obj, float):
-            if np.isnan(obj):
-                return None
-            if np.isinf(obj):
-                if obj > 0:
-                    return 1.0e+308  # Max JSON-compatible float
-                else:
-                    return -1.0e+308  # Min JSON-compatible float
+        # Handle numpy/pandas types
+        if isinstance(obj, np.ndarray):
+            return self._sanitize_obj(obj.tolist())
+        elif isinstance(obj, (np.integer, np.int_)):
+            return int(obj)
+        elif isinstance(obj, (np.floating, float)):
+            return self._sanitize_float(obj)
+        elif isinstance(obj, pd.Series):
+            return self._sanitize_obj(obj.to_dict())
+        elif isinstance(obj, pd.DataFrame):
+            return self._sanitize_obj(obj.to_dict())
         return super().default(obj)
 
+    def _sanitize_float(self, value):
+        """Sanitize a single float value."""
+        if np.isnan(value):
+            return None
+        if np.isinf(value):
+            return 1.0e+308 if value > 0 else -1.0e+308
+        if abs(value) > 1.0e+308:  # Too large for standard JSON
+            return 1.0e+308 if value > 0 else -1.0e+308
+        return value
+
+    def _sanitize_obj(self, obj):
+        """Recursively sanitize an object and its nested values."""
+        if isinstance(obj, dict):
+            return {k: self._sanitize_obj(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._sanitize_obj(item) for item in obj]
+        elif isinstance(obj, (float, np.floating)):
+            return self._sanitize_float(obj)
+        elif isinstance(obj, (np.integer, np.int_)):
+            return int(obj)
+        return obj
+
+    def encode(self, obj):
+        """Override encode to sanitize the entire object tree first."""
+        return super().encode(self._sanitize_obj(obj))
+        
     def iterencode(self, obj, _one_shot=False):
-        """Custom iterencode to handle NaN and Infinity in nested structures."""
-        # Sanitize the object before encoding
-        def sanitize_obj(o):
-            if isinstance(o, dict):
-                return {k: sanitize_obj(v) for k, v in o.items()}
-            elif isinstance(o, list):
-                return [sanitize_obj(item) for item in o]
-            elif isinstance(o, float):
-                if np.isnan(o):
-                    return None
-                elif np.isinf(o):
-                    return 1.0e+308 if o > 0 else -1.0e+308
-                else:
-                    return o
-            else:
-                return o
-        
-        # Sanitize the entire object tree first
-        sanitized = sanitize_obj(obj)
-        
+        """Override iterencode to sanitize the entire object tree first."""
+        # First sanitize the entire object tree
+        sanitized = self._sanitize_obj(obj)
         # Then let the parent encoder handle the sanitized object
         return super().iterencode(sanitized, _one_shot)
 
@@ -695,7 +707,7 @@ async def log_requests(request, call_next):
 async def api_exception_handler(request, exc: APIError):
     """Handle APIError exceptions by returning a formatted JSON response"""
     logger.error("API Error: %s - %s", exc.code, exc.message)
-    return JSONResponse(
+    return CustomJSONResponse(
         status_code=exc.status_code,
         content={
             "error": {
@@ -711,7 +723,7 @@ async def api_exception_handler(request, exc: APIError):
 async def generic_exception_handler(request, exc: Exception):
     """Handle any unhandled exceptions"""
     logger.exception("Unhandled exception occurred")
-    return JSONResponse(
+    return CustomJSONResponse(
         status_code=500,
         content={
             "error": {
@@ -2448,7 +2460,7 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             }
         
         print("OPTIMIZE: Successfully completed portfolio optimization")
-        return response_data
+        return CustomJSONResponse(content=response_data)
     
     except APIError:
         print("OPTIMIZE: API Error caught, re-raising")
