@@ -1306,9 +1306,9 @@ def generate_plots(port_returns: pd.Series, method: str, benchmark_df: pd.Series
                 bench_rolling_max = bench_cumulative.cummax()
                 bench_drawdown = (bench_cumulative / bench_rolling_max) - 1
                 
-                # Plot benchmark drawdown
+                # Plot benchmark drawdown - changed color from gray to red
                 plt.plot(bench_drawdown.index, bench_drawdown.values * 100, 
-                        label="Benchmark Drawdown", color='gray', alpha=0.7, linestyle='--')
+                        label="Benchmark Drawdown", color='red', alpha=0.7, linestyle='--')
                 
                 logger.info(f"Benchmark drawdown plotted for {len(bench_drawdown)} data points")
             else:
