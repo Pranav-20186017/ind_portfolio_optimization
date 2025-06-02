@@ -1943,8 +1943,9 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                     max_window = max(max_window, indicator.window)
             
             # Ensure we have enough data for the indicators but don't go back excessively
-            # Get max window (default to 200 if no indicators provided)
-            max_window = max([cfg.get("window", 200) for cfg in indicator_cfgs]) if indicator_cfgs else 200
+            # Default to 200 if no indicators provided
+            if max_window == 0:
+                max_window = 200
             
             # Use 252 trading days (1 year) + max window size + small buffer
             # This is more reasonable than using 2 years of data for technical indicators
