@@ -2010,24 +2010,40 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                 # The risk-free rate stays the same
 
         # Validate selected indicators (if any)
-        indicator_cfgs = [i.dict() for i in request.indicators]
+        indicator_cfgs = []
+        try:
+            if hasattr(request, 'indicators') and request.indicators:
+                indicator_cfgs = [i.dict() if hasattr(i, 'dict') else i for i in request.indicators if i is not None]
+        except Exception as e:
+            logger.warning(f"Error processing indicators: {str(e)}")
+            indicator_cfgs = []
+        
         for cfg in indicator_cfgs:
-            name = cfg["name"].upper()
+            if not cfg or not isinstance(cfg, dict):
+                logger.warning(f"Skipping invalid indicator config: {cfg}")
+                continue
+                
+            name = cfg.get("name", "").upper() if cfg.get("name") else ""
+            if not name:
+                logger.warning(f"Skipping indicator with no name: {cfg}")
+                continue
+                
             if name not in TECHNICAL_INDICATORS:
-                raise APIError(
-                    code=ErrorCode.INVALID_TICKER,
-                    message=f"Unsupported indicator: {cfg['name']}",
-                    details={"valid_indicators": list(TECHNICAL_INDICATORS.keys())}
-                )
+                logger.warning(f"Unsupported indicator: {name}")
+                # Don't raise an error, just skip this indicator
+                continue
             
             # Skip window validation for indicators that don't need a window
             if name in ["OBV", "AD"]:
                 continue
                 
-            # Ensure window is numeric
+            # Ensure window is numeric if provided
             if "window" in cfg and cfg["window"] is not None:
-                # No need to validate specific window values - any reasonable window is acceptable
-                pass
+                try:
+                    int(cfg["window"])  # Just validate it's convertible to int
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid window value for {name}: {cfg.get('window')}")
+                    # Don't raise an error, let build_technical_scores handle the default
 
         # If "technical-only", skip mu/cov entirely; else compute as before
         if is_technical_only:
@@ -2651,6 +2667,8 @@ def run_technical_only_LP(
 
     The function implements a robust optimization approach with multiple fallback strategies
     to ensure convergence in challenging scenarios.
+    
+    Requires CVXPY 1.6+ for CLARABEL solver (replaces deprecated ECOS).
 
     Args:
         S: pd.Series of technical indicator scores for each asset
@@ -2664,102 +2682,168 @@ def run_technical_only_LP(
     tickers = S.index.tolist()
     n = len(tickers)
     
-    # Standardize and clip extreme indicator scores for numerical stability
-    S_std = (S - S.mean()) / (S.std() or 1.0)  # Standardize with fallback for zero std
-    S_clipped = np.clip(S_std, -3, 3)  # Limit extreme values to ±3 sigma
-    
-    # Financial hyperparameters with documented justification
-    lam = 5.0         # Penalty on MAD (Mean Absolute Deviation)
-    w_max = 0.30      # 30% max per stock (typical regulatory/diversification constraint)
-    w_min = 0.0       # Lower bound on weights (long-only constraint)
-    turnover_cap = 0.50  # 50% turnover allowed (typical for monthly rebalancing)
-    
-    # Starting point: equal weight portfolio
-    w_prev = np.array([1.0 / n] * n)
-    
-    # Center returns with respect to their means
-    mu_vec = returns.mean(axis=0).values
-    R_centered = returns.values - mu_vec[np.newaxis, :]
-    
-    # Track optimization attempts for logging
-    attempts = []
-    
-    # ---- Primary Optimization: Full Model ----
+    # Log available solvers for debugging
     try:
-        # CVXPY variables
-        w = cp.Variable(n)  # Portfolio weights
-        epsilon = cp.Variable(returns.shape[0])  # MAD slack variables
-        
-        # MAD constraints: ε_t + Σ_i R_centered[t,i]*w_i ≥ 0  ∀ t
-        mad_constraints = [
-            epsilon[t] + R_centered[t, :] @ w >= 0
-            for t in range(R_centered.shape[0])
-        ]
-        
-        # Box, budget, turnover constraints
-        basic_constraints = [
-            cp.sum(w) == 1,      # Sum of weights = 1
-            w >= w_min,          # Non-negative weights
-            w <= w_max,          # Upper bound on weights
-            cp.norm1(w - w_prev) <= turnover_cap  # Turnover constraint
-        ]
-        
-        # Full constraint set
-        constraints = basic_constraints + mad_constraints
-        
-        # Objective function
-        obj = cp.Maximize(S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
-        
-        # Define the problem
-        prob = cp.Problem(obj, constraints)
-        
-        # Solve with ECOS solver (primary choice for LP)
-        prob.solve(solver=cp.ECOS, max_iters=2000, abstol=1e-7, reltol=1e-6, verbose=False)
-        
-        # Check KKT conditions and feasibility
-        if prob.status == cp.OPTIMAL:
-            logger.info("Technical LP: Primary optimization succeeded with ECOS")
-            attempts.append(("Primary ECOS", "Optimal", prob.value))
-            
-            # Check if solution is valid (sum ≈ 1)
-            if abs(sum(w.value) - 1.0) > 1e-4:
-                logger.warning(f"Technical LP: Primary solution weights sum to {sum(w.value)}, not 1.0")
-                raise ValueError("Primary solution weights don't sum to 1.0")
-                
-            # Return the optimal solution
-            return pd.Series(w.value, index=tickers).to_dict()
-            
-        elif prob.status in [cp.OPTIMAL_INACCURATE, cp.ALMOST_OPTIMAL]:
-            logger.warning(f"Technical LP: Primary optimization achieved {prob.status}")
-            attempts.append(("Primary ECOS", prob.status, prob.value))
-            
-            # If the solution is usable despite being inaccurate
-            if w.value is not None and abs(sum(w.value) - 1.0) <= 1e-2:
-                # Normalize to ensure weights sum to 1
-                w_normalized = w.value / sum(w.value)
-                logger.info("Technical LP: Using normalized inaccurate solution")
-                return pd.Series(w_normalized, index=tickers).to_dict()
-                
-        else:
-            logger.warning(f"Technical LP: Primary optimization failed with status {prob.status}")
-            attempts.append(("Primary ECOS", prob.status, None))
-    
+        available_solvers = cp.installed_solvers()
+        logger.info(f"Technical LP: Available CVXPY solvers: {available_solvers}")
+        if 'CLARABEL' not in available_solvers:
+            logger.warning("Technical LP: CLARABEL solver not available, will use fallback solvers")
     except Exception as e:
-        logger.warning(f"Technical LP: Primary optimization failed with error: {str(e)}")
-        attempts.append(("Primary ECOS", f"Error: {type(e).__name__}", None))
+        logger.warning(f"Technical LP: Could not check available solvers: {str(e)}")
     
-    # ---- Secondary Optimization: Alternative Solvers ----
-    alternative_solvers = [
-        (cp.SCS, {"max_iters": 5000, "eps": 1e-5}),
-        (cp.OSQP, {"max_iter": 10000, "eps_abs": 1e-5, "eps_rel": 1e-5})
-    ]
-    
-    for solver, kwargs in alternative_solvers:
+    try:
+        # Standardize and clip extreme indicator scores for numerical stability
+        S_std = (S - S.mean()) / (S.std() or 1.0)  # Standardize with fallback for zero std
+        S_clipped = np.clip(S_std, -3, 3)  # Limit extreme values to ±3 sigma
+        
+        # Financial hyperparameters with documented justification
+        lam = 5.0         # Penalty on MAD (Mean Absolute Deviation)
+        w_max = 1.0       # Allow up to 100% per stock to ensure feasibility (raised from 0.30)
+        w_min = 0.0       # Lower bound on weights (long-only constraint)
+        turnover_cap = 0.50  # 50% turnover allowed (typical for monthly rebalancing)
+        
+        # Starting point: equal weight portfolio
+        w_prev = np.array([1.0 / n] * n)
+        
+        # Center returns with respect to their means
+        mu_vec = returns.mean(axis=0).values
+        R_centered = returns.values - mu_vec[np.newaxis, :]
+        
+        # Track optimization attempts for logging
+        attempts = []
+        
+        # ---- Primary Optimization: Full Model ----
         try:
-            solver_name = str(solver).split(".")[-1].split(" ")[0]
-            logger.info(f"Technical LP: Trying alternative solver {solver_name}")
+            # CVXPY variables
+            w = cp.Variable(n)  # Portfolio weights
+            epsilon = cp.Variable(returns.shape[0])  # MAD slack variables
             
-            # Redefine problem for clean solver state
+            # MAD constraints: ε_t + Σ_i R_centered[t,i]*w_i ≥ 0  ∀ t
+            # Two-sided MAD constraints to capture full absolute deviation
+            mad_constraints = [
+                epsilon[t] + R_centered[t, :] @ w >= 0
+                for t in range(R_centered.shape[0])
+            ]
+            
+            # Box, budget, turnover constraints
+            basic_constraints = [
+                cp.sum(w) == 1,      # Sum of weights = 1
+                w >= w_min,          # Non-negative weights
+                w <= w_max,          # Upper bound on weights
+                cp.norm1(w - w_prev) <= turnover_cap  # Turnover constraint
+            ]
+            
+            # Full constraint set
+            constraints = basic_constraints + mad_constraints
+            
+            # Objective function
+            obj = cp.Maximize(S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
+            
+            # Define the problem
+            prob = cp.Problem(obj, constraints)
+            
+            # Solve with CLARABEL solver (new default in CVXPY 1.6+, replacing ECOS)
+            prob.solve(solver=cp.CLARABEL, verbose=False)
+            
+            # Check KKT conditions and feasibility
+            if prob.status == cp.OPTIMAL:
+                logger.info("Technical LP: Primary optimization succeeded with CLARABEL")
+                attempts.append(("Primary CLARABEL", "Optimal", prob.value))
+                
+                # Check if solution is valid (sum ≈ 1)
+                if abs(sum(w.value) - 1.0) > 1e-4:
+                    logger.warning(f"Technical LP: Primary solution weights sum to {sum(w.value)}, not 1.0")
+                    raise ValueError("Primary solution weights don't sum to 1.0")
+                    
+                # Return the cleaned optimal solution
+                return clean_weights(w.value, tickers, w_max)
+                
+            elif prob.status in [cp.OPTIMAL_INACCURATE, cp.ALMOST_OPTIMAL]:
+                logger.warning(f"Technical LP: Primary optimization achieved {prob.status}")
+                attempts.append(("Primary CLARABEL", prob.status, prob.value))
+                
+                # If the solution is usable despite being inaccurate
+                if w.value is not None and abs(sum(w.value) - 1.0) <= 1e-2:
+                    # Normalize to ensure weights sum to 1
+                    w_normalized = w.value / sum(w.value)
+                    logger.info("Technical LP: Using normalized inaccurate solution")
+                    return clean_weights(w_normalized, tickers, w_max)
+                    
+            else:
+                logger.warning(f"Technical LP: Primary optimization failed with status {prob.status}")
+                attempts.append(("Primary CLARABEL", prob.status, None))
+        
+        except Exception as e:
+            error_msg = str(e)
+            if "CLARABEL" in error_msg or "solver" in error_msg.lower():
+                logger.warning(f"Technical LP: CLARABEL solver not available: {error_msg}")
+                # Try with ECOS as immediate fallback for older CVXPY versions
+                try:
+                    prob.solve(solver=cp.ECOS, max_iters=2000, abstol=1e-7, reltol=1e-6, verbose=False)
+                    if prob.status == cp.OPTIMAL:
+                        logger.info("Technical LP: Fallback to ECOS succeeded")
+                        return clean_weights(w.value, tickers, w_max)
+                except Exception:
+                    pass
+            logger.warning(f"Technical LP: Primary optimization failed with error: {str(e)}")
+            attempts.append(("Primary CLARABEL", f"Error: {type(e).__name__}", None))
+        
+        # ---- Secondary Optimization: Alternative Solvers ----
+        alternative_solvers = [
+            (cp.SCS, {"max_iters": 5000, "eps": 1e-5}),
+            (cp.OSQP, {"max_iter": 10000, "eps_abs": 1e-5, "eps_rel": 1e-5}),
+            (cp.ECOS, {"max_iters": 2000, "abstol": 1e-7, "reltol": 1e-6})  # Keep ECOS as fallback
+        ]
+        
+        for solver, kwargs in alternative_solvers:
+            try:
+                solver_name = str(solver).split(".")[-1].split(" ")[0]
+                logger.info(f"Technical LP: Trying alternative solver {solver_name}")
+                
+                # Redefine problem for clean solver state
+                w = cp.Variable(n)
+                epsilon = cp.Variable(returns.shape[0])
+                
+                mad_constraints = [
+                    epsilon[t] + R_centered[t, :] @ w >= 0
+                    for t in range(R_centered.shape[0])
+                ]
+                
+                basic_constraints = [
+                    cp.sum(w) == 1,
+                    w >= w_min,
+                    w <= w_max,
+                    cp.norm1(w - w_prev) <= turnover_cap
+                ]
+                
+                constraints = basic_constraints + mad_constraints
+                obj = cp.Maximize(S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
+                prob = cp.Problem(obj, constraints)
+                
+                # Solve with alternative solver
+                prob.solve(solver=solver, verbose=False, **kwargs)
+                
+                if prob.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE, cp.ALMOST_OPTIMAL]:
+                    logger.info(f"Technical LP: Alternative solver {solver_name} succeeded with status {prob.status}")
+                    attempts.append((f"Alternative {solver_name}", prob.status, prob.value))
+                    
+                    if w.value is not None and abs(sum(w.value) - 1.0) <= 1e-2:
+                        # Normalize to ensure weights sum to 1
+                        w_normalized = w.value / sum(w.value)
+                        return clean_weights(w_normalized, tickers, w_max)
+                else:
+                    logger.warning(f"Technical LP: Alternative solver {solver_name} failed with status {prob.status}")
+                    attempts.append((f"Alternative {solver_name}", prob.status, None))
+                    
+            except Exception as e:
+                logger.warning(f"Technical LP: Alternative solver failed with error: {str(e)}")
+                attempts.append((f"Alternative {solver_name}", f"Error: {type(e).__name__}", None))
+        
+        # ---- Tertiary Optimization: Relaxed Constraints ----
+        try:
+            logger.info("Technical LP: Trying relaxed constraints (no turnover limit)")
+            
+            # Redefine problem with relaxed constraints
             w = cp.Variable(n)
             epsilon = cp.Variable(returns.shape[0])
             
@@ -2768,150 +2852,113 @@ def run_technical_only_LP(
                 for t in range(R_centered.shape[0])
             ]
             
-            basic_constraints = [
+            # Remove turnover constraint
+            relaxed_constraints = [
                 cp.sum(w) == 1,
                 w >= w_min,
-                w <= w_max,
-                cp.norm1(w - w_prev) <= turnover_cap
+                w <= w_max
+            ] + mad_constraints
+            
+            obj = cp.Maximize(S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
+            prob = cp.Problem(obj, relaxed_constraints)
+            
+            # Try with CLARABEL first, then SCS as fallback
+            for solver, solver_name, kwargs in [
+                (cp.CLARABEL, "CLARABEL", {}),  # New default solver
+                (cp.SCS, "SCS", {"max_iters": 5000, "eps": 1e-4})
+            ]:
+                try:
+                    prob.solve(solver=solver, verbose=False, **kwargs)
+                    
+                    if prob.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE, cp.ALMOST_OPTIMAL]:
+                        logger.info(f"Technical LP: Relaxed constraints with {solver_name} succeeded: {prob.status}")
+                        attempts.append((f"Relaxed {solver_name}", prob.status, prob.value))
+                        
+                        if w.value is not None and abs(sum(w.value) - 1.0) <= 1e-2:
+                            # Normalize to ensure weights sum to 1
+                            w_normalized = w.value / sum(w.value)
+                            return clean_weights(w_normalized, tickers, w_max)
+                    else:
+                        logger.warning(f"Technical LP: Relaxed constraints with {solver_name} failed: {prob.status}")
+                        attempts.append((f"Relaxed {solver_name}", prob.status, None))
+                        
+                except Exception as e:
+                    logger.warning(f"Technical LP: Relaxed {solver_name} failed with error: {str(e)}")
+                    attempts.append((f"Relaxed {solver_name}", f"Error: {type(e).__name__}", None))
+        
+        except Exception as e:
+            logger.warning(f"Technical LP: Relaxed constraints approach failed with error: {str(e)}")
+            attempts.append(("Relaxed approach", f"Error: {type(e).__name__}", None))
+        
+        # ---- Quaternary Optimization: Minimal Constraints (fallback) ----
+        try:
+            logger.info("Technical LP: Trying minimal constraints (budget + non-negativity only)")
+            
+            # Simplest possible formulation
+            w = cp.Variable(n)
+            
+            # Only enforce budget and non-negativity
+            minimal_constraints = [
+                cp.sum(w) == 1,
+                w >= w_min
             ]
             
-            constraints = basic_constraints + mad_constraints
-            obj = cp.Maximize(S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
-            prob = cp.Problem(obj, constraints)
+            # Simplified objective (no epsilon variables)
+            obj = cp.Maximize(S_clipped.values @ w)
+            prob = cp.Problem(obj, minimal_constraints)
             
-            # Solve with alternative solver
-            prob.solve(solver=solver, verbose=False, **kwargs)
+            prob.solve(solver=cp.CLARABEL, verbose=False)
             
             if prob.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE, cp.ALMOST_OPTIMAL]:
-                logger.info(f"Technical LP: Alternative solver {solver_name} succeeded with status {prob.status}")
-                attempts.append((f"Alternative {solver_name}", prob.status, prob.value))
+                logger.info(f"Technical LP: Minimal constraints succeeded with status {prob.status}")
+                attempts.append(("Minimal", prob.status, prob.value))
                 
-                if w.value is not None and abs(sum(w.value) - 1.0) <= 1e-2:
+                if w.value is not None:
                     # Normalize to ensure weights sum to 1
                     w_normalized = w.value / sum(w.value)
-                    return pd.Series(w_normalized, index=tickers).to_dict()
+                    return clean_weights(w_normalized, tickers, w_max)
             else:
-                logger.warning(f"Technical LP: Alternative solver {solver_name} failed with status {prob.status}")
-                attempts.append((f"Alternative {solver_name}", prob.status, None))
+                logger.warning(f"Technical LP: Even minimal constraints failed with status {prob.status}")
+                attempts.append(("Minimal", prob.status, None))
                 
         except Exception as e:
-            logger.warning(f"Technical LP: Alternative solver failed with error: {str(e)}")
-            attempts.append((f"Alternative {solver_name}", f"Error: {type(e).__name__}", None))
-    
-    # ---- Tertiary Optimization: Relaxed Constraints ----
-    try:
-        logger.info("Technical LP: Trying relaxed constraints (no turnover limit)")
+            logger.warning(f"Technical LP: Minimal constraints approach failed with error: {str(e)}")
+            attempts.append(("Minimal", f"Error: {type(e).__name__}", None))
         
-        # Redefine problem with relaxed constraints
-        w = cp.Variable(n)
-        epsilon = cp.Variable(returns.shape[0])
-        
-        mad_constraints = [
-            epsilon[t] + R_centered[t, :] @ w >= 0
-            for t in range(R_centered.shape[0])
-        ]
-        
-        # Remove turnover constraint
-        relaxed_constraints = [
-            cp.sum(w) == 1,
-            w >= w_min,
-            w <= w_max
-        ] + mad_constraints
-        
-        obj = cp.Maximize(S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
-        prob = cp.Problem(obj, relaxed_constraints)
-        
-        # Try with ECOS first, then SCS as fallback
-        for solver, solver_name, kwargs in [
-            (cp.ECOS, "ECOS", {"max_iters": 2000, "abstol": 1e-6, "reltol": 1e-6}),
-            (cp.SCS, "SCS", {"max_iters": 5000, "eps": 1e-4})
-        ]:
-            try:
-                prob.solve(solver=solver, verbose=False, **kwargs)
+        # ---- Last Resort: Score-Weighted Portfolio ----
+        try:
+            logger.info("Technical LP: All optimization attempts failed. Using score-weighted portfolio.")
+            
+            # Make all scores positive by adding the minimum score (if negative)
+            min_score = min(0, S_clipped.min())
+            shifted_scores = S_clipped - min_score
+            
+            # Handle the case where all scores are identical
+            if shifted_scores.std() < 1e-6:
+                logger.info("Technical LP: All scores effectively identical, using equal weights")
+                weights = pd.Series(1.0 / n, index=tickers)
+            else:
+                # Score-weighted approach: weight proportional to positive score
+                weights = shifted_scores / shifted_scores.sum()
                 
-                if prob.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE, cp.ALMOST_OPTIMAL]:
-                    logger.info(f"Technical LP: Relaxed constraints with {solver_name} succeeded: {prob.status}")
-                    attempts.append((f"Relaxed {solver_name}", prob.status, prob.value))
-                    
-                    if w.value is not None and abs(sum(w.value) - 1.0) <= 1e-2:
-                        # Normalize to ensure weights sum to 1
-                        w_normalized = w.value / sum(w.value)
-                        return pd.Series(w_normalized, index=tickers).to_dict()
-                else:
-                    logger.warning(f"Technical LP: Relaxed constraints with {solver_name} failed: {prob.status}")
-                    attempts.append((f"Relaxed {solver_name}", prob.status, None))
-                    
-            except Exception as e:
-                logger.warning(f"Technical LP: Relaxed {solver_name} failed with error: {str(e)}")
-                attempts.append((f"Relaxed {solver_name}", f"Error: {type(e).__name__}", None))
-    
-    except Exception as e:
-        logger.warning(f"Technical LP: Relaxed constraints approach failed with error: {str(e)}")
-        attempts.append(("Relaxed approach", f"Error: {type(e).__name__}", None))
-    
-    # ---- Quaternary Optimization: Minimal Constraints (fallback) ----
-    try:
-        logger.info("Technical LP: Trying minimal constraints (budget + non-negativity only)")
-        
-        # Simplest possible formulation
-        w = cp.Variable(n)
-        
-        # Only enforce budget and non-negativity
-        minimal_constraints = [
-            cp.sum(w) == 1,
-            w >= w_min
-        ]
-        
-        # Simplified objective (no epsilon variables)
-        obj = cp.Maximize(S_clipped.values @ w)
-        prob = cp.Problem(obj, minimal_constraints)
-        
-        prob.solve(solver=cp.ECOS, verbose=False)
-        
-        if prob.status in [cp.OPTIMAL, cp.OPTIMAL_INACCURATE, cp.ALMOST_OPTIMAL]:
-            logger.info(f"Technical LP: Minimal constraints succeeded with status {prob.status}")
-            attempts.append(("Minimal", prob.status, prob.value))
+                # Apply max weight constraint if any weight exceeds w_max
+                if weights.max() > w_max:
+                    logger.info(f"Technical LP: Score-weighted exceeded max weight {w_max}, applying constraint")
+                    weights = constrain_weights(weights, w_max)
             
-            if w.value is not None:
-                # Normalize to ensure weights sum to 1
-                w_normalized = w.value / sum(w.value)
-                return pd.Series(w_normalized, index=tickers).to_dict()
-        else:
-            logger.warning(f"Technical LP: Even minimal constraints failed with status {prob.status}")
-            attempts.append(("Minimal", prob.status, None))
+            logger.warning(f"Technical LP: Returning score-weighted fallback solution: {weights.to_dict()}")
+            return weights.to_dict()
+            
+        except Exception as e:
+            logger.error(f"Technical LP: Even score-weighted fallback failed: {str(e)}")
+            # Last fallback: equal weights
+            logger.error("Technical LP: Using equal weights as final fallback")
+            return pd.Series(1.0 / n, index=tickers).to_dict()
             
     except Exception as e:
-        logger.warning(f"Technical LP: Minimal constraints approach failed with error: {str(e)}")
-        attempts.append(("Minimal", f"Error: {type(e).__name__}", None))
-    
-    # ---- Last Resort: Score-Weighted Portfolio ----
-    try:
-        logger.info("Technical LP: All optimization attempts failed. Using score-weighted portfolio.")
-        
-        # Make all scores positive by adding the minimum score (if negative)
-        min_score = min(0, S_clipped.min())
-        shifted_scores = S_clipped - min_score
-        
-        # Handle the case where all scores are identical
-        if shifted_scores.std() < 1e-6:
-            logger.info("Technical LP: All scores effectively identical, using equal weights")
-            weights = pd.Series(1.0 / n, index=tickers)
-        else:
-            # Score-weighted approach: weight proportional to positive score
-            weights = shifted_scores / shifted_scores.sum()
-            
-            # Apply max weight constraint if any weight exceeds w_max
-            if weights.max() > w_max:
-                logger.info(f"Technical LP: Score-weighted exceeded max weight {w_max}, applying constraint")
-                weights = constrain_weights(weights, w_max)
-        
-        logger.warning(f"Technical LP: Returning score-weighted fallback solution: {weights.to_dict()}")
-        return weights.to_dict()
-        
-    except Exception as e:
-        logger.error(f"Technical LP: Even score-weighted fallback failed: {str(e)}")
-        # Last fallback: equal weights
-        logger.error("Technical LP: Using equal weights as final fallback")
+        # Ultimate safety net: if any unexpected error occurs, return equal weights
+        logger.error(f"Technical LP: Unexpected error in optimization: {str(e)}")
+        logger.error("Technical LP: Returning equal weights as ultimate fallback")
         return pd.Series(1.0 / n, index=tickers).to_dict()
 
 def constrain_weights(weights: pd.Series, max_weight: float = 0.30) -> pd.Series:
@@ -3000,178 +3047,304 @@ def build_technical_scores(
     Returns:
         pd.Series of normalized scores for each stock
     """
-    if not indicator_cfgs:
-        # If no indicators were provided, return zero scores (no signal)
-        return pd.Series(0.0, index=prices.columns)
-    
-    # Convert everything to float64 to avoid mixed dtypes with TA-Lib
-    prices = prices.astype(np.float64)
-    highs = highs.astype(np.float64)
-    lows = lows.astype(np.float64)
-    volume = volume.astype(np.float64)
-    
-    # Find the maximum lookback window needed across all indicators
-    max_window = 0
-    for cfg in indicator_cfgs:
-        if "window" in cfg and cfg["window"] is not None:
-            max_window = max(max_window, int(cfg["window"]))
-    
-    # Ensure we have enough data for the indicators by limiting the window size
-    # For large windows like 200, we'll use what we have but not demand excessively long histories
-    max_allowed_window = min(max_window, max(100, len(prices) // 2))
-    if max_allowed_window < max_window:
-        logger.warning(f"Limiting technical indicator window from {max_window} to {max_allowed_window} due to data availability")
-    
-    # Initialize signal DataFrame
-    signals = pd.DataFrame(index=prices.index, columns=prices.columns)
-    
-    # Create separate signals for each indicator
-    all_signals = []
-    
-    for idx, cfg in enumerate(indicator_cfgs):
-        # Get indicator type
-        indicator_type = cfg["name"].upper()
+    try:
+        if not indicator_cfgs:
+            # If no indicators were provided, return zero scores (no signal)
+            return pd.Series(0.0, index=prices.columns)
         
-        # Skip if not supported
-        if indicator_type not in TECHNICAL_INDICATORS:
-            logger.warning(f"Skipping unsupported indicator type: {indicator_type}")
-            continue
-            
-        # Default window=10 for indicators that need a window
-        window = int(cfg.get("window", 10))
+        # Convert everything to float64 to avoid mixed dtypes with TA-Lib
+        prices = prices.astype(np.float64)
+        highs = highs.astype(np.float64)
+        lows = lows.astype(np.float64)
+        volume = volume.astype(np.float64)
         
-        # For large windows, limit to the max allowed
-        window = min(window, max_allowed_window)
+        # Find the maximum lookback window needed across all indicators
+        max_window = 0
+        for cfg in indicator_cfgs:
+            if cfg and isinstance(cfg, dict) and "window" in cfg and cfg["window"] is not None:
+                try:
+                    max_window = max(max_window, int(cfg["window"]))
+                except (ValueError, TypeError):
+                    pass  # Skip invalid window values
         
-        # Get a multiplier if specified (for SUPERTREND)
-        mult = float(cfg.get("mult", 3.0))
+        # Ensure we have enough data for the indicators by limiting the window size
+        # For large windows like 200, we'll use what we have but not demand excessively long histories
+        max_allowed_window = min(max_window, max(100, len(prices) // 2))
+        if max_allowed_window < max_window:
+            logger.warning(f"Limiting technical indicator window from {max_window} to {max_allowed_window} due to data availability")
         
-        signal = None
+        # Initialize signal DataFrame
+        signals = pd.DataFrame(index=prices.index, columns=prices.columns)
         
-        # Compute signals based on indicator type - using TA-Lib
-        try:
-            if indicator_type == "SMA":
-                signal = talib.SMA(prices.values, timeperiod=window)
-                
-            elif indicator_type == "EMA":
-                signal = talib.EMA(prices.values, timeperiod=window)
-                
-            elif indicator_type == "WMA":
-                signal = talib.WMA(prices.values, timeperiod=window)
-                
-            elif indicator_type == "RSI":
-                signal = talib.RSI(prices.values, timeperiod=window)
-                
-                # Normalize RSI: RSI ranges from 0-100, center at 50
-                # Signal: above 50 = positive, below 50 = negative
-                signal = (signal - 50) / 25  # Scale to roughly -2 to +2
-                
-            elif indicator_type == "WILLR":
-                signal = talib.WILLR(highs.values, lows.values, prices.values, timeperiod=window)
-                
-                # Normalize Williams %R: ranges from -100 to 0
-                # Signal: above -50 = negative, below -50 = positive (inverse like RSI)
-                signal = (signal + 50) / 25  # Scale to roughly -2 to +2
-                
-            elif indicator_type == "CCI":
-                signal = talib.CCI(highs.values, lows.values, prices.values, timeperiod=window)
-                
-                # Normalize CCI: typically ranges from -300 to +300, center at 0
-                # Signal: positive = positive, negative = negative
-                signal = signal / 100  # Scale to roughly -3 to +3
-                
-            elif indicator_type == "ROC":
-                signal = talib.ROC(prices.values, timeperiod=window)
-                
-                # ROC is already a percentage change, just scale down
-                signal = signal / 5  # Rough scaling to match other indicators
-                
-            elif indicator_type == "ATR":
-                atr = talib.ATR(highs.values, lows.values, prices.values, timeperiod=window)
-                
-                # Convert ATR to a % of price for normalization
-                signal = atr / prices.values * 100
-                
-                # Center around typical volatility (2% ATR)
-                signal = (signal - 2) / 2  # Rough normalization
-                
-            elif indicator_type == "SUPERTREND":
-                # This uses mult parameter - implement basic Supertrend logic
-                atr = talib.ATR(highs.values, lows.values, prices.values, timeperiod=window)
-                
-                # Simple Supertrend: basic upper/lower bands using ATR * multiplier
-                upper_band = (highs.values + lows.values) / 2 + mult * atr
-                lower_band = (highs.values + lows.values) / 2 - mult * atr
-                
-                # Compute signal based on close price vs. bands
-                signal = np.zeros_like(prices.values)
-                for i in range(window, len(prices)):
-                    for j in range(prices.shape[1]):
-                        # +1 when price above midpoint, -1 when below
-                        mid = (upper_band[i, j] + lower_band[i, j]) / 2
-                        signal[i, j] = 1 if prices.values[i, j] > mid else -1
-                
-            elif indicator_type == "BBANDS":
-                upper, middle, lower = talib.BBANDS(prices.values, timeperiod=window)
-                
-                # Calculate %B indicator: (price - lower) / (upper - lower)
-                # %B: 0 = at lower band, 0.5 = at middle band, 1 = at upper band
-                band_width = upper - lower
-                signal = (prices.values - lower) / band_width
-                
-                # Center around 0.5 and scale
-                signal = (signal - 0.5) * 4  # Scale to roughly -2 to +2
-                
-            elif indicator_type == "OBV":
-                # On-Balance Volume
-                signal = talib.OBV(prices.values, volume.values)
-                
-                # Normalize by comparing to SMA of OBV
-                obv_sma = talib.SMA(signal, timeperiod=20)  # Use 20-day average as baseline
-                obv_signal = (signal - obv_sma) / (np.abs(obv_sma) + 1e-10)  # Avoid divide by zero
-                signal = np.clip(obv_signal, -3, 3)  # Limit extreme values
-                
-            elif indicator_type == "AD":
-                # Accumulation/Distribution Line
-                signal = talib.AD(highs.values, lows.values, prices.values, volume.values)
-                
-                # Normalize similarly to OBV
-                ad_sma = talib.SMA(signal, timeperiod=20)
-                ad_signal = (signal - ad_sma) / (np.abs(ad_sma) + 1e-10)
-                signal = np.clip(ad_signal, -3, 3)
-                
-            else:
-                logger.warning(f"Unhandled indicator type: {indicator_type}")
+        # Create separate signals for each indicator
+        all_signals = []
+        
+        for idx, cfg in enumerate(indicator_cfgs):
+            # Ensure cfg is a valid dictionary
+            if cfg is None or not isinstance(cfg, dict):
+                logger.warning(f"Skipping invalid indicator config at index {idx}: {cfg}")
                 continue
                 
-        except Exception as e:
-            logger.error(f"Error computing {indicator_type} signal: {str(e)}")
-            continue
+            # Get indicator type
+            indicator_type = cfg.get("name", "").upper() if cfg.get("name") else ""
             
-        # Create DataFrame from the signal array
-        if signal is not None:
-            signal_df = pd.DataFrame(signal, index=prices.index, columns=prices.columns)
+            # Skip if not supported
+            if not indicator_type or indicator_type not in TECHNICAL_INDICATORS:
+                logger.warning(f"Skipping unsupported indicator type: {indicator_type}")
+                continue
+                
+            # Default window=10 for indicators that need a window
+            try:
+                window = int(cfg.get("window") or 10)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid window value for {indicator_type}, using default 10")
+                window = 10
             
-            # Store in list for later cross-sectional standardization
-            all_signals.append(signal_df)
-    
-    # Skip computations if no valid signals were generated
-    if not all_signals:
-        logger.warning("No valid technical signals were generated")
+            # For large windows, limit to the max allowed
+            window = min(window, max_allowed_window)
+            
+            # Get a multiplier if specified (for SUPERTREND)
+            try:
+                mult_value = cfg.get("mult")
+                if mult_value is None:
+                    mult = 3.0
+                else:
+                    mult = float(mult_value)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid mult value for {indicator_type}, using default 3.0")
+                mult = 3.0
+            
+            signal = None
+            
+            # Compute signals based on indicator type - using TA-Lib
+            try:
+                if indicator_type == "SMA":
+                    signal = talib.SMA(prices.values, timeperiod=window)
+                    
+                elif indicator_type == "EMA":
+                    signal = talib.EMA(prices.values, timeperiod=window)
+                    
+                elif indicator_type == "WMA":
+                    signal = talib.WMA(prices.values, timeperiod=window)
+                    
+                elif indicator_type == "RSI":
+                    signal = talib.RSI(prices.values, timeperiod=window)
+                    
+                    # Normalize RSI: RSI ranges from 0-100, center at 50
+                    # Signal: above 50 = positive, below 50 = negative
+                    signal = (signal - 50) / 25  # Scale to roughly -2 to +2
+                    
+                elif indicator_type == "WILLR":
+                    signal = talib.WILLR(highs.values, lows.values, prices.values, timeperiod=window)
+                    
+                    # Normalize Williams %R: ranges from -100 to 0
+                    # Signal: above -50 = negative, below -50 = positive (inverse like RSI)
+                    signal = (signal + 50) / 25  # Scale to roughly -2 to +2
+                    
+                elif indicator_type == "CCI":
+                    signal = talib.CCI(highs.values, lows.values, prices.values, timeperiod=window)
+                    
+                    # Normalize CCI: typically ranges from -300 to +300, center at 0
+                    # Signal: positive = positive, negative = negative
+                    signal = signal / 100  # Scale to roughly -3 to +3
+                    
+                elif indicator_type == "ROC":
+                    signal = talib.ROC(prices.values, timeperiod=window)
+                    
+                    # ROC is already a percentage change, just scale down
+                    signal = signal / 5  # Rough scaling to match other indicators
+                    
+                elif indicator_type == "ATR":
+                    atr = talib.ATR(highs.values, lows.values, prices.values, timeperiod=window)
+                    
+                    # Convert ATR to a % of price for normalization
+                    signal = atr / prices.values * 100
+                    
+                    # Center around typical volatility (2% ATR)
+                    signal = (signal - 2) / 2  # Rough normalization
+                    
+                elif indicator_type == "SUPERTREND":
+                    # This uses mult parameter - implement basic Supertrend logic
+                    atr = talib.ATR(highs.values, lows.values, prices.values, timeperiod=window)
+                    
+                    # Simple Supertrend: basic upper/lower bands using ATR * multiplier
+                    upper_band = (highs.values + lows.values) / 2 + mult * atr
+                    lower_band = (highs.values + lows.values) / 2 - mult * atr
+                    
+                    # Compute signal based on close price vs. bands
+                    signal = np.zeros_like(prices.values)
+                    for i in range(window, len(prices)):
+                        for j in range(prices.shape[1]):
+                            # +1 when price above midpoint, -1 when below
+                            mid = (upper_band[i, j] + lower_band[i, j]) / 2
+                            signal[i, j] = 1 if prices.values[i, j] > mid else -1
+                    
+                elif indicator_type == "BBANDS":
+                    upper, middle, lower = talib.BBANDS(prices.values, timeperiod=window)
+                    
+                    # Calculate %B indicator: (price - lower) / (upper - lower)
+                    # %B: 0 = at lower band, 0.5 = at middle band, 1 = at upper band
+                    band_width = upper - lower
+                    signal = (prices.values - lower) / band_width
+                    
+                    # Center around 0.5 and scale
+                    signal = (signal - 0.5) * 4  # Scale to roughly -2 to +2
+                    
+                elif indicator_type == "OBV":
+                    # On-Balance Volume
+                    signal = talib.OBV(prices.values, volume.values)
+                    
+                    # Normalize by comparing to SMA of OBV
+                    obv_sma = talib.SMA(signal, timeperiod=20)  # Use 20-day average as baseline
+                    obv_signal = (signal - obv_sma) / (np.abs(obv_sma) + 1e-10)  # Avoid divide by zero
+                    signal = np.clip(obv_signal, -3, 3)  # Limit extreme values
+                    
+                elif indicator_type == "AD":
+                    # Accumulation/Distribution Line
+                    signal = talib.AD(highs.values, lows.values, prices.values, volume.values)
+                    
+                    # Normalize similarly to OBV
+                    ad_sma = talib.SMA(signal, timeperiod=20)
+                    ad_signal = (signal - ad_sma) / (np.abs(ad_sma) + 1e-10)
+                    signal = np.clip(ad_signal, -3, 3)
+                    
+                else:
+                    logger.warning(f"Unhandled indicator type: {indicator_type}")
+                    continue
+                    
+            except Exception as e:
+                logger.error(f"Error computing {indicator_type} signal: {str(e)}")
+                continue
+                
+            # Create DataFrame from the signal array
+            if signal is not None:
+                signal_df = pd.DataFrame(signal, index=prices.index, columns=prices.columns)
+                
+                # Store in list for later cross-sectional standardization
+                all_signals.append(signal_df)
+        
+        # Skip computations if no valid signals were generated
+        if not all_signals:
+            logger.warning("No valid technical signals were generated")
+            return pd.Series(0.0, index=prices.columns)
+        
+        # Combine all signals using the selected blending method
+        if blend == "equal":
+            # Equal weighting: average all signals
+            combined = pd.concat(all_signals).groupby(level=0).mean()
+        else:
+            # Default to equal weighting
+            combined = pd.concat(all_signals).groupby(level=0).mean()
+        
+        # Use only the last row (current values) for signals
+        latest_signals = combined.iloc[-1]
+        
+        # Z-score standardization across stocks (cross-sectional)
+        scores = zscore_cross_section(latest_signals.to_frame().T).iloc[0]
+        
+        return scores
+        
+    except Exception as e:
+        # Ultimate fallback: if any unexpected error occurs, return zero scores
+        logger.error(f"Unexpected error in build_technical_scores: {str(e)}")
+        logger.error("Returning zero scores as fallback")
         return pd.Series(0.0, index=prices.columns)
+
+def clean_weights(
+    weights: np.ndarray, 
+    tickers: List[str], 
+    w_max: float = 1.0,
+    tolerance: float = 1e-10
+) -> Dict[str, float]:
+    """
+    Clean up numerical precision issues in optimization weights.
     
-    # Combine all signals using the selected blending method
-    if blend == "equal":
-        # Equal weighting: average all signals
-        combined = pd.concat(all_signals).groupby(level=0).mean()
+    Args:
+        weights: Raw weights from solver
+        tickers: List of ticker names
+        w_max: Maximum weight per asset
+        tolerance: Numerical tolerance for cleanup
+        
+    Returns:
+        Dictionary of cleaned weights
+    """
+    # Convert to pandas Series for easier manipulation
+    weights_clean = pd.Series(weights, index=tickers)
+    
+    # Fix tiny negative weights (set to zero)
+    weights_clean = weights_clean.clip(lower=0.0)
+    
+    # Fix weights slightly above w_max due to solver precision
+    weights_clean = weights_clean.clip(upper=w_max + tolerance)
+    
+    # If any weight is still above w_max after tolerance, cap it
+    weights_clean = weights_clean.clip(upper=w_max)
+    
+    # Renormalize to ensure sum = 1.0
+    total = weights_clean.sum()
+    if total > tolerance:  # Avoid division by zero
+        weights_clean = weights_clean / total
     else:
-        # Default to equal weighting
-        combined = pd.concat(all_signals).groupby(level=0).mean()
+        # If all weights are effectively zero, use equal weights
+        weights_clean = pd.Series(1.0 / len(tickers), index=tickers)
     
-    # Use only the last row (current values) for signals
-    latest_signals = combined.iloc[-1]
+    return weights_clean.to_dict()
+
+def constrain_weights(weights: pd.Series, max_weight: float = 0.30) -> pd.Series:
+    """
+    Apply weight constraints to ensure no weight exceeds max_weight while maintaining sum = 1
     
-    # Z-score standardization across stocks (cross-sectional)
-    scores = zscore_cross_section(latest_signals.to_frame().T).iloc[0]
+    Args:
+        weights: Initial weights
+        max_weight: Maximum allowed weight for any single asset
+        
+    Returns:
+        pd.Series: Constrained weights
+    """
+    # If no weight exceeds the limit, return as-is
+    if weights.max() <= max_weight:
+        return weights
     
-    return scores
+    # Copy to avoid modifying original
+    result = weights.copy()
+    
+    # Iteratively constrain weights
+    while result.max() > max_weight:
+        # Find assets exceeding the limit
+        excess_idx = result[result > max_weight].index
+        
+        # Calculate total excess
+        total_excess = sum(result[excess_idx] - max_weight)
+        
+        # Cap the exceeding assets
+        result[excess_idx] = max_weight
+        
+        # Find assets below the limit
+        below_idx = result[result < max_weight].index
+        
+        # If no assets below limit, we can't redistribute
+        if len(below_idx) == 0:
+            # Set all to equal weights
+            return pd.Series(1.0 / len(result), index=result.index)
+        
+        # Calculate remaining capacity
+        remaining_capacity = below_idx.map(lambda idx: max_weight - result[idx])
+        total_capacity = sum(remaining_capacity)
+        
+        # If not enough capacity, distribute proportionally to capacity
+        if total_capacity < total_excess:
+            for idx in below_idx:
+                # Proportional distribution
+                result[idx] += (max_weight - result[idx]) / total_capacity * total_excess
+        else:
+            # Distribute proportionally to current weights
+            below_sum = sum(result[below_idx])
+            for idx in below_idx:
+                if below_sum > 0:
+                    result[idx] += result[idx] / below_sum * total_excess
+                else:
+                    # If all below weights are 0, distribute equally
+                    result[idx] += total_excess / len(below_idx)
+    
+    # Final normalization to ensure sum = 1
+    return result / result.sum()

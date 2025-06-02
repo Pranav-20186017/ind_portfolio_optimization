@@ -127,7 +127,7 @@ def compute_supertrend(
                 st[col].iat[t] = -1
             else:
                 st[col].iat[t] = st[col].iat[t - 1]
-    return st.fillna(method="ffill")
+    return st.ffill()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 4) VOLUME-BASED INDICATORS (no rolling-window)
@@ -229,7 +229,9 @@ def build_technical_scores(
 
         elif name == "SUPERTREND":
             atr_n = int(cfg.get("window", 10))
-            mult = float(cfg.get("mult", 3.0))
+            # If cfg["mult"] is missing or None, default to 3.0
+            raw_mult = cfg.get("mult")
+            mult = float(raw_mult) if (raw_mult is not None) else 3.0
             raw = compute_supertrend(highs, lows, prices, atr_n, mult)  # ±1
             z = zscore_cross_section(raw).iloc[-1]
 
