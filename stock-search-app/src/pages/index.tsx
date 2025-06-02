@@ -823,41 +823,93 @@ const HomePage: React.FC = () => {
       // ----------- 2. OPTIMIZATION METHOD RESULTS -----------
       const resultsContainer = document.getElementById('optimization-results');
       if (resultsContainer) {
-        const methodCards = Array.from(resultsContainer.querySelectorAll('.method-card'));
+        // Fix: Instead of looking for a class that doesn't exist, get all Cards directly
+        // Get all card elements in the results container - these are the method cards
+        const methodCards = Array.from(resultsContainer.querySelectorAll('div[class*="MuiCard-root"]')).filter(
+          // Exclude any cards that are part of other components like the date info box
+          card => {
+            // Only include cards that have a Typography with a method name (portfolio heading)
+            const hasMethodName = card.querySelector('h5, [class*="MuiTypography-h5"]');
+            // Exclude cards that are clearly not method cards (like info boxes)
+            const isInfoCard = card.querySelector('[class*="infoCard"], [class*="Information"]');
+            return hasMethodName && !isInfoCard;
+          }
+        );
+        
+        console.log(`Found ${methodCards.length} method cards for PDF generation`);
         
         for (let i = 0; i < methodCards.length; i++) {
           const card = methodCards[i] as HTMLElement;
-          const methodNameElement = card.querySelector('h5');
+          
+          // Extract method name from the card's heading
+          const methodNameElement = card.querySelector('h5, [class*="MuiTypography-h5"]');
           const methodName = methodNameElement ? methodNameElement.textContent || 'Optimization Method' : `Method ${i + 1}`;
           
           // Generate a unique key for the card for caching purposes
-          let cardCacheKey = `card-${methodName.replace(/\s+/g, '-')}`;
-          const cardIdAttr = card.getAttribute('id') || card.getAttribute('data-method-key');
-          if (cardIdAttr) cardCacheKey = `card-${cardIdAttr}`;
-          else cardCacheKey = `card-idx-${i}` // Fallback key if no specific identifier found
-
+          let cardCacheKey = `method-card-${i}-${methodName.replace(/\s+/g, '-')}`;
+          
           pdfDoc.addPage();
           pdfDoc.setFontSize(16);
           pdfDoc.text(methodName, pageWidth / 2, 20, { align: 'center' });
 
           try {
-            const cardCanvas = await renderOnce(card, cardCacheKey, commonCanvasOptions);
+            // Increase scale for better quality
+            const cardCanvas = await renderOnce(card, cardCacheKey, {
+              ...commonCanvasOptions,
+              scale: 2.0 // Higher scale for better quality
+            });
+            
             const cardImgData = cardCanvas.toDataURL('image/png');
             const cardImgWidth = pageWidth - (margin * 2);
             const cardImgHeight = (cardCanvas.height * cardImgWidth) / cardCanvas.width;
 
-            if (cardImgHeight > pageHeight - 30) {
+            // If the image is too tall for a single page, scale it down
+            if (cardImgHeight > (pageHeight - 30)) {
               const scaleFactor = (pageHeight - 30) / cardImgHeight;
-              pdfDoc.addImage(cardImgData, 'PNG', margin, 30, cardImgWidth * scaleFactor, cardImgHeight * scaleFactor);
+              pdfDoc.addImage(
+                cardImgData, 
+                'PNG', 
+                margin, 
+                30, 
+                cardImgWidth * scaleFactor, 
+                cardImgHeight * scaleFactor
+              );
+              console.log(`Rendered card ${i+1}/${methodCards.length} (${methodName}) scaled down to fit page`);
             } else {
               pdfDoc.addImage(cardImgData, 'PNG', margin, 30, cardImgWidth, cardImgHeight);
+              console.log(`Rendered card ${i+1}/${methodCards.length} (${methodName}) at full size`);
             }
           } catch (err) {
             console.error(`Failed to render card for ${methodName} (key: ${cardCacheKey}):`, err);
             pdfDoc.setFontSize(12);
             pdfDoc.text(`Unable to render optimization result for ${methodName}.`, margin, 40);
+            
+            // Try to capture a screenshot of just the essential info if full card fails
+            try {
+              const essentialInfo = card.querySelector('[class*="MuiCardContent-root"]');
+              if (essentialInfo) {
+                const essentialCanvas = await html2canvas(essentialInfo as HTMLElement, {
+                  ...commonCanvasOptions,
+                  scale: 1.2
+                });
+                const essentialImgData = essentialCanvas.toDataURL('image/png');
+                pdfDoc.addImage(
+                  essentialImgData, 
+                  'PNG', 
+                  margin, 
+                  50, 
+                  pageWidth - (margin * 2), 
+                  (essentialCanvas.height * (pageWidth - (margin * 2))) / essentialCanvas.width
+                );
+                console.log(`Rendered essential info for ${methodName} as fallback`);
+              }
+            } catch (fallbackErr) {
+              console.error(`Even fallback rendering failed for ${methodName}:`, fallbackErr);
+            }
           }
         }
+      } else {
+        console.error('Results container not found for PDF generation');
       }
 
       // ----------- 3. CUMULATIVE RETURNS CHART -----------
