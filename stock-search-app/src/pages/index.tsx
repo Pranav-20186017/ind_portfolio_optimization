@@ -1618,10 +1618,9 @@ const HomePage: React.FC = () => {
                     </Typography>
                     
                     <Grid container spacing={3}>
-                      {/* Weights Section - Move to below the metrics */}
-                      
-                      {/* Performance Metrics */}
+                      {/* Left Column: Metrics, Advanced Metrics, and Weights */}
                       <Grid item xs={12} md={4}>
+                        {/* Performance Metrics */}
                         <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
                           Performance Metrics
                         </Typography>

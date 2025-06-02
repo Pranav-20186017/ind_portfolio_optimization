@@ -1282,38 +1282,40 @@ def generate_plots(port_returns: pd.Series, method: str, benchmark_df: pd.Series
     
     plt.figure(figsize=(10, 6))
     
-    # For technical optimization, ensure we use date formatting on x-axis
-    if is_technical:
-        # Plot using the actual dates instead of integer indices
-        plt.plot(drawdown.index, drawdown.values * 100, label=f"{method_display} Drawdown", color='blue')
-        
-        # If benchmark is provided, calculate and plot its drawdown too
-        if benchmark_df is not None:
+    # Plot portfolio drawdown
+    plt.plot(drawdown.index, drawdown.values * 100, label=f"{method_display} Drawdown", color='blue')
+    plt.fill_between(drawdown.index, 0, drawdown.values * 100, color='red', alpha=0.2)
+    
+    # Always calculate and plot benchmark drawdown if benchmark data is provided
+    if benchmark_df is not None and not benchmark_df.empty:
+        try:
             # Calculate benchmark returns
             bench_returns = benchmark_df.pct_change().dropna()
             
             # Align the benchmark returns to the portfolio returns period
             common_dates = port_returns.index.intersection(bench_returns.index)
             if len(common_dates) > 0:
-                bench_returns = bench_returns.loc[common_dates]
+                bench_returns_aligned = bench_returns.loc[common_dates]
                 
                 # Calculate benchmark drawdown
-                bench_cumulative = (1 + bench_returns).cumprod()
+                bench_cumulative = (1 + bench_returns_aligned).cumprod()
                 bench_rolling_max = bench_cumulative.cummax()
                 bench_drawdown = (bench_cumulative / bench_rolling_max) - 1
                 
                 # Plot benchmark drawdown
-                plt.plot(bench_drawdown.index, bench_drawdown.values * 100, label="Benchmark Drawdown", color='gray', alpha=0.7)
-    else:
-        # Standard plot using default indexing
-        plt.plot(drawdown * 100, label=f"{method_display} Drawdown", color='blue')
+                plt.plot(bench_drawdown.index, bench_drawdown.values * 100, 
+                        label="Benchmark Drawdown", color='gray', alpha=0.7, linestyle='--')
+                
+                logger.info(f"Benchmark drawdown plotted for {len(bench_drawdown)} data points")
+            else:
+                logger.warning("No common dates found between portfolio and benchmark for drawdown plot")
+        except Exception as e:
+            logger.warning(f"Could not plot benchmark drawdown: {str(e)}")
     
-    plt.fill_between(drawdown.index, 0, drawdown.values * 100, color='red', alpha=0.2)
     plt.title(f"{method_display} Portfolio Drawdown")
     plt.xlabel("Date")
     plt.ylabel("Drawdown (%)")
     plt.grid(True)
-    plt.legend()
     
     # Format x-axis with dates - use auto formatting for better readability
     plt.gcf().autofmt_xdate()
@@ -1931,7 +1933,6 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         benchmark_ticker = Benchmarks.get_ticker(request.benchmark)
         
         # Determine lookback period based on methods
-        # Default: 5 years for return-based methods, 1 year for technical-only methods
         is_technical_only = all(method == OptimizationMethod.TECHNICAL for method in request.methods)
         
         # For technical-only methods, use a shorter lookback period
@@ -1952,13 +1953,14 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             lookback_days = min(252 + max_window + 20, 504)  # Cap at ~2 years max
             
             start_date = datetime.now() - timedelta(days=lookback_days * 1.4)  # Add 40% for weekends/holidays
-            end_date = datetime.now()
             print(f"OPTIMIZE: Using reasonable lookback of {lookback_days} trading days for technical-only optimization")
         else:
-            # For return-based methods, use standard 5-year lookback
-            start_date = datetime.now() - timedelta(days=365*5)
-            end_date = datetime.now()
-            print(f"OPTIMIZE: Using standard 5-year lookback for return-based optimization")
+            # For return-based methods, start with a generous lookback to capture maximum data
+            # We'll use the actual data availability after fetching
+            start_date = datetime(1990, 1, 1)  # Start from early date to get maximum overlap
+            print(f"OPTIMIZE: Using maximum lookback from 1990 for return-based optimization")
+        
+        end_date = datetime.now()
         
         # Fetch and align price data
         df, benchmark_df = fetch_and_align_data(tickers, benchmark_ticker, sanitize_bse=True)
@@ -1970,14 +1972,16 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                 details={"tickers": tickers}
             )
         
-        print(f"OPTIMIZE: Fetched data for {len(df.columns)} stocks from {df.index[0]} to {df.index[-1]}")
+        # Use actual data period (not the initial broad search period)
+        actual_start_date = df.index[0].to_pydatetime()
+        actual_end_date = df.index[-1].to_pydatetime()
         
-        # Get risk-free rate for the analysis period
-        rf_start = df.index[0]
-        rf_end = df.index[-1]
+        print(f"OPTIMIZE: Actual data period: {actual_start_date.date()} to {actual_end_date.date()}")
+        print(f"OPTIMIZE: Fetched data for {len(df.columns)} stocks with {len(df)} trading days")
         
+        # Get risk-free rate for the actual analysis period (not the search period)
         try:
-            risk_free_rate = get_risk_free_rate(rf_start, rf_end)
+            risk_free_rate = get_risk_free_rate(actual_start_date, actual_end_date)
         except Exception as e:
             print(f"OPTIMIZE: Error fetching risk-free rate: {str(e)}")
             logger.warning("Error fetching risk-free rate: %s. Using default 0.05", str(e))
@@ -1997,18 +2001,10 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         
         if OptimizationMethod.TECHNICAL in request.methods:
             # If technical optimization is included, store its parameters
-            technical_start_date = start_date
-            technical_end_date = end_date
+            # For technical, we still use the actual data period available
+            technical_start_date = actual_start_date
+            technical_end_date = actual_end_date
             technical_risk_free_rate = risk_free_rate
-            
-            # If it's not technical only, get standard parameters for other methods
-            if not is_technical_only:
-                # For mixed optimization (technical + return-based),
-                # set the main parameters to the standard 5-year lookback
-                start_date = datetime.now() - timedelta(days=365*5)
-                end_date = datetime.now()
-                
-                # The risk-free rate stays the same
 
         # Validate selected indicators (if any)
         indicator_cfgs = []
@@ -2220,13 +2216,13 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         cum_returns_df = cum_returns_df.loc[common_dates]
         cum_benchmark = cum_benchmark.loc[common_dates]
         
-        # Build response
+        # Build response using actual data period
         print("OPTIMIZE: Building final response")
         cumulative_returns = {key: cum_returns_df[key].tolist() for key in cum_returns_df.columns}
         response = PortfolioOptimizationResponse(
             results=results,
-            start_date=start_date,
-            end_date=end_date,
+            start_date=actual_start_date,  # Use actual data start, not search start
+            end_date=actual_end_date,      # Use actual data end, not search end
             cumulative_returns=cumulative_returns,
             dates=cum_returns_df.index.tolist(),
             benchmark_returns=[BenchmarkReturn(name=request.benchmark, returns=cum_benchmark.tolist())],
