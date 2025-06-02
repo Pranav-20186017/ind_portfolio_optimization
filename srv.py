@@ -1999,12 +1999,27 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         technical_end_date = None
         technical_risk_free_rate = None
         
-        if OptimizationMethod.TECHNICAL in request.methods:
-            # If technical optimization is included, store its parameters
-            # For technical, we still use the actual data period available
+        if is_technical_only:
+            # For technical-only optimization, calculate risk-free rate for the technical period
+            # which might be different from the return-based period
             technical_start_date = actual_start_date
             technical_end_date = actual_end_date
-            technical_risk_free_rate = risk_free_rate
+            try:
+                # Calculate risk-free rate specifically for the technical period
+                technical_risk_free_rate = get_risk_free_rate(technical_start_date, technical_end_date)
+                print(f"OPTIMIZE: Technical-only risk-free rate: {technical_risk_free_rate:.4f} for period {technical_start_date.date()} to {technical_end_date.date()}")
+            except Exception as e:
+                print(f"OPTIMIZE: Error fetching technical risk-free rate: {str(e)}")
+                logger.warning("Error fetching technical risk-free rate: %s. Using default 0.05", str(e))
+                technical_risk_free_rate = 0.05  # Default fallback
+        else:
+            # For mixed or return-based optimization, technical fields remain None
+            # but we still need to handle the case where both technical and return-based methods are selected
+            if OptimizationMethod.TECHNICAL in request.methods:
+                # Mixed optimization: set technical dates to actual dates but use same risk-free rate
+                technical_start_date = actual_start_date
+                technical_end_date = actual_end_date
+                technical_risk_free_rate = risk_free_rate  # Use same rate for mixed optimization
 
         # Validate selected indicators (if any)
         indicator_cfgs = []
@@ -2168,7 +2183,9 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                 else:
                     # ─ TECHNICAL-ONLY mode ─
                     # We already computed S_scores above. Solve LP → get raw weights
-                    raw_wts = run_technical_only_LP(S_scores, returns, benchmark_df, risk_free_rate)
+                    # Use technical_risk_free_rate for technical-only optimization
+                    rf_for_technical = technical_risk_free_rate if technical_risk_free_rate is not None else risk_free_rate
+                    raw_wts = run_technical_only_LP(S_scores, returns, benchmark_df, rf_for_technical)
                     # Now feed those weights into finalize_portfolio(...) so that we produce
                     # a valid OptimizationResult and cumulative returns
                     optimization_result, cum_returns = await run_in_threadpool(
@@ -2177,7 +2194,7 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                         raw_wts,
                         returns,
                         benchmark_df,
-                        risk_free_rate
+                        rf_for_technical
                     )
                 
                 if optimization_result:

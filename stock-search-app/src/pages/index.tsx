@@ -1545,7 +1545,7 @@ const HomePage: React.FC = () => {
               )}
 
               {/* For technical-only optimization or mixed optimization with technical */}
-              {selectedAlgorithms.some(algo => algo.value === "TECHNICAL") && (
+              {(isTechnicalOptimizationResult || (optimizationResult.technical_start_date && optimizationResult.technical_end_date)) && (
                 <Card sx={{ backgroundColor: '#f0f8ff', border: '1px solid #b3d8ff' }}>
                   <CardContent>
                     <Typography variant="h6" sx={{ mb: 1, fontWeight: 600, fontSize: '1.1rem' }}>
@@ -1596,25 +1596,15 @@ const HomePage: React.FC = () => {
             {/* Method Cards */}
             {Object.entries(optimizationResult.results).map(([methodKey, methodData], index) => {
               if (!methodData) return null;
-              
-              // Get display name for the method
-              const displayName = methodDisplayNames[methodKey] || methodKey;
+
+              // Check if this is a technical optimization result (contains ONLY technical method)
+              const isTechnicalMethod = methodKey === "TECHNICAL";
               
               return (
-                <Card 
-                  key={methodKey} 
-                  id={`method-card-${methodKey}`}
-                  data-method-key={methodKey}
-                  className="method-card"
-                  sx={{ 
-                    mb: 4, 
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
-                    border: '1px solid #f0f0f0'
-                  }}
-                >
+                <Card key={methodKey} sx={{ mb: 3, boxShadow: 3 }}>
                   <CardContent>
-                    <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, color: '#1e293b' }}>
-                      {displayName}
+                    <Typography variant="h5" gutterBottom sx={{ fontSize: '1.3rem', fontWeight: 600 }}>
+                      {getMethodDisplayName(methodKey)} Portfolio
                     </Typography>
                     
                     <Grid container spacing={3}>
@@ -1806,89 +1796,228 @@ const HomePage: React.FC = () => {
                             )}
                           </TableBody>
                         </Table>
-                      </Grid>
-                      
-                      {/* Advanced Beta and Cross-Moment Metrics */}
-                      {methodKey !== "TECHNICAL" && (
-                        <Grid item xs={12} md={4}>
+                        
+                        {/* Advanced Beta and Cross-Moment Metrics with NEW tag */}
+                        {methodKey !== "TECHNICAL" && (
+                          <Box sx={{ mt: 3 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                              <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600, mr: 1 }}>
+                                Advanced Beta & Cross-Moment Metrics
+                              </Typography>
+                              <Chip 
+                                label="NEW" 
+                                size="small" 
+                                sx={{ 
+                                  backgroundColor: '#4caf50', 
+                                  color: 'white', 
+                                  fontWeight: 'bold',
+                                  fontSize: '0.7rem'
+                                }} 
+                              />
+                            </Box>
+                            <Table size="small">
+                              <TableBody>
+                                <TableRow>
+                                  <TableCell>
+                                    Welch Beta
+                                    <Tooltip title="Alternative beta calculation that filters out unusual returns using a trimming approach specific to how extreme the market returns were. Robust to outliers and extreme market conditions.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.welch_beta !== undefined && !isNaN(methodData.performance.welch_beta) ? methodData.performance.welch_beta.toFixed(3) : 'N/A'}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Semi Beta
+                                    <Tooltip title="Downside beta that only considers periods when the market return is below a threshold (usually zero). Measures sensitivity to market downturns specifically.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.semi_beta !== undefined && !isNaN(methodData.performance.semi_beta) ? methodData.performance.semi_beta.toFixed(3) : 'N/A'}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Blume-Adjusted Beta
+                                    <Tooltip title="Beta adjusted using Blume's technique which addresses the tendency of beta to revert to 1.0 over time. Calculated as: 0.67 × Beta + 0.33 × 1.0">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.blume_adjusted_beta.toFixed(3)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Beta p-value
+                                    <Tooltip title="Statistical significance of the beta estimate. Lower values indicate higher confidence in the beta value (reject null hypothesis of β=0).">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.beta_pvalue.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Coskewness
+                                    <Tooltip title="Measures the relationship between portfolio returns and squared market returns. Negative values suggest the portfolio tends to have negative returns when market volatility increases.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.coskewness !== undefined && !isNaN(methodData.performance.coskewness) ? methodData.performance.coskewness.toFixed(4) : 'N/A'}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Cokurtosis
+                                    <Tooltip title="Fourth cross-moment measuring the relationship between portfolio returns and extreme market returns. A high positive value indicates portfolio returns amplify extreme market movements.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.cokurtosis !== undefined && !isNaN(methodData.performance.cokurtosis) ? methodData.performance.cokurtosis.toFixed(4) : 'N/A'}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Entropy
+                                    <Tooltip title="Shannon entropy of the return distribution. Higher values indicate more dispersed returns.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.entropy.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Gini Mean Difference
+                                    <Tooltip title="A measure of variability based on the average absolute difference between all pairs of returns. Higher values indicate greater dispersion.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.gini_mean_difference.toFixed(4)}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    DaR (95%)
+                                    <Tooltip title="Drawdown at Risk - the 95th percentile of the drawdown distribution. Represents the worst 5% of drawdowns.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(-methodData.performance.dar_95)}>
+                                    {(methodData.performance.dar_95 * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    CDaR (95%)
+                                    <Tooltip title="Conditional Drawdown at Risk - the expected drawdown given that drawdown exceeds DaR. Average of the worst 5% of drawdowns.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(-methodData.performance.cdar_95)}>
+                                    {(methodData.performance.cdar_95 * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    EVaR (95%)
+                                    <Tooltip title="Entropic Value at Risk - a coherent risk measure that uses an exponential transformation. More sensitive to tail risk than traditional VaR.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right" style={getReturnCellStyle(methodData.performance.evar_95)}>
+                                    {(methodData.performance.evar_95 * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Upside Potential Ratio
+                                    <Tooltip title="Ratio of upside potential to downside risk. Measures the probability-weighted upside returns relative to downside volatility.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {Number.isFinite(methodData.performance.upside_potential_ratio) ? methodData.performance.upside_potential_ratio.toFixed(4) : '∞'}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    M² (Modigliani Risk-Adjusted Performance)
+                                    <Tooltip title="Risk-adjusted return measure that adjusts portfolio returns to the same risk level as the benchmark. Expressed as percentage return.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {(methodData.performance.modigliani_risk_adjusted_performance * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Sterling Ratio
+                                    <Tooltip title="Risk-adjusted return measure calculated as CAGR divided by (Average Annual Drawdown - 10%). Higher values are better.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {Number.isFinite(methodData.performance.sterling_ratio) && !isNaN(methodData.performance.sterling_ratio) ? methodData.performance.sterling_ratio.toFixed(3) : 'N/A'}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    V2 Ratio
+                                    <Tooltip title="Relative risk-adjusted return measure that compares portfolio performance to benchmark on a drawdown-adjusted basis.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {Number.isFinite(methodData.performance.v2_ratio) && !isNaN(methodData.performance.v2_ratio) ? methodData.performance.v2_ratio.toFixed(4) : 'N/A'}
+                                  </TableCell>
+                                </TableRow>
+                              </TableBody>
+                            </Table>
+                          </Box>
+                        )}
+                        
+                        {/* Portfolio Weights Table */}
+                        <Box sx={{ mt: 3 }}>
                           <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                            Advanced Beta & Cross-Moment Metrics
+                            Portfolio Weights
                           </Typography>
                           <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Stock</TableCell>
+                                <TableCell align="right" sx={{ fontWeight: 'bold' }}>Weight</TableCell>
+                              </TableRow>
+                            </TableHead>
                             <TableBody>
-                              <TableRow>
-                                <TableCell>
-                                  <strong>Welch Beta</strong>
-                                  <Tooltip title="Alternative beta calculation that filters out unusual returns using a trimming approach specific to how extreme the market returns were. Robust to outliers and extreme market conditions.">
-                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                  </Tooltip>
-                                </TableCell>
-                                <TableCell align="right">
-                                  {methodData.performance.welch_beta !== undefined ? methodData.performance.welch_beta.toFixed(3) : 'N/A'}
-                                </TableCell>
-                              </TableRow>
-                              <TableRow>
-                                <TableCell>
-                                  <strong>Semi Beta</strong>
-                                  <Tooltip title="Downside beta that only considers periods when the market return is below a threshold (usually zero). Measures sensitivity to market downturns specifically.">
-                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                  </Tooltip>
-                                </TableCell>
-                                <TableCell align="right">
-                                  {methodData.performance.semi_beta !== undefined ? methodData.performance.semi_beta.toFixed(3) : 'N/A'}
-                                </TableCell>
-                              </TableRow>
-                              <TableRow>
-                                <TableCell>
-                                  <strong>Blume-Adjusted Beta</strong>
-                                  <Tooltip title="Beta adjusted using Blume's technique which addresses the tendency of beta to revert to 1.0 over time. Calculated as: 0.67 × Beta + 0.33 × 1.0">
-                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                  </Tooltip>
-                                </TableCell>
-                                <TableCell align="right">
-                                  {methodData.performance.blume_adjusted_beta.toFixed(3)}
-                                </TableCell>
-                              </TableRow>
-                              <TableRow>
-                                <TableCell>
-                                  <strong>Beta p-value</strong>
-                                  <Tooltip title="Statistical significance of the beta estimate. Lower values indicate higher confidence in the beta value (reject null hypothesis of β=0).">
-                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                  </Tooltip>
-                                </TableCell>
-                                <TableCell align="right">
-                                  {methodData.performance.beta_pvalue.toFixed(4)}
-                                </TableCell>
-                              </TableRow>
-                              <TableRow>
-                                <TableCell>
-                                  <strong>Coskewness</strong>
-                                  <Tooltip title="Measures the relationship between portfolio returns and squared market returns. Negative values suggest the portfolio tends to have negative returns when market volatility increases.">
-                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                  </Tooltip>
-                                </TableCell>
-                                <TableCell align="right">
-                                  {methodData.performance.coskewness !== undefined ? methodData.performance.coskewness.toFixed(4) : 'N/A'}
-                                </TableCell>
-                              </TableRow>
-                              <TableRow>
-                                <TableCell>
-                                  <strong>Cokurtosis</strong>
-                                  <Tooltip title="Fourth cross-moment measuring the relationship between portfolio returns and extreme market returns. A high positive value indicates portfolio returns amplify extreme market movements.">
-                                    <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
-                                  </Tooltip>
-                                </TableCell>
-                                <TableCell align="right">
-                                  {methodData.performance.cokurtosis !== undefined ? methodData.performance.cokurtosis.toFixed(4) : 'N/A'}
-                                </TableCell>
-                              </TableRow>
+                              {Object.entries(methodData.weights)
+                                .sort(([,a], [,b]) => b - a) // Sort by weight descending
+                                .map(([ticker, weight]) => (
+                                  <TableRow key={ticker}>
+                                    <TableCell>{ticker}</TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: weight > 0.1 ? 'bold' : 'normal' }}>
+                                      {(weight * 100).toFixed(2)}%
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
                             </TableBody>
                           </Table>
-                        </Grid>
-                      )}
+                        </Box>
+                      </Grid>
                       
-                      {/* Visualizations - Returns Distribution and Drawdown */}
+                      {/* Right Column: Visualizations */}
                       <Grid item xs={12} md={8}>
+                        {/* Returns Distribution */}
                         {methodData.returns_dist && (
                           <Box>
                             <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
@@ -1905,6 +2034,7 @@ const HomePage: React.FC = () => {
                           </Box>
                         )}
                         
+                        {/* Maximum Drawdown */}
                         {methodData.max_drawdown_plot && (
                           <Box sx={{ mt: 3 }}>
                             <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
@@ -1921,45 +2051,6 @@ const HomePage: React.FC = () => {
                           </Box>
                         )}
                       </Grid>
-                    </Grid>
-                    
-                    {/* Additional Portfolio Visualizations */}
-                    <Grid container spacing={3} sx={{ mt: 2 }}>
-                      {/* Efficient Frontier */}
-                      {methodData.efficient_frontier_img && (
-                        <Grid item xs={12} md={6}>
-                          <Box>
-                            <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                              Efficient Frontier
-                            </Typography>
-                            <ImageComponent base64String={methodData.efficient_frontier_img} altText="Efficient Frontier" />
-                          </Box>
-                        </Grid>
-                      )}
-                      
-                      {/* Weights Plot */}
-                      {methodData.weights_plot && (
-                        <Grid item xs={12} md={6}>
-                          <Box>
-                            <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                              Portfolio Weights Visualization
-                            </Typography>
-                            <ImageComponent base64String={methodData.weights_plot} altText="Portfolio Weights" />
-                          </Box>
-                        </Grid>
-                      )}
-                      
-                      {/* Dendrogram Plot */}
-                      {methodData.dendrogram_plot && (
-                        <Grid item xs={12} md={6}>
-                          <Box>
-                            <Typography variant="h6" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                              Hierarchical Clustering Dendrogram
-                            </Typography>
-                            <ImageComponent base64String={methodData.dendrogram_plot} altText="Hierarchical Clustering" />
-                          </Box>
-                        </Grid>
-                      )}
                     </Grid>
                   </CardContent>
                 </Card>
