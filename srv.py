@@ -727,7 +727,8 @@ def format_tickers(stocks: List[StockItem]) -> List[str]:
 def fetch_and_align_data(
     tickers: List[str],
     benchmark_ticker: str,
-    sanitize_bse: bool = False
+    sanitize_bse: bool = False,
+    start_date: Optional[datetime] = None
 ) -> Tuple[pd.DataFrame, pd.Series]:
     """
     Download & align data for each ticker, plus benchmark index.
@@ -746,8 +747,11 @@ def fetch_and_align_data(
     data = {}
     failed_tickers = []
     
-    # Start date is set to a common date for all tickers
-    start_date = datetime(1990, 1, 1)
+    # Use provided start_date or default to a common date for all tickers
+    if start_date is None:
+        start_date = datetime(1990, 1, 1)
+    
+    print(f"FETCH_ALIGN: Using start_date={start_date.date()}")
     
     # Process NSE tickers with auto_adjust=True
     for ticker in nse_tickers:
@@ -1963,7 +1967,7 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         end_date = datetime.now()
         
         # Fetch and align price data
-        df, benchmark_df = fetch_and_align_data(tickers, benchmark_ticker, sanitize_bse=True)
+        df, benchmark_df = fetch_and_align_data(tickers, benchmark_ticker, sanitize_bse=True, start_date=start_date)
         
         if df.empty:
             raise APIError(
@@ -1999,27 +2003,50 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         technical_end_date = None
         technical_risk_free_rate = None
         
-        if is_technical_only:
-            # For technical-only optimization, calculate risk-free rate for the technical period
-            # which might be different from the return-based period
-            technical_start_date = actual_start_date
-            technical_end_date = actual_end_date
+        # Check if technical optimization is requested (either technical-only or mixed)
+        has_technical = OptimizationMethod.TECHNICAL in request.methods
+        
+        if has_technical:
+            # Calculate technical window and dates
+            # Find max window size from indicators
+            max_window = 0
+            for indicator in request.indicators:
+                if hasattr(indicator, "window") and indicator.window:
+                    max_window = max(max_window, indicator.window)
+            
+            # If no indicators provided or window is 0, use a reasonable default
+            if max_window == 0:
+                max_window = 100  # Default window
+            
+            # Add buffer for technical calculations
+            buffer_days = min(50, max_window // 2)
+            required_days = max_window + buffer_days
+            
+            # For technical optimization, we need to determine the technical period
+            if len(df) > required_days:
+                # Use only the last required_days for technical analysis
+                technical_start_date = df.iloc[-required_days:].index[0].to_pydatetime()
+                technical_end_date = df.index[-1].to_pydatetime()
+            else:
+                # If we don't have enough data, use all available data for technical
+                technical_start_date = actual_start_date
+                technical_end_date = actual_end_date
+            
+            # Calculate short-term risk-free rate for technical period
             try:
-                # Calculate risk-free rate specifically for the technical period
                 technical_risk_free_rate = get_risk_free_rate(technical_start_date, technical_end_date)
-                print(f"OPTIMIZE: Technical-only risk-free rate: {technical_risk_free_rate:.4f} for period {technical_start_date.date()} to {technical_end_date.date()}")
+                print(f"OPTIMIZE: Technical period: {technical_start_date.date()} to {technical_end_date.date()}")
+                print(f"OPTIMIZE: Technical risk-free rate: {technical_risk_free_rate:.4f}")
             except Exception as e:
                 print(f"OPTIMIZE: Error fetching technical risk-free rate: {str(e)}")
                 logger.warning("Error fetching technical risk-free rate: %s. Using default 0.05", str(e))
                 technical_risk_free_rate = 0.05  # Default fallback
-        else:
-            # For mixed or return-based optimization, technical fields remain None
-            # but we still need to handle the case where both technical and return-based methods are selected
-            if OptimizationMethod.TECHNICAL in request.methods:
-                # Mixed optimization: set technical dates to actual dates but use same risk-free rate
-                technical_start_date = actual_start_date
-                technical_end_date = actual_end_date
-                technical_risk_free_rate = risk_free_rate  # Use same rate for mixed optimization
+        
+        print(f"OPTIMIZE: Long-term period: {actual_start_date.date()} to {actual_end_date.date()}")
+        print(f"OPTIMIZE: Long-term risk-free rate: {risk_free_rate:.4f}")
+        if has_technical:
+            print(f"OPTIMIZE: Technical period: {technical_start_date.date()} to {technical_end_date.date()}")
+            print(f"OPTIMIZE: Technical risk-free rate: {technical_risk_free_rate:.4f}")
 
         # Validate selected indicators (if any)
         indicator_cfgs = []
@@ -2061,12 +2088,33 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         if is_technical_only:
             mu = None
             cov = None
-            # Build composite indicator scores S
+            
+            # For technical-only optimization, slice the data to only use what's needed
+            # Use the technical period calculated above
+            if technical_start_date and technical_end_date:
+                # Slice the data to the technical period
+                technical_mask = (df.index >= technical_start_date) & (df.index <= technical_end_date)
+                if technical_mask.any():
+                    df_for_analysis = df.loc[technical_mask].copy()
+                    benchmark_df_for_analysis = benchmark_df.loc[benchmark_df.index.intersection(df_for_analysis.index)].copy()
+                    print(f"OPTIMIZE: Technical-only sliced to {len(df_for_analysis)} days")
+                else:
+                    # Fallback: use all available data
+                    df_for_analysis = df
+                    benchmark_df_for_analysis = benchmark_df
+                    print(f"OPTIMIZE: Technical slicing failed, using all {len(df)} days")
+            else:
+                # Fallback: use all available data
+                df_for_analysis = df
+                benchmark_df_for_analysis = benchmark_df
+                print(f"OPTIMIZE: No technical period defined, using all {len(df)} days")
+            
+            # Build composite indicator scores S using the sliced data
             S_scores = build_technical_scores(
-                prices=df,
-                highs=df,    # if you have separate H/L, pass them; else reuse df
-                lows=df,
-                volume=df,   # if no volume, pass a dummy frame of 1.0s
+                prices=df_for_analysis,
+                highs=df_for_analysis,    # if you have separate H/L, pass them; else reuse df
+                lows=df_for_analysis,
+                volume=df_for_analysis,   # if no volume, pass a dummy frame of 1.0s
                 indicator_cfgs=indicator_cfgs,
                 blend="equal"  # free tier
             )
@@ -2082,17 +2130,32 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             )
             cov_heatmap_b64 = await run_in_threadpool(generate_covariance_heatmap, cov)
             stock_yearly_returns = await run_in_threadpool(compute_yearly_returns_stocks, returns)
-            # If indicators are also selected, compute S_scores to blend with mu (optional)
-            if indicator_cfgs:
+            
+            # If technical indicators are also selected (mixed optimization), compute S_scores
+            if has_technical and indicator_cfgs:
+                # For mixed optimization, use the technical period for indicator calculation
+                if technical_start_date and technical_end_date:
+                    technical_mask = (df.index >= technical_start_date) & (df.index <= technical_end_date)
+                    if technical_mask.any():
+                        df_technical = df.loc[technical_mask].copy()
+                        print(f"OPTIMIZE: Mixed mode - using {len(df_technical)} days for technical indicators")
+                    else:
+                        df_technical = df
+                        print(f"OPTIMIZE: Mixed mode - technical slicing failed, using all {len(df)} days")
+                else:
+                    df_technical = df
+                    print(f"OPTIMIZE: Mixed mode - using all {len(df)} days for technical indicators")
+                
                 S_scores = build_technical_scores(
-                    prices=df,
-                    highs=df,
-                    lows=df,
-                    volume=df,
+                    prices=df_technical,
+                    highs=df_technical,
+                    lows=df_technical,
+                    volume=df_technical,
                     indicator_cfgs=indicator_cfgs,
                     blend="equal"  # free tier
                 )
-                # If you want to blend into mu: mu = mu + α·S_scores  (user-specific logic)
+                # Note: For mixed optimization, you could blend S_scores into mu here if desired
+                # mu = mu + alpha * S_scores (user-specific logic)
             else:
                 S_scores = pd.Series(0.0, index=df.columns)
         
@@ -2185,15 +2248,25 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                     # We already computed S_scores above. Solve LP → get raw weights
                     # Use technical_risk_free_rate for technical-only optimization
                     rf_for_technical = technical_risk_free_rate if technical_risk_free_rate is not None else risk_free_rate
-                    raw_wts = run_technical_only_LP(S_scores, returns, benchmark_df, rf_for_technical)
+                    
+                    # For technical-only optimization, use the sliced data if available
+                    returns_for_technical = df_for_analysis if is_technical_only and 'df_for_analysis' in locals() else returns
+                    benchmark_for_technical = benchmark_df_for_analysis if is_technical_only and 'benchmark_df_for_analysis' in locals() else benchmark_df
+                    
+                    # Convert prices to returns for the LP optimization if needed
+                    if returns_for_technical is not returns:
+                        returns_for_technical = returns_for_technical.pct_change().dropna()
+                    
+                    raw_wts = run_technical_only_LP(S_scores, returns_for_technical, benchmark_for_technical, rf_for_technical)
+                    
                     # Now feed those weights into finalize_portfolio(...) so that we produce
                     # a valid OptimizationResult and cumulative returns
                     optimization_result, cum_returns = await run_in_threadpool(
                         finalize_portfolio,
                         method.value,
                         raw_wts,
-                        returns,
-                        benchmark_df,
+                        returns_for_technical,
+                        benchmark_for_technical,
                         rf_for_technical
                     )
                 
