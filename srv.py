@@ -84,17 +84,19 @@ class CustomJSONEncoder(JSONEncoder, metaclass=CustomJSONEncoderMeta):
             return self._sanitize_obj(obj.to_dict())
         elif isinstance(obj, pd.DataFrame):
             return self._sanitize_obj(obj.to_dict())
+        elif pd.isna(obj):  # Add explicit pandas NaN check
+            return None
         return super().default(obj)
 
     def _sanitize_float(self, value):
         """Sanitize a single float value."""
-        if np.isnan(value):
+        if pd.isna(value) or np.isnan(value):  # Use both pandas and numpy NaN checks
             return None
         if np.isinf(value):
             return 1.0e+308 if value > 0 else -1.0e+308
         if abs(value) > 1.0e+308:  # Too large for standard JSON
             return 1.0e+308 if value > 0 else -1.0e+308
-        return value
+        return float(value)  # Ensure it's a Python float
 
     def _sanitize_obj(self, obj):
         """Recursively sanitize an object and its nested values."""
@@ -106,6 +108,10 @@ class CustomJSONEncoder(JSONEncoder, metaclass=CustomJSONEncoderMeta):
             return self._sanitize_float(obj)
         elif isinstance(obj, (np.integer, np.int_)):
             return int(obj)
+        elif pd.isna(obj):  # Add explicit pandas NaN check
+            return None
+        elif isinstance(obj, str) and obj.lower() == 'nan':  # Handle string "NaN"
+            return None
         return obj
 
     def encode(self, obj):
@@ -122,14 +128,24 @@ class CustomJSONEncoder(JSONEncoder, metaclass=CustomJSONEncoderMeta):
 # Custom JSONResponse class that uses our encoder
 class CustomJSONResponse(JSONResponse):
     def render(self, content: Any) -> bytes:
-        return json.dumps(
-            content,
+        # First sanitize the content
+        sanitized_content = sanitize_json_values(content)
+        
+        # Then encode with our custom encoder
+        json_str = json.dumps(
+            sanitized_content,
             ensure_ascii=False,
-            allow_nan=False,
+            allow_nan=False,  # This will raise an error if NaN is encountered
             indent=None,
             separators=(",", ":"),
             cls=CustomJSONEncoder,
-        ).encode("utf-8")
+        )
+        
+        # Final check: replace any remaining "NaN" strings
+        json_str = json_str.replace('"NaN"', 'null').replace("'NaN'", 'null')
+        json_str = json_str.replace('"Infinity"', '"1.0e+308"').replace('"-Infinity"', '"-1.0e+308"')
+        
+        return json_str.encode("utf-8")
 
 ########### Identify which optimizers need returns/mu/cov ############
 RETURN_BASED_METHODS = {
@@ -267,163 +283,151 @@ def finalize_portfolio(
     """
     Common post-processing for all optimization methods:
     - Calculate portfolio returns
-    - Compute custom metrics
-    - Generate plots
-    - Build OptimizationResult
+    - Calculate performance metrics
+    - Create OptimizationResult object
     
-    Parameters:
-        method (str): Optimization method name for labeling
-        weights (Dict[str, float]): Portfolio weights
-        returns (pd.DataFrame): Historical returns data
-        benchmark_df (pd.Series): Benchmark returns
-        risk_free_rate (float): Risk-free rate, default 0.05
-        pfolio_perf (Optional[Tuple]): Performance metrics from optimization, if available
-    
+    Args:
+        method: Optimization method name
+        weights: Dictionary of weights
+        returns: DataFrame of asset returns
+        benchmark_df: Series of benchmark returns
+        risk_free_rate: Risk-free rate (annualized)
+        pfolio_perf: Optional tuple of (expected_return, volatility, sharpe) from optimizer
+        
     Returns:
-        Tuple: (OptimizationResult, cumulative_returns)
+        Tuple of (OptimizationResult, cumulative_returns)
     """
-    # 1) Build a pd.Series of weights
-    w_series = pd.Series(weights)
-    # 2) Calculate portfolio returns
-    port_returns = returns.dot(w_series)
-
-    # 3) ALWAYS compute "short-horizon" metrics (sortino, max drawdown, VaR/CVaR, etc.)
-    custom = compute_custom_metrics(port_returns, benchmark_df, risk_free_rate)
-
-    # 4) Align & compute excess returns for OLS if we have enough history
-    #    If len(returns) < MIN_LONG_HORIZON_DAYS, we skip all OLS / rolling beta
-    has_long_horizon = len(returns) >= MIN_LONG_HORIZON_DAYS
-
-    if has_long_horizon:
-        # 4a) portfolio excess
-        if not risk_free_rate_manager.is_empty():
-            rf_port = risk_free_rate_manager._series.reindex(port_returns.index).ffill().fillna(risk_free_rate / 252)
-        else:
-            rf_port = pd.Series(risk_free_rate / 252, index=port_returns.index)
-        port_excess = port_returns - rf_port
-
-        # 4b) benchmark excess
-        bench_ret = benchmark_df.pct_change().dropna()
-        if not risk_free_rate_manager.is_empty():
-            rf_bench = risk_free_rate_manager._series.reindex(bench_ret.index).ffill().fillna(risk_free_rate / 252)
-        else:
-            rf_bench = pd.Series(risk_free_rate / 252, index=bench_ret.index)
-        bench_excess = bench_ret - rf_bench
-
-        # 5) Compute rolling yearly betas
-        yearly_betas = compute_yearly_betas(port_excess, bench_excess)
-
-        # 6) Compute alpha/beta/Sharpe/Treynor via OLS
-        X = sm.add_constant(bench_excess.values)
-        y = port_excess.values
-        model = sm.OLS(y, X).fit()
-        daily_alpha = float(model.params[0])
-        portfolio_beta = float(model.params[1])
-        beta_pvalue = float(model.pvalues[1])
-        r_squared = float(model.rsquared)
-        portfolio_alpha = daily_alpha * 252  # annualize
-
-        mean_excess_daily = port_excess.mean() * 252
-        std_excess_daily = port_excess.std() * np.sqrt(252)
-        sharpe = float(mean_excess_daily / std_excess_daily) if std_excess_daily > 0 else None
-        treynor_ratio = float(mean_excess_daily / portfolio_beta) if portfolio_beta not in (0, None) else None
-
-        # 7) UPDATE custom metrics with these "long-horizon" values
-        custom["portfolio_beta"] = portfolio_beta
-        custom["portfolio_alpha"] = portfolio_alpha
-        custom["beta_pvalue"] = beta_pvalue
-        custom["r_squared"] = r_squared
-        custom["blume_adjusted_beta"] = 1 + 0.67 * (portfolio_beta - 1)
-        custom["treynor_ratio"] = treynor_ratio
-        custom["sharpe_ratio"] = sharpe
-        custom["yearly_betas"] = yearly_betas
+    # Calculate portfolio returns
+    if not weights:
+        logger.warning(f"Empty weights dictionary for {method}")
+        return None, None
+    
+    # Filter returns to include only assets in weights
+    returns_filtered = returns[[col for col in returns.columns if col in weights]]
+    
+    if returns_filtered.empty:
+        logger.warning(f"No matching columns between returns and weights for {method}")
+        return None, None
+    
+    # Create weight Series aligned with returns columns
+    weight_series = pd.Series(0.0, index=returns_filtered.columns)
+    for ticker, weight in weights.items():
+        if ticker in weight_series.index:
+            weight_series[ticker] = weight
+    
+    # Normalize weights to sum to 1.0
+    if weight_series.sum() > 0:
+        weight_series = weight_series / weight_series.sum()
+    
+    # Calculate portfolio returns
+    port_returns = (returns_filtered * weight_series).sum(axis=1)
+    
+    # Calculate cumulative returns
+    cum_returns = (1 + port_returns).cumprod()
+    
+    # If optimizer provided performance metrics, use them
+    if pfolio_perf is not None:
+        expected_return, volatility, sharpe = pfolio_perf
     else:
-        # 4c) Not enough history → force all long-horizon metrics to 0.0 (not None)
+        # Calculate basic performance metrics
+        expected_return = port_returns.mean() * 252  # Annualized
+        volatility = port_returns.std() * np.sqrt(252)  # Annualized
+        excess_return = expected_return - risk_free_rate
+        sharpe = excess_return / volatility if volatility > 0 else 0
+    
+    # Calculate additional custom metrics
+    custom = compute_custom_metrics(port_returns, benchmark_df, risk_free_rate)
+    
+    # For short history, explicitly set long-horizon metrics to 0.0
+    if len(returns) < MIN_LONG_HORIZON_DAYS:
         custom["portfolio_beta"] = 0.0
         custom["portfolio_alpha"] = 0.0
-        custom["beta_pvalue"] = 1.0
+        custom["treynor_ratio"] = 0.0
         custom["r_squared"] = 0.0
         custom["blume_adjusted_beta"] = 0.0
-        custom["treynor_ratio"] = 0.0
-        custom["sharpe_ratio"] = 0.0
-        custom["yearly_betas"] = {}
-
-    # 8) Generate plots (we always can plot distribution/drawdown even if short-horizon)
-    dist_b64, dd_b64 = generate_plots(port_returns, method, benchmark_df)
-
-    # 9) Expected return, volatility: if pfolio_perf was passed, use that; else compute
-    if pfolio_perf is not None:
-        expected_return = pfolio_perf[0] if len(pfolio_perf) > 0 else 0.0
-        volatility = pfolio_perf[1] if len(pfolio_perf) > 1 else 0.0
-        sharpe = pfolio_perf[2] if len(pfolio_perf) > 2 else (expected_return - risk_free_rate) / volatility if volatility > 0 else 0.0
-    else:
-        expected_return = port_returns.mean() * 252
-        volatility = port_returns.std() * np.sqrt(252)
-        sharpe = (expected_return - risk_free_rate) / volatility if volatility > 0 else 0.0
-
-    # 10) Build and return the Pydantic PortfolioPerformance
+        custom["beta_pvalue"] = 1.0
+    
+    # Sanitize all custom metrics before creating PortfolioPerformance
+    for key, value in custom.items():
+        if pd.isna(value) or (isinstance(value, float) and np.isnan(value)):
+            custom[key] = None
+        elif isinstance(value, dict):
+            custom[key] = {k: (None if pd.isna(v) or (isinstance(v, float) and np.isnan(v)) else v) 
+                          for k, v in value.items()}
+    
+    # Sanitize performance values
+    expected_return = None if pd.isna(expected_return) else expected_return
+    volatility = None if pd.isna(volatility) else volatility
+    sharpe = None if pd.isna(sharpe) else sharpe
+    
+    # Generate plots
+    returns_dist_b64, max_drawdown_plot_b64 = generate_plots(port_returns, method, benchmark_df)
+    
+    # Calculate yearly betas
+    port_excess = port_returns - custom.get("risk_free_rate_daily", 0)
+    bench_excess = benchmark_df.pct_change().dropna() - custom.get("risk_free_rate_daily", 0)
+    
+    # Calculate yearly betas if we have enough data
+    yearly_betas = None
+    if len(port_excess) >= 252:  # At least a year of data
+        try:
+            yearly_betas = compute_yearly_betas(port_excess, bench_excess)
+            # Sanitize yearly betas
+            if yearly_betas:
+                yearly_betas = {k: (None if pd.isna(v) or np.isnan(v) else v) for k, v in yearly_betas.items()}
+        except Exception as e:
+            logger.warning(f"Error computing yearly betas: {str(e)}")
+    
+    # Create performance object
     performance = PortfolioPerformance(
-        expected_return=expected_return,
-        volatility=volatility,
-        sharpe=sharpe,
-        sortino=custom["sortino"],
-        max_drawdown=custom["max_drawdown"],
-        romad=custom["romad"],
-        var_95=custom["var_95"],
-        cvar_95=custom["cvar_95"],
-        var_90=custom["var_90"],
-        cvar_90=custom["cvar_90"],
-        cagr=custom["cagr"],
-        portfolio_beta=custom["portfolio_beta"] or 0.0,
-        portfolio_alpha=custom["portfolio_alpha"] or 0.0,
-        beta_pvalue=custom["beta_pvalue"] or 1.0,
-        r_squared=custom["r_squared"] or 0.0,
-        blume_adjusted_beta=custom["blume_adjusted_beta"] or 0.0,
-        treynor_ratio=custom["treynor_ratio"] or 0.0,
-        skewness=custom["skewness"],
-        kurtosis=custom["kurtosis"],
-        entropy=custom["entropy"],
-        # Advanced beta & cross-moment
-        welch_beta=custom["welch_beta"],
-        semi_beta=custom["semi_beta"],
-        coskewness=custom["coskewness"],
-        cokurtosis=custom["cokurtosis"],
-        garch_beta=custom["garch_beta"],
-        # Other metrics
-        omega_ratio=custom["omega_ratio"],
-        calmar_ratio=custom["calmar_ratio"],
-        ulcer_index=custom["ulcer_index"],
-        evar_95=custom["evar_95"],
-        gini_mean_difference=custom["gini_mean_difference"],
-        dar_95=custom["dar_95"],
-        cdar_95=custom["cdar_95"],
-        upside_potential_ratio=custom["upside_potential_ratio"],
-        modigliani_risk_adjusted_performance=custom["modigliani_risk_adjusted_performance"],
-        information_ratio=custom["information_ratio"],
-        sterling_ratio=custom["sterling_ratio"],
-        v2_ratio=custom["v2_ratio"]
+        expected_return=expected_return if expected_return is not None else 0.0,
+        volatility=volatility if volatility is not None else 0.0,
+        sharpe=sharpe if sharpe is not None else 0.0,
+        sortino=custom.get("sortino", 0.0) or 0.0,
+        max_drawdown=custom.get("max_drawdown", 0.0) or 0.0,
+        romad=custom.get("romad", 0.0) or 0.0,
+        var_95=custom.get("var_95", 0.0) or 0.0,
+        cvar_95=custom.get("cvar_95", 0.0) or 0.0,
+        var_90=custom.get("var_90", 0.0) or 0.0,
+        cvar_90=custom.get("cvar_90", 0.0) or 0.0,
+        cagr=custom.get("cagr", 0.0) or 0.0,
+        portfolio_beta=custom.get("portfolio_beta", 0.0) or 0.0,
+        portfolio_alpha=custom.get("portfolio_alpha", 0.0) or 0.0,
+        beta_pvalue=custom.get("beta_pvalue", 1.0) or 1.0,
+        r_squared=custom.get("r_squared", 0.0) or 0.0,
+        blume_adjusted_beta=custom.get("blume_adjusted_beta", 0.0) or 0.0,
+        treynor_ratio=custom.get("treynor_ratio", 0.0) or 0.0,
+        skewness=custom.get("skewness", 0.0) or 0.0,
+        kurtosis=custom.get("kurtosis", 0.0) or 0.0,
+        entropy=custom.get("entropy", 0.0) or 0.0,
+        welch_beta=custom.get("welch_beta", 0.0),
+        semi_beta=custom.get("semi_beta", 0.0),
+        coskewness=custom.get("coskewness", 0.0),
+        cokurtosis=custom.get("cokurtosis", 0.0),
+        # garch_beta=custom.get("garch_beta"),  # Commented out temporarily
+        omega_ratio=custom.get("omega_ratio", 0.0) or 0.0,
+        calmar_ratio=custom.get("calmar_ratio", 0.0) or 0.0,
+        ulcer_index=custom.get("ulcer_index", 0.0) or 0.0,
+        evar_95=custom.get("evar_95", 0.0) or 0.0,
+        gini_mean_difference=custom.get("gini_mean_difference", 0.0) or 0.0,
+        dar_95=custom.get("dar_95", 0.0) or 0.0,
+        cdar_95=custom.get("cdar_95", 0.0) or 0.0,
+        upside_potential_ratio=custom.get("upside_potential_ratio", 0.0) or 0.0,
+        modigliani_risk_adjusted_performance=custom.get("modigliani_risk_adjusted_performance", 0.0) or 0.0,
+        information_ratio=custom.get("information_ratio", 0.0) or 0.0,
+        sterling_ratio=custom.get("sterling_ratio", 0.0) or 0.0,
+        v2_ratio=custom.get("v2_ratio", 0.0) or 0.0
     )
-
-    # Log & wrap up
-    portfolio_data = {
-        "method": method,
-        "weights": {k: float(v) for k, v in sorted(weights.items(), key=lambda x: x[1], reverse=True)},
-        "performance": jsonable_encoder(performance),
-        "yearly_betas": {str(k): float(v) for k, v in custom.get("yearly_betas", {}).items()},
-        "total_weight": float(sum(weights.values())),
-        "timestamp": datetime.now().isoformat()
-    }
-    logger.info(f"PORTFOLIO OPTIMIZATION RESULT: {method}", extra={"portfolio_data": portfolio_data})
-
+    
+    # Create optimization result
     result = OptimizationResult(
         weights=weights,
         performance=performance,
-        returns_dist=dist_b64,
-        max_drawdown_plot=dd_b64,
-        rolling_betas=custom.get("yearly_betas", {})
+        returns_dist=returns_dist_b64,
+        max_drawdown_plot=max_drawdown_plot_b64,
+        rolling_betas=yearly_betas
     )
-
-    cum_returns = (1 + port_returns).cumprod()
+    
     return result, cum_returns
 
 # ---- MOSEK License Configuration ----
@@ -2452,6 +2456,10 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         
         # Include a warning in the response if some methods failed
         response_data = jsonable_encoder(response)
+        
+        # Additional sanitization to catch any values the encoder might miss
+        response_data = sanitize_json_values(response_data)
+        
         if failed_methods:
             print(f"OPTIMIZE: Some methods failed: {failed_methods}")
             response_data["warnings"] = {
@@ -3758,7 +3766,7 @@ def sanitize_json_values(obj):
     elif isinstance(obj, list):
         return [sanitize_json_values(item) for item in obj]
     elif isinstance(obj, (float, np.floating)):
-        if np.isnan(obj):
+        if pd.isna(obj) or np.isnan(obj):
             return None
         elif np.isinf(obj):
             return 1.0e+308 if obj > 0 else -1.0e+308
@@ -3778,6 +3786,20 @@ def sanitize_json_values(obj):
     elif isinstance(obj, pd.DataFrame):
         # Handle pandas DataFrame
         return sanitize_json_values(obj.to_dict())
+    elif pd.isna(obj):
+        # Handle any other pandas NA type
+        return None
+    elif isinstance(obj, str):
+        # Handle string representations of NaN and Infinity
+        lower_obj = obj.lower()
+        if lower_obj in ['nan', 'na', 'n/a', '#n/a', '#na', '#nan']:
+            return None
+        elif lower_obj == 'inf' or lower_obj == 'infinity':
+            return 1.0e+308
+        elif lower_obj == '-inf' or lower_obj == '-infinity':
+            return -1.0e+308
+        else:
+            return obj
     else:
         return obj
 
