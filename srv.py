@@ -23,7 +23,10 @@ import riskfolio as rp
 import seaborn as sns
 import statsmodels.api as sm
 import yfinance as yf
-import talib
+try:  # pragma: no cover - provide stubbed talib if not installed
+    import talib  # type: ignore
+except ModuleNotFoundError:
+    from signals import talib  # type: ignore
 from arch import arch_model
 from cachetools import TTLCache, cached
 from fastapi import FastAPI, Body, BackgroundTasks
@@ -2504,8 +2507,8 @@ async def async_http_get(url: str):
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(url, timeout=10.0)
-            # Create a requests-like response for compatibility
-            response.text = response.text
+            # httpx's Response object already mimics the requests.Response API
+            # so we can simply return it without modification.
             return response
     except Exception:
         # Fallback to synchronous version

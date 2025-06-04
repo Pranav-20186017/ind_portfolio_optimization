@@ -3,7 +3,92 @@
 from typing import List, Dict
 import pandas as pd
 import numpy as np
-import talib
+
+try:  # pragma: no cover - best effort fallback if TA-Lib is unavailable
+    import talib  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover - define minimal stubs
+    class talib:  # type: ignore
+        """Minimal TA-Lib replacement used for tests when the real package isn't installed."""
+
+        @staticmethod
+        def RSI(values, timeperiod=14):
+            series = pd.Series(values)
+            delta = series.diff()
+            gain = delta.clip(lower=0)
+            loss = -delta.clip(upper=0)
+            avg_gain = gain.rolling(timeperiod).mean()
+            avg_loss = loss.rolling(timeperiod).mean()
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+            return rsi.to_numpy()
+
+        @staticmethod
+        def WILLR(high, low, close, timeperiod=14):
+            high_s = pd.Series(high)
+            low_s = pd.Series(low)
+            close_s = pd.Series(close)
+            highest_high = high_s.rolling(timeperiod).max()
+            lowest_low = low_s.rolling(timeperiod).min()
+            willr = -100 * (highest_high - close_s) / (highest_high - lowest_low)
+            return willr.to_numpy()
+
+        @staticmethod
+        def CCI(high, low, close, timeperiod=14):
+            high_s = pd.Series(high)
+            low_s = pd.Series(low)
+            close_s = pd.Series(close)
+            tp = (high_s + low_s + close_s) / 3
+            sma = tp.rolling(timeperiod).mean()
+            mean_dev = tp.rolling(timeperiod).apply(lambda x: np.mean(np.abs(x - np.mean(x))), raw=True)
+            cci = (tp - sma) / (0.015 * mean_dev)
+            return cci.to_numpy()
+
+        @staticmethod
+        def TRANGE(high, low, prev_close):
+            high_s = pd.Series(high)
+            low_s = pd.Series(low)
+            prev_close_s = pd.Series(prev_close)
+            ranges = np.vstack([
+                high_s - low_s,
+                (high_s - prev_close_s).abs(),
+                (low_s - prev_close_s).abs(),
+            ])
+            return np.nanmax(ranges, axis=0)
+
+        @staticmethod
+        def ATR(high, low, close, timeperiod=14):
+            prev_close = pd.Series(close).shift(1)
+            tr = talib.TRANGE(high, low, prev_close)
+            atr = pd.Series(tr).rolling(timeperiod).mean()
+            return atr.to_numpy()
+
+        @staticmethod
+        def OBV(close, volume):
+            close_s = pd.Series(close)
+            volume_s = pd.Series(volume)
+            direction = np.sign(close_s.diff().fillna(0))
+            obv = (direction * volume_s).cumsum()
+            return obv.to_numpy()
+
+        @staticmethod
+        def AD(high, low, close, volume):
+            high_s = pd.Series(high)
+            low_s = pd.Series(low)
+            close_s = pd.Series(close)
+            volume_s = pd.Series(volume)
+            mfm = ((close_s - low_s) - (high_s - close_s)) / (high_s - low_s)
+            mfm = mfm.fillna(0)
+            ad = (mfm * volume_s).cumsum()
+            return ad.to_numpy()
+
+        @staticmethod
+        def BBANDS(price, timeperiod=20, nbdevup=2, nbdevdn=2):
+            series = pd.Series(price)
+            mid = series.rolling(timeperiod).mean()
+            std = series.rolling(timeperiod).std()
+            upper = mid + nbdevup * std
+            lower = mid - nbdevdn * std
+            return upper.to_numpy(), mid.to_numpy(), lower.to_numpy()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 1) MOVING AVERAGES
