@@ -322,6 +322,13 @@ def finalize_portfolio(
     # Calculate portfolio returns
     port_returns = (returns_filtered * weight_series).sum(axis=1)
     
+    # Replace any NaN/Inf in port_returns with 0 (so cumprod cannot blow up)
+    port_returns = port_returns.copy()
+    port_returns[:] = [
+        0.0 if (pd.isna(r) or np.isinf(r)) else r
+        for r in port_returns
+    ]
+    
     # Calculate cumulative returns
     cum_returns = (1 + port_returns).cumprod()
     
@@ -2224,14 +2231,47 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                 print(f"OPTIMIZE: No technical period defined, using all {len(df)} days")
             
             # Build composite indicator scores S using the sliced data
+            # Create a dummy volume DataFrame of ones to avoid NaNs in volume-based indicators
+            dummy_volume = pd.DataFrame(
+                1.0,
+                index=df_for_analysis.index,
+                columns=df_for_analysis.columns
+            )
+            
             S_scores = build_technical_scores(
                 prices=df_for_analysis,
-                highs=df_for_analysis,    # if you have separate H/L, pass them; else reuse df
+                highs=df_for_analysis,
                 lows=df_for_analysis,
-                volume=df_for_analysis,   # if no volume, pass a dummy frame of 1.0s
+                volume=dummy_volume,  # Using dummy volume instead of price data
                 indicator_cfgs=indicator_cfgs,
-                blend="equal"  # free tier
+                blend="equal"
             )
+            
+            # Drop any tickers whose composite score is NaN (so we don't pass NaN into the LP)
+            S_scores = S_scores.dropna()
+            
+            if S_scores.empty:
+                # If all scores were NaN, revert to equal-weight fallback immediately
+                logger.warning("All technical scores are NaN, reverting to equal weights")
+                equal_weights = {ticker: 1.0 / len(df_for_analysis.columns) for ticker in df_for_analysis.columns}
+                
+                # Use the fallback weights
+                raw_wts = equal_weights
+            else:
+                # Proceed with LP optimization using the valid scores
+                # For technical-only optimization, use the sliced data if available
+                returns_for_technical = df_for_analysis.pct_change().dropna() if df_for_analysis is not returns else returns
+                benchmark_for_technical = benchmark_df_for_analysis if is_technical_only and 'benchmark_df_for_analysis' in locals() else benchmark_df
+                
+                # Convert prices to returns for the LP optimization if needed
+                if returns_for_technical is not returns:
+                    returns_for_technical = returns_for_technical.pct_change().dropna()
+                
+                # Use technical_risk_free_rate for technical-only optimization
+                rf_for_technical = technical_risk_free_rate if technical_risk_free_rate is not None else risk_free_rate
+                
+                raw_wts = run_technical_only_LP(S_scores, returns_for_technical, benchmark_for_technical, rf_for_technical)
+            
             cov_heatmap_b64 = None
             stock_yearly_returns = None
         else:
@@ -2417,6 +2457,7 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         # Align with benchmark
         common_dates = cum_returns_df.index.intersection(cum_benchmark.index)
         print(f"OPTIMIZE: Found {len(common_dates)} common dates for benchmark alignment")
+        # Only keep common dates without reindexing to avoid introducing NaNs
         cum_returns_df = cum_returns_df.loc[common_dates]
         cum_benchmark = cum_benchmark.loc[common_dates]
         
@@ -2427,7 +2468,7 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         # Check for NaN or Infinity values in cumulative returns
         for key, returns_list in cumulative_returns.items():
             if any(np.isnan(x) or np.isinf(x) for x in returns_list if isinstance(x, float)):
-                logger.warning(f"Found NaN or Infinity values in cumulative returns for {key}")
+                logger.warning(f"Found NaN or Infinity values in cumulative returns for {key} - replacing with None")
                 # Replace problematic values with None
                 cumulative_returns[key] = [None if (isinstance(x, float) and (np.isnan(x) or np.isinf(x))) else x for x in returns_list]
         
