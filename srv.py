@@ -42,6 +42,7 @@ import cvxpy as cp
 import matplotlib.dates as mdates
 import json
 from json import JSONEncoder
+from sklearn.covariance import LedoitWolf
 
 # Inject json into builtins to make it available for tests
 import builtins
@@ -2279,9 +2280,27 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             mu = await run_in_threadpool(
                 lambda: expected_returns.mean_historical_return(df, frequency=252)
             )
-            cov = await run_in_threadpool(
-                lambda: CovarianceShrinkage(df).ledoit_wolf()
-            )
+            
+            # Replace CovarianceShrinkage with Ledoit-Wolf implementation
+            def _ledoit_wolf_cov(returns_df: pd.DataFrame) -> pd.DataFrame:
+                """
+                Estimate covariance via Ledoit–Wolf shrinkage (scikit-learn).
+                Returns a pandas DataFrame (n_assets × n_assets).
+                """
+                # Fit Ledoit-Wolf on raw returns (rows = dates, cols = tickers)
+                lw = LedoitWolf().fit(returns_df.values)
+                Σ_lw = lw.covariance_  # numpy.ndarray shape (n_assets, n_assets)
+                
+                # Wrap back into a pandas DataFrame with proper indices/columns
+                return pd.DataFrame(
+                    Σ_lw,
+                    index=returns_df.columns,
+                    columns=returns_df.columns,
+                )
+            
+            # Use the new Ledoit-Wolf implementation
+            cov = await run_in_threadpool(lambda: _ledoit_wolf_cov(returns))
+            
             cov_heatmap_b64 = await run_in_threadpool(generate_covariance_heatmap, cov)
             stock_yearly_returns = await run_in_threadpool(compute_yearly_returns_stocks, returns)
             

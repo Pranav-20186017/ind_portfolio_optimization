@@ -202,9 +202,10 @@ def build_technical_scores(
             z = zscore_cross_section(gap).iloc[-1]
 
         elif name == "RSI":
-            raw = compute_rsi(prices, n)  # RSI in [0..100]
-            # Convert to "higher = more bullish": 50 − (RSI − 50)/50
-            transformed = 50 - (raw - 50) / 50
+            raw = compute_rsi(prices, n)  # RSI ∈ [0..100]
+            # Normalize to [-1 .. +1] by centering at 50 and dividing by 50
+            transformed = (raw - 50.0) / 50.0
+            # (Alternatively, if you want 0..1 range: transformed = raw / 100.0)
             z = zscore_cross_section(transformed).iloc[-1]
 
         elif name == "WILLR":
@@ -224,7 +225,8 @@ def build_technical_scores(
         elif name == "ATR":
             raw = compute_atr(highs, lows, prices, n)  # positive volatility
             # Higher ATR = more volatile = less bullish → negate
-            transformed = -raw
+            # Normalize by price to get percentage ATR, then negate
+            transformed = -(raw / prices)
             z = zscore_cross_section(transformed).iloc[-1]
 
         elif name == "SUPERTREND":
