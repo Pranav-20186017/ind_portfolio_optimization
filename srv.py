@@ -3020,28 +3020,42 @@ def run_technical_only_LP(
     except Exception as e:
         logger.warning(f"Technical LP: Could not check available solvers: {str(e)}")
     
-    # --- 1) Build a shrunk covariance via Ledoit-Wolf ---
-    # We take the daily returns DataFrame 'returns' (shape T×n),
-    # fit LedoitWolf on it, and retrieve the covariance matrix.
-    # This ensures S_hat is positive-definite even if n>T or if returns are nearly singular.
+    # --- 0) CLEAN the returns matrix of Inf / NaN before building any covariance ---
+    # Step A) replace infinities with NaN
+    R = returns.replace([np.inf, -np.inf], np.nan)
+
+    # Step B) drop any date (row) where any ticker has NaN
+    returns_clean = R.dropna(axis=0, how="any")
+
+    if returns_clean.shape[0] < 2:
+        # Too few rows after dropping Inf/NaN → no meaningful covariance
+        logger.warning("Technical LP: Not enough valid return rows after dropping Inf/NaN.")
+        returns_for_cov = returns_clean  # may be empty or tiny
+    else:
+        returns_for_cov = returns_clean
+        logger.info(f"Technical LP: Using {returns_for_cov.shape[0]} clean return rows after dropping Inf/NaN.")
+
+    # --- 1) Try Ledoit-Wolf shrinkage on the cleaned returns ---
     try:
         lw = LedoitWolf()
-        # fit on the raw daily returns values (shape T×n)
-        lw.fit(returns.values)
-        Σ_hat = lw.covariance_          # returns an n×n numpy array
-        # Annualize covariance (multiply by 252)
-        Σ_hat *= 252.0
+        # Note: returns_for_cov.values is T×n; LedoitWolf will error if it still contains inf/nan
+        lw.fit(returns_for_cov.values)
 
-        cov_matrix = pd.DataFrame(
-            Σ_hat,
-            index=returns.columns,
-            columns=returns.columns
-        )
+        Σ_hat = lw.covariance_     # n×n array
+        Σ_hat *= 252.0             # annualize
+
+        # put it back into a pandas DataFrame (index=columns for clarity)
+        cov_matrix = pd.DataFrame(Σ_hat, index=returns.columns, columns=returns.columns)
         logger.info("Technical LP: used Ledoit-Wolf shrinkage for covariance (well-conditioned).")
     except Exception as e:
-        # If LedoitWolf itself fails (e.g. too few data points), fall back to sample covariance
-        logger.warning(f"Technical LP: Ledoit-Wolf shrinkage failed ({e}), using raw sample covariance.")
-        cov_matrix = returns.cov() * 252.0
+        # Shrinkage failed (e.g. too few rows, or other numeric issues). Fall back to sample cov on cleaned returns:
+        logger.warning(f"Technical LP: Ledoit-Wolf shrinkage failed ({e}), using raw (symmetrized) sample covariance.")
+
+        # If returns_for_cov is empty, `cov()` yields an empty DataFrame; that's fine—later QP will fail and fall back
+        S_raw = returns_for_cov.cov() * 252.0
+
+        # Enforce exact symmetry: (S + Sᵀ)/2
+        cov_matrix = (S_raw + S_raw.T) / 2.0
     
     try:
         # Standardize and clip extreme indicator scores for numerical stability
