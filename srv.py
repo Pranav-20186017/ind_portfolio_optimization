@@ -3020,6 +3020,29 @@ def run_technical_only_LP(
     except Exception as e:
         logger.warning(f"Technical LP: Could not check available solvers: {str(e)}")
     
+    # --- 1) Build a shrunk covariance via Ledoit-Wolf ---
+    # We take the daily returns DataFrame 'returns' (shape T×n),
+    # fit LedoitWolf on it, and retrieve the covariance matrix.
+    # This ensures S_hat is positive-definite even if n>T or if returns are nearly singular.
+    try:
+        lw = LedoitWolf()
+        # fit on the raw daily returns values (shape T×n)
+        lw.fit(returns.values)
+        Σ_hat = lw.covariance_          # returns an n×n numpy array
+        # Annualize covariance (multiply by 252)
+        Σ_hat *= 252.0
+
+        cov_matrix = pd.DataFrame(
+            Σ_hat,
+            index=returns.columns,
+            columns=returns.columns
+        )
+        logger.info("Technical LP: used Ledoit-Wolf shrinkage for covariance (well-conditioned).")
+    except Exception as e:
+        # If LedoitWolf itself fails (e.g. too few data points), fall back to sample covariance
+        logger.warning(f"Technical LP: Ledoit-Wolf shrinkage failed ({e}), using raw sample covariance.")
+        cov_matrix = returns.cov() * 252.0
+    
     try:
         # Standardize and clip extreme indicator scores for numerical stability
         S_std = (S - S.mean()) / (S.std() or 1.0)  # Standardize with fallback for zero std
@@ -3037,6 +3060,9 @@ def run_technical_only_LP(
         # Center returns with respect to their means
         mu_vec = returns.mean(axis=0).values
         R_centered = returns.values - mu_vec[np.newaxis, :]
+        
+        # Prepare the covariance matrix for quadratic objective
+        Σ_mat = cov_matrix.values
         
         # Track optimization attempts for logging
         attempts = []
@@ -3065,8 +3091,12 @@ def run_technical_only_LP(
             # Full constraint set
             constraints = basic_constraints + mad_constraints
             
-            # Objective function
-            obj = cp.Maximize(S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
+            # Objective function: maximize score - λ·MAD - γ·risk
+            # Set up the objective: maximize (scores • w) - λ·MAD - 0.5·γ·(wᵀ Σ w)
+            gamma = 0.5  # Weight on portfolio variance term
+            obj = cp.Maximize(
+                S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon) - 0.5 * gamma * cp.quad_form(w, Σ_mat)
+            )
             
             # Define the problem
             prob = cp.Problem(obj, constraints)
@@ -3146,7 +3176,11 @@ def run_technical_only_LP(
                 ]
                 
                 constraints = basic_constraints + mad_constraints
-                obj = cp.Maximize(S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
+                # Same quadratic objective as primary optimization
+                gamma = 0.5  # Weight on portfolio variance term
+                obj = cp.Maximize(
+                    S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon) - 0.5 * gamma * cp.quad_form(w, Σ_mat)
+                )
                 prob = cp.Problem(obj, constraints)
                 
                 # Solve with alternative solver
@@ -3188,7 +3222,11 @@ def run_technical_only_LP(
                 w <= w_max
             ] + mad_constraints
             
-            obj = cp.Maximize(S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon))
+            # Same quadratic objective with relaxed constraints
+            gamma = 0.5  # Weight on portfolio variance term
+            obj = cp.Maximize(
+                S_clipped.values @ w - lam * (1.0 / R_centered.shape[0]) * cp.sum(epsilon) - 0.5 * gamma * cp.quad_form(w, Σ_mat)
+            )
             prob = cp.Problem(obj, relaxed_constraints)
             
             # Try with CLARABEL first, then SCS as fallback
@@ -3232,8 +3270,9 @@ def run_technical_only_LP(
                 w >= w_min
             ]
             
-            # Simplified objective (no epsilon variables)
-            obj = cp.Maximize(S_clipped.values @ w)
+            # Simplified objective with quadratic risk term
+            gamma = 0.5  # Weight on portfolio variance term
+            obj = cp.Maximize(S_clipped.values @ w - 0.5 * gamma * cp.quad_form(w, Σ_mat))
             prob = cp.Problem(obj, minimal_constraints)
             
             prob.solve(solver=cp.CLARABEL, verbose=False)
