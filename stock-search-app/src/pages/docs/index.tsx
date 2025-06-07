@@ -243,36 +243,31 @@ const docsIndexPage: React.FC = () => {
       title: 'Welch Beta',
       description: 'A robust alternative to traditional beta that uses winsorization to reduce the impact of extreme returns.',
       path: '/docs/welch-beta',
-      available: false,
-      comingSoon: true
+      available: true
     },
     {
       title: 'Semi Beta',
       description: 'A downside beta that measures portfolio sensitivity to the benchmark only during down markets.',
       path: '/docs/semi-beta',
-      available: false,
-      comingSoon: true
+      available: true
     },
     {
       title: 'Coskewness',
       description: 'Measures the relationship between portfolio returns and squared market returns, indicating asymmetrical risk.',
       path: '/docs/coskewness',
-      available: false,
-      comingSoon: true
+      available: true
     },
     {
       title: 'Cokurtosis',
       description: 'Measures the relationship between portfolio returns and cubed market returns, indicating tail dependency.',
       path: '/docs/cokurtosis',
-      available: false,
-      comingSoon: true
+      available: true
     },
     {
       title: 'GARCH Beta',
       description: 'A time-varying measure of portfolio beta that accounts for volatility clustering using GARCH models.',
       path: '/docs/garch-beta',
-      available: false,
-      comingSoon: true
+      available: true
     }
   ];
 
