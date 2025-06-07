@@ -1234,6 +1234,26 @@ const HomePage: React.FC = () => {
           getOptionLabel={(o) => o.label}
           onChange={handleAlgorithmChange}
           value={selectedAlgorithms}
+          renderOption={(props, option) => (
+            <li {...props}>
+              {option.value === 'TECHNICAL' ? (
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  Technical Indicator Optimization
+                  <span style={{ 
+                    backgroundColor: '#4caf50', 
+                    color: 'white', 
+                    padding: '2px 6px', 
+                    borderRadius: '4px', 
+                    fontSize: '0.7rem', 
+                    marginLeft: '8px',
+                    fontWeight: 'bold'
+                  }}>
+                    NEW
+                  </span>
+                </div>
+              ) : option.label}
+            </li>
+          )}
           renderInput={(params) => (
             <TextField {...params} variant="outlined" label="Choose Algorithms" placeholder="Select one or more" />
           )}
