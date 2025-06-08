@@ -13,8 +13,9 @@ RUN apt-get update && apt-get install -y wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Install TA-Lib Python package first (needs the C library)
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir TA-Lib>=0.6.3
+RUN pip install --upgrade pip 
+# && \
+#     pip install --no-cache-dir TA-Lib>=0.6.3
 
 # Install other Python dependencies
 COPY requirements.txt .
