@@ -228,18 +228,27 @@ def coskewness(r_i: pd.Series, r_m: pd.Series) -> float:
 
 def cokurtosis(r_i: pd.Series, r_m: pd.Series) -> float:
     """
-    Calculate cokurtosis (4th cross-moment).
+    Calculates the cokurtosis between an asset and the market.
+    CoKurt = E[(r_i - μ_i)·(r_m - μ_m)³] / (σ_i·σ_m³)
     
     Parameters:
-        r_i (pd.Series): Portfolio excess returns.
-        r_m (pd.Series): Benchmark excess returns.
+        r_i (pd.Series): Asset returns
+        r_m (pd.Series): Market returns
         
     Returns:
-        float: Cokurtosis or NaN if standard deviation is zero.
+        float: Cokurtosis value
     """
-    σm = r_m.std(ddof=1)  # Use sample std (ddof=1) for consistency with pandas' kurt()
-    if σm < 1e-9: return np.nan
-    return float(((r_i - r_i.mean()) * (r_m - r_m.mean())**3).mean() / σm**4)
+    if len(r_i) <= 3 or r_i.var() <= 1e-12 or r_m.var() <= 1e-12:
+        return np.nan
+    
+    # Standardize variables
+    r_i_std = (r_i - r_i.mean()) / r_i.std()
+    r_m_std = (r_m - r_m.mean()) / r_m.std()
+    
+    # Calculate cokurtosis
+    cokurt = np.mean(r_i_std * r_m_std**3)
+    
+    return cokurt
 
 def garch_beta(r_i: pd.Series, r_m: pd.Series) -> float:
     """
@@ -412,6 +421,8 @@ def finalize_portfolio(
         semi_beta=custom.get("semi_beta", 0.0),
         coskewness=custom.get("coskewness", 0.0),
         cokurtosis=custom.get("cokurtosis", 0.0),
+        vasicek_beta=custom.get("vasicek_beta", 0.0),
+        james_stein_beta=custom.get("james_stein_beta", 0.0),
         # garch_beta=custom.get("garch_beta"),  # Commented out temporarily
         omega_ratio=custom.get("omega_ratio", 0.0) or 0.0,
         calmar_ratio=custom.get("calmar_ratio", 0.0) or 0.0,
@@ -2771,6 +2782,39 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
         adv_metrics["coskewness"] = coskewness(port_excess, bench_excess)
         adv_metrics["cokurtosis"] = cokurtosis(port_excess, bench_excess)
         
+        # Calculate Vasicek and James-Stein betas
+        try:
+            # Create a simplified dataset with both portfolio and benchmark
+            asset_returns = pd.DataFrame({
+                "portfolio": port_excess,
+                "benchmark": bench_excess
+            }).dropna()
+            
+            if len(asset_returns) > 10:  # Need sufficient data points
+                # Create synthetic third asset for better shrinkage (weighted mix)
+                asset_returns["mixed"] = 0.5 * asset_returns["portfolio"] + 0.5 * asset_returns["benchmark"]
+                
+                # Equal weights across assets
+                weight_series = pd.Series(
+                    [1.0 / len(asset_returns.columns)] * len(asset_returns.columns), 
+                    index=asset_returns.columns
+                )
+                
+                # Compute asset-level betas
+                raw_betas, var_betas = compute_asset_betas(asset_returns, bench_excess)
+                
+                # Calculate shrunk portfolio betas
+                adv_metrics["vasicek_beta"] = vasicek_portfolio_beta(raw_betas, var_betas, weight_series)
+                adv_metrics["james_stein_beta"] = james_stein_portfolio_beta(raw_betas, var_betas, weight_series)
+            else:
+                # Not enough data points for meaningful shrinkage
+                adv_metrics["vasicek_beta"] = portfolio_beta  # Use regular beta as fallback
+                adv_metrics["james_stein_beta"] = portfolio_beta  # Use regular beta as fallback
+        except Exception as e:
+            logger.warning(f"Shrinkage beta calculation failed: {str(e)}")
+            adv_metrics["vasicek_beta"] = portfolio_beta  # Use regular beta as fallback
+            adv_metrics["james_stein_beta"] = portfolio_beta  # Use regular beta as fallback
+        
         # GARCH beta is more computationally intensive, so we'll add error handling
         # Commenting out GARCH beta calculation as it's time-intensive - will be implemented later
         """
@@ -2789,6 +2833,8 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
             "semi_beta": np.nan,
             "coskewness": np.nan,
             "cokurtosis": np.nan,
+            "vasicek_beta": np.nan,
+            "james_stein_beta": np.nan,
             "garch_beta": np.nan
         }
     
@@ -2924,6 +2970,8 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
         "semi_beta": adv_metrics["semi_beta"],
         "coskewness": adv_metrics["coskewness"],
         "cokurtosis": adv_metrics["cokurtosis"],
+        "vasicek_beta": adv_metrics["vasicek_beta"],
+        "james_stein_beta": adv_metrics["james_stein_beta"],
         "garch_beta": adv_metrics["garch_beta"],
         # Other metrics
         "omega_ratio": float(omega_ratio),
@@ -3784,3 +3832,99 @@ def sanitize_json_values(obj):
                 "failed_methods": failed_methods,
                 "message": "Some optimization methods failed to complete"
             }
+
+def compute_asset_betas(returns: pd.DataFrame, market_returns: pd.Series) -> Tuple[Dict[str, float], Dict[str, float]]:
+    """
+    Regress each column in `returns` on `market_returns` to get raw betas and their variance.
+    Returns two dicts: raw_betas[ticker] and var_beta[ticker] = (SE_beta)^2.
+    
+    Parameters:
+        returns (pd.DataFrame): DataFrame of asset returns
+        market_returns (pd.Series): Series of market returns
+        
+    Returns:
+        Tuple[Dict[str, float], Dict[str, float]]: (raw_betas, var_betas)
+    """
+    raw_betas = {}
+    var_betas = {}
+    # align
+    aligned = returns.join(market_returns.rename("mkt"), how="inner").dropna()
+    X = sm.add_constant(aligned["mkt"])
+    for ticker in returns.columns:
+        y = aligned[ticker]
+        model = sm.OLS(y, X).fit()
+        raw_betas[ticker] = model.params["mkt"]
+        var_betas[ticker] = model.bse["mkt"] ** 2
+    return raw_betas, var_betas
+
+def vasicek_portfolio_beta(raw_betas: Dict[str, float],
+                           var_betas: Dict[str, float],
+                           weights: pd.Series) -> float:
+    """
+    Bayesian shrinkage of raw betas toward their cross-sectional mean.
+    β*_j = (τ2/(τ2 + σ2_j))·β_j + (σ2_j/(τ2 + σ2_j))·μ_prior
+    where τ2 = Var(raw_betas), μ_prior = mean(raw_betas).
+    Aggregate with portfolio weights.
+    
+    Parameters:
+        raw_betas (Dict[str, float]): Dictionary of raw asset betas
+        var_betas (Dict[str, float]): Dictionary of beta variances
+        weights (pd.Series): Portfolio weights
+        
+    Returns:
+        float: Vasicek portfolio beta
+    """
+    betas = np.array(list(raw_betas.values()))
+    prior_mean = float(np.mean(betas))
+    prior_var = float(np.var(betas, ddof=1) if len(betas) > 1 else 0.0)
+    
+    shrunk = {}
+    for j, β in raw_betas.items():
+        σ2 = var_betas[j]
+        # avoid division by zero
+        if prior_var + σ2 < 1e-9:
+            shrunk[j] = β
+        else:
+            w = prior_var / (prior_var + σ2)
+            shrunk[j] = w * β + (1 - w) * prior_mean
+    
+    # weighted sum
+    return float(sum(weights[j] * shrunk_j for j, shrunk_j in shrunk.items() if j in weights))
+
+def james_stein_portfolio_beta(raw_betas: Dict[str, float],
+                               var_betas: Dict[str, float],
+                               weights: pd.Series) -> float:
+    """
+    James–Stein shrinkage across the vector of raw_betas.
+    μ = mean(raw_betas), σ2_bar = mean(var_betas)
+    S = Σ (β_j - μ)^2, p = number of assets.
+    shrink = max(0, 1 - ((p-2)*σ2_bar)/S)
+    β^JS_j = μ + shrink·(β_j - μ)
+    Aggregate by weights.
+    
+    Parameters:
+        raw_betas (Dict[str, float]): Dictionary of raw asset betas
+        var_betas (Dict[str, float]): Dictionary of beta variances
+        weights (pd.Series): Portfolio weights
+        
+    Returns:
+        float: James-Stein portfolio beta
+    """
+    betas = np.array(list(raw_betas.values()))
+    p = len(betas)
+    μ = float(np.mean(betas))
+    σ2_bar = float(np.mean(list(var_betas.values())))
+    # sum of squared deviations
+    S = float(np.sum((betas - μ)**2))
+    # classic JS factor
+    if S < 1e-9 or p <= 2:
+        shrink = 0.0
+    else:
+        shrink = max(0.0, 1 - ((p - 2) * σ2_bar) / S)
+    
+    # shrink each
+    shrunk = {j: μ + shrink * (β - μ)
+              for j, β in raw_betas.items()}
+    
+    # weighted sum
+    return float(sum(weights[j] * shrunk_j for j, shrunk_j in shrunk.items() if j in weights))

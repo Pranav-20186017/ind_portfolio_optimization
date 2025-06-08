@@ -116,6 +116,8 @@ class PortfolioPerformance(BaseModel):
     semi_beta: Optional[float] = None
     coskewness: Optional[float] = None
     cokurtosis: Optional[float] = None
+    vasicek_beta: Optional[float] = None
+    james_stein_beta: Optional[float] = None
     # garch_beta: Optional[float] = None  # Commented out temporarily - computationally intensive
     # Other metrics
     omega_ratio: float

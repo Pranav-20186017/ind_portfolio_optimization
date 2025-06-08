@@ -1913,6 +1913,28 @@ const HomePage: React.FC = () => {
                                 </TableRow>
                                 <TableRow>
                                   <TableCell>
+                                    Vasicek Beta
+                                    <Tooltip title="Bayesian shrinkage estimator that adjusts raw beta toward the cross-sectional mean based on estimation variance. Produces more reliable beta estimates by reducing estimation error.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.vasicek_beta !== undefined && !isNaN(methodData.performance.vasicek_beta) ? methodData.performance.vasicek_beta.toFixed(3) : 'N/A'}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    James-Stein Beta
+                                    <Tooltip title="Shrinkage estimator that pulls extreme betas toward the mean proportional to their distance from the average. Reduces overall estimation error by applying greater shrinkage to more extreme values.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    {methodData.performance.james_stein_beta !== undefined && !isNaN(methodData.performance.james_stein_beta) ? methodData.performance.james_stein_beta.toFixed(3) : 'N/A'}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
                                     Blume-Adjusted Beta
                                     <Tooltip title="Beta adjusted using Blume's technique which addresses the tendency of beta to revert to 1.0 over time. Calculated as: 0.67 × Beta + 0.33 × 1.0">
                                       <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />

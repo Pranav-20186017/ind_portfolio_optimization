@@ -52,6 +52,8 @@ export interface PortfolioPerformance {
     // Advanced beta and cross-moment metrics
     welch_beta?: number;
     semi_beta?: number;
+    vasicek_beta?: number;
+    james_stein_beta?: number;
     coskewness?: number;
     cokurtosis?: number;
     // garch_beta?: number; // Commented out temporarily - computationally intensive
