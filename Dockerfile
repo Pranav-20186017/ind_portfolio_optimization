@@ -16,18 +16,22 @@ RUN apt-get update \
  && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
 
-# 2) Upgrade pip and install all your requirements (includes numpy==1.26.4)
+# 2) Upgrade pip & install your pinned dependencies (including numpy==1.26.4)
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir -r requirements.txt
 
-# 3) Now build the TA-Lib Python wrapper against that numpy
+# 3) *Patch* the CFLAGS so TA-Lib’s Cython code sees NPY_DEFAULT & NPY_C_CONTIGUOUS
+ENV CFLAGS="-DNPY_DEFAULT=NPY_ARRAY_DEFAULT -DNPY_C_CONTIGUOUS=PyBUF_C_CONTIGUOUS"
+
+# 4) Now build/install the Python wrapper for TA-Lib
 RUN pip install --no-cache-dir TA-Lib
 
-# 4) Create needed directories
-RUN mkdir -p /app/mosek /app/outputs
+# (Optional) clear CFLAGS if you want to be tidy
+ENV CFLAGS=""
 
-# 5) Copy your application code
+# 5) Create directories & copy your app
+RUN mkdir -p /app/mosek /app/outputs
 COPY data.py srv.py settings.py test.py main.py signals.py ./
 
 # 6) Entrypoint for MOSEK license handling
@@ -41,7 +45,7 @@ RUN printf '%s\n' \
   > /app/entrypoint.sh \
  && chmod +x /app/entrypoint.sh
 
-# 7) Expose and set runtime
+# 7) Expose & runtime
 EXPOSE 80
 ARG ENVIRONMENT=production
 ENV ENVIRONMENT=${ENVIRONMENT} \
