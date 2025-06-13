@@ -1311,16 +1311,31 @@ def generate_covariance_heatmap(
     
     # Create the heatmap with a more modern palette ("rocket") and additional styling.
     plt.figure()
+    
+    # Calculate vmin and vmax for better color scaling
+    vmin = cov_matrix.min().min()
+    vmax = cov_matrix.max().max()
+    
+    # If all values are very close to zero, adjust the scale
+    if abs(vmax - vmin) < 1e-10:
+        vmin = -1e-6
+        vmax = 1e-6
+    
     ax = sns.heatmap(
         cov_matrix,
         annot=show_tickers,
-        fmt=".2f",
-        cmap="rocket",       # using the "rocket" palette for a robust look
+        fmt=".6f",  # Show more decimal places for small values
+        cmap="rocket",
         square=True,
         linewidths=0.5,
-        cbar_kws={'shrink': 0.75}
+        cbar_kws={'shrink': 0.75, 'label': 'Covariance'},
+        vmin=vmin,
+        vmax=vmax,
+        center=0  # Center the colormap at 0
     )
     
+    # Add title
+    plt.title("Variance-Covariance Matrix")
     
     # Optionally remove tick labels if not desired.
     if not show_tickers:
