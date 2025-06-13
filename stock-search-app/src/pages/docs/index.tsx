@@ -9,7 +9,8 @@ import {
   CardContent,
   CardActions,
   Button,
-  Divider
+  Divider,
+  Chip
 } from '@mui/material';
 import Link from 'next/link';
 import Head from 'next/head';
@@ -82,6 +83,13 @@ const docsIndexPage: React.FC = () => {
       description: 'A portfolio optimization method that minimizes the maximum expected drawdown with a certain confidence level.',
       path: '/docs/min-cdar',
       available: true
+    },
+    {
+      title: 'Technical Indicator Optimization',
+      description: 'A signal-based optimization approach using cross-sectional z-scores of technical indicators combined through linear programming.',
+      path: '/docs/technical',
+      available: true,
+      isNew: true
     }
   ];
 
@@ -388,9 +396,22 @@ const docsIndexPage: React.FC = () => {
                 }}
               >
                 <CardContent sx={{ flexGrow: 1 }}>
-                  <Typography variant="h5" component="h3" gutterBottom>
-                    {topic.title}
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <Typography variant="h5" component="h3">
+                      {topic.title}
+                    </Typography>
+                    {topic.isNew && (
+                      <Chip 
+                        label="NEW" 
+                        color="success" 
+                        size="small"
+                        sx={{ 
+                          fontSize: '0.75rem',
+                          fontWeight: 'bold'
+                        }} 
+                      />
+                    )}
+                  </Box>
                   <Typography variant="body1" color="text.secondary">
                     {topic.description}
                   </Typography>
