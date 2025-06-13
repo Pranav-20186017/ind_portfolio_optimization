@@ -1271,19 +1271,16 @@ def compute_yearly_returns_stocks(daily_returns: pd.DataFrame) -> Dict[str, Dict
 _original_compute_yearly_returns_stocks = compute_yearly_returns_stocks
 
 def generate_covariance_heatmap(
-    cov_matrix: Union[pd.DataFrame, np.ndarray],
+    returns: pd.DataFrame,
     method: str = "covariance",
     show_tickers: bool = True
 ) -> str:
     """
-    Generate a variance–covariance matrix heatmap using seaborn and updated matplotlib settings,
-    save the plot in the output directory, and return the base64‑encoded image string.
-    
-    The covariance matrix shows the variances on the diagonal and the covariances off-diagonal,
-    which provides insight into the absolute risk (variance) of each asset and their joint movements.
+    Generate a variance–covariance matrix heatmap using seaborn and a classic theme.
+    Always uses the annualized sample covariance matrix for visualization.
     
     Parameters:
-        cov_matrix (pd.DataFrame or np.ndarray): The covariance matrix to plot.
+        returns (pd.DataFrame): DataFrame of asset returns (daily).
         method (str, optional): A label for naming the file. Defaults to "covariance".
         show_tickers (bool, optional): Whether to display the numerical values in the heatmap.
                                        Defaults to True.
@@ -1291,65 +1288,29 @@ def generate_covariance_heatmap(
     Returns:
         str: Base64‑encoded string of the saved heatmap image.
     """
-    # Configure matplotlib backend
-    plt.switch_backend('Agg')
+    # Compute annualized sample covariance matrix
+    cov_matrix = returns.cov() * 252
     
-    # Ensure cov_matrix is a DataFrame.
-    if not isinstance(cov_matrix, pd.DataFrame):
-        cov_matrix = pd.DataFrame(cov_matrix)
-    
-    # Update seaborn theme and matplotlib rcParams for a modern look.
-    sns.set_theme(style="whitegrid", palette="deep")
-    plt.rcParams.update({
-        'figure.figsize': (10, 8),
-        'axes.titlesize': 16,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'savefig.dpi': 300
-    })
-    
-    # Create the heatmap with a more modern palette ("rocket") and additional styling.
-    plt.figure()
-    
-    # Calculate vmin and vmax for better color scaling
-    vmin = cov_matrix.min().min()
-    vmax = cov_matrix.max().max()
-    
-    # If all values are very close to zero, adjust the scale
-    if abs(vmax - vmin) < 1e-10:
-        vmin = -1e-6
-        vmax = 1e-6
-    
+    # Use the old familiar theme and palette
+    sns.set_theme(style="dark")
+    plt.figure(figsize=(10, 8))
     ax = sns.heatmap(
         cov_matrix,
         annot=show_tickers,
-        fmt=".6f",  # Show more decimal places for small values
-        cmap="rocket",
+        fmt=".2f",
+        cmap="RdBu_r",
         square=True,
         linewidths=0.5,
         cbar_kws={'shrink': 0.75, 'label': 'Covariance'},
-        vmin=vmin,
-        vmax=vmax,
-        center=0  # Center the colormap at 0
+        center=0
     )
-    
-    # Add title
     plt.title("Variance-Covariance Matrix")
-    
-    # Optionally remove tick labels if not desired.
     if not show_tickers:
         ax.set_xticklabels([])
         ax.set_yticklabels([])
-    
-    # Construct the file path using your global output_dir (assumed to be defined).
     filepath = os.path.join(output_dir, f"{method.lower()}_cov_heatmap.png")
-    
-    # Save the figure.
-    plt.savefig(filepath, bbox_inches="tight")
+    plt.savefig(filepath, bbox_inches="tight", dpi=300)
     plt.close()
-    
-    # Return the base64-encoded image string using your existing utility function.
     return file_to_base64(filepath)
 
 # Preserve unpatched reference for tests
@@ -2346,7 +2307,7 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
             # Use the new Ledoit-Wolf implementation
             cov = await run_in_threadpool(lambda: _ledoit_wolf_cov(returns))
             
-            cov_heatmap_b64 = await run_in_threadpool(generate_covariance_heatmap, cov)
+            cov_heatmap_b64 = await run_in_threadpool(generate_covariance_heatmap, returns)
             stock_yearly_returns = await run_in_threadpool(compute_yearly_returns_stocks, returns)
             
             # If technical indicators are also selected (mixed optimization), compute S_scores
