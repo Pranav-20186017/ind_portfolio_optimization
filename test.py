@@ -14,6 +14,13 @@ import inspect
 import asyncio
 import random
 
+# Fix OpenMP library conflict before importing any scientific libraries
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
 print("Starting test execution...")
 
 # Set a testing flag that srv.py can check
@@ -56,6 +63,8 @@ from srv import (
 
 # Suppress warnings for cleaner test output
 warnings.filterwarnings("ignore")
+# Specifically suppress the threadpoolctl OpenMP warning
+warnings.filterwarnings("ignore", message=".*Found Intel OpenMP.*")
 
 class TestPortfolioOptimization(unittest.TestCase):
     @classmethod

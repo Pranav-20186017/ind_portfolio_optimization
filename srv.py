@@ -11,10 +11,24 @@ from typing import List, Dict, Optional, Tuple, Union, Any
 import re
 import tempfile
 
+# Fix OpenMP library conflict (Intel vs LLVM) - must be set before importing scientific libraries
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
+# Suppress the threadpoolctl OpenMP warning
+import warnings
+warnings.filterwarnings("ignore", message=".*Found Intel OpenMP.*")
+
 # Third-party imports
 import aiofiles
 import httpx
 import logfire
+# Set the backend to Agg before importing pyplot to avoid threading issues
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -1271,27 +1285,34 @@ def compute_yearly_returns_stocks(daily_returns: pd.DataFrame) -> Dict[str, Dict
 _original_compute_yearly_returns_stocks = compute_yearly_returns_stocks
 
 def generate_covariance_heatmap(
-    returns: pd.DataFrame,
+    data: Union[pd.DataFrame, np.ndarray],
     method: str = "covariance",
-    show_tickers: bool = True
+    show_tickers: bool = True,
+    is_cov_matrix: Optional[bool] = None
 ) -> str:
     """
     Generate a variance–covariance matrix heatmap using seaborn and a classic theme.
-    Always uses the annualized sample covariance matrix for visualization.
-    
-    Parameters:
-        returns (pd.DataFrame): DataFrame of asset returns (daily).
-        method (str, optional): A label for naming the file. Defaults to "covariance".
-        show_tickers (bool, optional): Whether to display the numerical values in the heatmap.
-                                       Defaults to True.
-    
-    Returns:
-        str: Base64‑encoded string of the saved heatmap image.
+    If is_cov_matrix is None, auto-detect: numpy array or square DataFrame = cov matrix.
+    If is_cov_matrix is False, treat data as returns and compute annualized cov.
+    If is_cov_matrix is True, treat data as the covariance matrix directly.
     """
-    # Compute annualized sample covariance matrix
-    cov_matrix = returns.cov() * 252
+    # Auto-detect if not specified
+    if is_cov_matrix is None:
+        if isinstance(data, np.ndarray):
+            is_cov_matrix = True
+        elif isinstance(data, pd.DataFrame):
+            if data.shape[0] == data.shape[1]:
+                is_cov_matrix = True
+            else:
+                is_cov_matrix = False
+        else:
+            raise ValueError("Input must be a DataFrame or numpy array")
+
+    if is_cov_matrix:
+        cov_matrix = pd.DataFrame(data)
+    else:
+        cov_matrix = data.cov() * 252
     
-    # Use the old familiar theme and palette
     sns.set_theme(style="dark")
     plt.figure(figsize=(10, 8))
     ax = sns.heatmap(
@@ -1318,8 +1339,7 @@ _original_generate_covariance_heatmap = generate_covariance_heatmap
 
 def generate_plots(port_returns: pd.Series, method: str, benchmark_df: pd.Series = None) -> Tuple[str, str]:
     """Generate distribution and drawdown plots, return base64 encoded images"""
-    # Configure matplotlib backend
-    plt.switch_backend('Agg')
+    # Backend is already configured at module level with matplotlib.use('Agg')
     
     # Check if this is a technical optimization - modify the title accordingly
     is_technical = method.upper() == "TECHNICAL"
