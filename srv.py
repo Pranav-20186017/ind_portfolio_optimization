@@ -1313,13 +1313,13 @@ def generate_covariance_heatmap(
     else:
         cov_matrix = data.cov() * 252
     
-    sns.set_theme(style="dark")
+    # Use the original seaborn style without dark theme
     plt.figure(figsize=(10, 8))
     ax = sns.heatmap(
         cov_matrix,
         annot=show_tickers,
         fmt=".2f",
-        cmap="RdBu_r",
+        cmap="coolwarm",
         square=True,
         linewidths=0.5,
         cbar_kws={'shrink': 0.75, 'label': 'Covariance'},
