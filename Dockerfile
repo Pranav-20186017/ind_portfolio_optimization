@@ -25,7 +25,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 ENV CFLAGS="-DNPY_DEFAULT=NPY_ARRAY_DEFAULT -DNPY_C_CONTIGUOUS=PyBUF_C_CONTIGUOUS"
 
 # 4) Now build/install the Python wrapper for TA-Lib
-RUN pip install --no-cache-dir TA-Lib
+RUN pip install --no-cache-dir TA-Lib==0.6.4
 
 # (Optional) clear CFLAGS if you want to be tidy
 ENV CFLAGS=""

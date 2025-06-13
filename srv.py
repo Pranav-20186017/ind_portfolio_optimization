@@ -2298,7 +2298,26 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                 Estimate covariance via Ledoit–Wolf shrinkage (scikit-learn).
                 Returns a pandas DataFrame (n_assets × n_assets).
                 """
-                # Fit Ledoit-Wolf on raw returns (rows = dates, cols = tickers)
+                # Ensure we're working with returns data
+                if not isinstance(returns_df, pd.DataFrame):
+                    raise ValueError("Input must be a pandas DataFrame")
+                
+                # Remove any rows with NaN values
+                returns_df = returns_df.dropna()
+                
+                # Check if we have enough data points
+                if len(returns_df) < 2:
+                    raise ValueError("Not enough data points for covariance estimation")
+                
+                # Check for constant columns (zero variance)
+                zero_var_cols = returns_df.columns[returns_df.var() == 0]
+                if len(zero_var_cols) > 0:
+                    logger.warning(f"Found {len(zero_var_cols)} assets with zero variance: {zero_var_cols.tolist()}")
+                    # Add small noise to zero variance columns to prevent numerical issues
+                    for col in zero_var_cols:
+                        returns_df[col] = returns_df[col] + np.random.normal(0, 1e-6, size=len(returns_df))
+                
+                # Fit Ledoit-Wolf on preprocessed returns (rows = dates, cols = tickers)
                 lw = LedoitWolf().fit(returns_df.values)
                 Σ_lw = lw.covariance_  # numpy.ndarray shape (n_assets, n_assets)
                 
