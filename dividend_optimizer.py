@@ -389,6 +389,19 @@ class DividendOptimizationService:
                     thresholds=None,  # Use dynamic thresholds
                     seed=seed
                 )
+                
+                # Safety net at service level
+                deploy = 1.0 - (result.residual_cash / budget)
+                if deploy < 0.95 and result.allocation_method.startswith("Greedy"):
+                    logger.info(f"Under-deployed ({deploy:.2%}). Rerunning with MILP.")
+                    result = self.optimizer.solve_income_milp(
+                        target_weights=target_weights,
+                        budget=budget,
+                        individual_caps=individual_caps,
+                        sector_caps=sector_caps,
+                        sector_mapping=sector_mapping,
+                        min_names=min_names,
+                    )
             elif method == "GREEDY":
                 result = self.optimizer.allocate_shares_greedy(
                     target_weights=target_weights,

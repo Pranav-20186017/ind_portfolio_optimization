@@ -700,6 +700,68 @@ class ForwardYieldOptimizer:
             if remaining_cash / budget <= residual_threshold:
                 break
         
+        # === Cash-sweep pass (best bang-per-buck), optional light risk guard ===
+        # Get dynamic thresholds to determine when cash-sweep should stop
+        dynamic_thresh = self.dynamic_thresholds(budget)
+        sweep_stop = dynamic_thresh.get("residual_threshold", 0.002)
+        
+        invested = np.sum(shares * self.prices)
+        remaining_cash = budget - invested
+        residual_frac = remaining_cash / budget
+        
+        if residual_frac > sweep_stop and np.min(self.prices) <= remaining_cash:
+            print(f"Starting cash-sweep pass (residual: {residual_frac:.2%} > {sweep_stop:.2%})")
+            
+            # rank by forward_dividend / price (dividend per rupee)
+            bang_for_buck = self.forward_dividends / np.maximum(self.prices, 1e-9)
+            order = np.argsort(-bang_for_buck)  # descending
+            
+            # optional risk cap: only enforce if you passed max_risk_variance earlier
+            def ok_after_buy(idx):
+                # prevent breaking per-name caps if you use them elsewhere
+                # (simple per-name cap: executed weight ≤ individual_caps[idx])
+                if individual_caps is not None:
+                    new_val = (shares[idx] + 1) * self.prices[idx] / budget
+                    if new_val > individual_caps[idx] + 1e-12:
+                        return False
+                
+                # Check sector cap feasibility if applicable
+                if sector_caps and sector_mapping:
+                    symbol = self.symbols[idx]
+                    sector = sector_mapping.get(symbol)
+                    if sector and sector in sector_caps:
+                        # Calculate current sector weight 
+                        sector_indices = [j for j, s in enumerate(self.symbols) 
+                                        if sector_mapping.get(s) == sector]
+                        current_sector_weight = np.sum([shares[j] * self.prices[j] 
+                                                      for j in sector_indices]) / budget
+                        new_sector_weight = current_sector_weight + (self.prices[idx] / budget)
+                        if new_sector_weight > sector_caps[sector] + 1e-12:
+                            return False
+                
+                # light risk guard: recompute vol only every few steps for speed, or skip entirely
+                return True
+            
+            # buy while we can afford the cheapest name
+            sweep_iterations = 0
+            max_sweep_iterations = 500  # Prevent infinite loops
+            
+            while (budget - invested) >= np.min(self.prices) and sweep_iterations < max_sweep_iterations:
+                bought = False
+                for idx in order:
+                    if self.prices[idx] <= (budget - invested) and ok_after_buy(idx):
+                        shares[idx] += 1
+                        invested += float(self.prices[idx])
+                        bought = True
+                        break
+                if not bought:
+                    break  # no feasible single-share buy remains
+                sweep_iterations += 1
+            
+            # Update remaining cash after sweep
+            remaining_cash = budget - invested
+            print(f"Cash-sweep completed: {sweep_iterations} purchases, residual: {remaining_cash/budget:.2%}")
+        
         # Calculate final portfolio metrics
         final_invested = np.sum(shares * self.prices)
         executed_weights = (shares * self.prices) / budget
@@ -795,14 +857,19 @@ class ForwardYieldOptimizer:
     
     def dynamic_thresholds(self, budget: float) -> Dict[str, float]:
         """
-        Budget-aware thresholds: stricter for small budgets to ensure discrete feasibility
+        Budget-aware thresholds for discrete allocation.
+        - N_min / g_max → AUTO's Greedy vs MILP decision
+        - min_deploy    → minimum fraction of budget that must be invested
+        - residual_threshold → when Greedy's loop can stop
         """
         if budget < 50_000:
-            return {"N_min": 10, "g_max": 0.05}  # Very small budgets need MILP sooner
+            return {"N_min": 10, "g_max": 0.005, "min_deploy": 0.985, "residual_threshold": 0.002}
         elif budget < 200_000:
-            return {"N_min": 15, "g_max": 0.08}  # Small budgets need more care
+            return {"N_min": 15, "g_max": 0.003, "min_deploy": 0.975, "residual_threshold": 0.002}
+        elif budget < 1_000_000:
+            return {"N_min": 20, "g_max": 0.002, "min_deploy": 0.95,  "residual_threshold": 0.002}
         else:
-            return {"N_min": 25, "g_max": 0.10}  # Large budgets can use greedy more often
+            return {"N_min": 25, "g_max": 0.0015, "min_deploy": 0.93, "residual_threshold": 0.001}
     
     def solve_income_milp(self,
                          target_weights: np.ndarray,
@@ -1045,7 +1112,7 @@ class ForwardYieldOptimizer:
             )
         else:
             print("\nUsing fast greedy allocation")
-            return self.allocate_shares_greedy(
+            greedy_res = self.allocate_shares_greedy(
                 target_weights=target_weights,
                 budget=budget,
                 individual_caps=individual_caps,
@@ -1054,6 +1121,27 @@ class ForwardYieldOptimizer:
                 min_names=min_names,
                 seed=seed
             )
+
+            # NEW: under-deployment safety net
+            thresholds = thresholds or self.dynamic_thresholds(budget)
+            deploy = 1.0 - (greedy_res.residual_cash / budget)
+            if deploy + 1e-9 < float(thresholds.get("min_deploy", 0.95)):
+                print(
+                    f"Under-deployment detected ({deploy:.2%} < "
+                    f"{thresholds.get('min_deploy', 0.95):.2%}). Escalating to MILP…"
+                )
+                return self.solve_income_milp(
+                    target_weights=target_weights,
+                    budget=budget,
+                    individual_caps=individual_caps,
+                    sector_caps=sector_caps,
+                    sector_mapping=sector_mapping,
+                    min_names=min_names,
+                    # invest essentially all the cash (a touch below min_deploy to leave rupee dust)
+                    min_invest_frac=max(0.99, thresholds.get("min_deploy", 0.95) - 0.005),
+                    verbose=False
+                )
+            return greedy_res
     
     # Duplicate method removed - using _post_round_risk_repair instead
     
