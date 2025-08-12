@@ -15,12 +15,19 @@ class ErrorCode(IntEnum):
     INVALID_TICKER = 40003
     INVALID_DATE_RANGE = 40004
     INVALID_OPTIMIZATION_METHOD = 40005
+    INVALID_BUDGET = 40006
+    BUDGET_TOO_SMALL = 40007
+    ALLOCATION_INFEASIBLE = 40008
+    MIN_NAMES_INFEASIBLE = 40009
     
     # Processing errors (500 range)
     OPTIMIZATION_FAILED = 50001
     DATA_FETCH_ERROR = 50002
     RISK_FREE_RATE_ERROR = 50003
     COVARIANCE_CALCULATION_ERROR = 50004
+    DIVIDEND_DATA_INSUFFICIENT = 50005
+    DIVIDEND_FETCH_ERROR = 50006
+    RISK_CONSTRAINT_FAILED = 50007
     UNEXPECTED_ERROR = 50099
 
 class APIError(Exception):
@@ -52,6 +59,11 @@ class OptimizationMethod(str, Enum):
     NCO = "NCO"    # Nested Clustered Optimization
     HERC2 = "HERC2"  # Another variant of HERC
     TECHNICAL = "TECHNICAL"  # Technical indicator-based optimization
+
+class DividendOptimizationMethod(str, Enum):
+    AUTO = "AUTO"          # Intelligent greedy/MILP selection
+    GREEDY = "GREEDY"      # Fast round-repair 
+    MILP = "MILP"          # Exact share-level optimization
 
 # New enum for CLA sub-methods
 class CLAOptimizationMethod(str, Enum):
@@ -169,4 +181,81 @@ class TickerRequest(BaseModel):
     methods: List[OptimizationMethod] = [OptimizationMethod.MVO]
     cla_method: Optional[CLAOptimizationMethod] = CLAOptimizationMethod.BOTH
     benchmark: BenchmarkName = BenchmarkName.nifty  # Default to Nifty
-    indicators: List[TechnicalIndicator] = [] 
+    indicators: List[TechnicalIndicator] = []
+
+########################################
+# Dividend Optimization Models
+########################################
+
+class DividendOptimizationRequest(BaseModel):
+    """Request model for dividend optimization endpoint"""
+    stocks: List[StockItem]
+    budget: float = 1000000  # Default ₹10L
+    max_risk_variance: float = 0.04  # 20% vol cap (σ²)
+    method: DividendOptimizationMethod = DividendOptimizationMethod.AUTO
+    individual_caps: Optional[Dict[str, float]] = None  # symbol -> cap
+    sector_caps: Optional[Dict[str, float]] = None      # sector -> cap  
+    sector_mapping: Optional[Dict[str, str]] = None     # symbol -> sector
+    min_names: Optional[int] = None
+    seed: Optional[int] = 42  # For reproducible results
+    
+    # Validation
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "stocks": [
+                    {"ticker": "ITC", "exchange": "NSE"},
+                    {"ticker": "HDFCBANK", "exchange": "NSE"}
+                ],
+                "budget": 1000000,
+                "max_risk_variance": 0.04,
+                "method": "AUTO",
+                "sector_caps": {"Banking": 0.35, "FMCG": 0.25},
+                "sector_mapping": {"ITC": "FMCG", "HDFCBANK": "Banking"}
+            }
+        }
+
+class DividendStockData(BaseModel):
+    """Individual stock dividend and price data"""
+    symbol: str
+    price: float
+    forward_dividend: float
+    forward_yield: float
+    dividend_source: str  # 'info', 'trailing', 'history', 'fallback'
+    confidence: Optional[str] = None  # 'very_low', 'low', 'medium', 'high'
+    cadence_info: Optional[Dict] = None  # Frequency, CV, regularity data
+
+class DividendAllocationResult(BaseModel):
+    """Individual stock allocation result"""
+    symbol: str
+    shares: int
+    price: float
+    value: float
+    weight: float
+    target_weight: float
+    forward_yield: float
+    annual_income: float
+
+class DividendOptimizationResponse(BaseModel):
+    """Response model for dividend optimization endpoint"""
+    # Portfolio metrics
+    total_budget: float
+    amount_invested: float
+    residual_cash: float
+    portfolio_yield: float
+    yield_on_invested: float
+    annual_income: float
+    post_round_volatility: float
+    l1_drift: float
+    allocation_method: str
+    
+    # Individual holdings
+    allocations: List[DividendAllocationResult]
+    
+    # Summary data
+    dividend_data: List[DividendStockData]
+    granularity_check: Dict
+    optimization_summary: Dict
+    
+    # Sector breakdown (if provided)
+    sector_allocations: Optional[Dict[str, float]] = None 

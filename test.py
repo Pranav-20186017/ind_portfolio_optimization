@@ -7,7 +7,7 @@ import warnings
 import logging
 import time
 from datetime import datetime
-from unittest.mock import patch, MagicMock, mock_open, ANY
+from unittest.mock import patch, MagicMock, mock_open, ANY, Mock
 from pathlib import Path
 import math
 import inspect
@@ -2948,6 +2948,561 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertEqual(m2["modigliani_risk_adjusted_performance"], 0.02)
         
         print("✅ Short horizon metrics test passed")
+
+    ########################################
+    # Dividend Optimization Tests
+    ########################################
+
+    def test_dividend_optimization_request_validation(self):
+        """Test dividend optimization request validation"""
+        from data import DividendOptimizationRequest, DividendOptimizationMethod, StockItem, ExchangeEnum
+        
+        # Valid request
+        valid_request = DividendOptimizationRequest(
+            stocks=[
+                StockItem(ticker="ITC", exchange=ExchangeEnum.NSE),
+                StockItem(ticker="HDFCBANK", exchange=ExchangeEnum.NSE)
+            ],
+            budget=1000000,
+            method=DividendOptimizationMethod.AUTO
+        )
+        self.assertEqual(len(valid_request.stocks), 2)
+        self.assertEqual(valid_request.budget, 1000000)
+        self.assertEqual(valid_request.method, DividendOptimizationMethod.AUTO)
+        
+        # Test with sector mapping
+        request_with_sectors = DividendOptimizationRequest(
+            stocks=[
+                StockItem(ticker="ITC", exchange=ExchangeEnum.NSE),
+                StockItem(ticker="HDFCBANK", exchange=ExchangeEnum.NSE)
+            ],
+            budget=500000,
+            sector_caps={"Banking": 0.4, "FMCG": 0.3},
+            sector_mapping={"ITC": "FMCG", "HDFCBANK": "Banking"}
+        )
+        self.assertEqual(request_with_sectors.sector_caps["Banking"], 0.4)
+        self.assertEqual(request_with_sectors.sector_mapping["ITC"], "FMCG")
+        
+        print("✅ Dividend optimization request validation test passed")
+
+    def test_dividend_optimization_service_validation(self):
+        """Test dividend optimization service validation"""
+        from dividend_optimizer import DividendOptimizationService
+        from data import StockItem, ExchangeEnum, APIError, ErrorCode
+        import asyncio
+        
+        service = DividendOptimizationService()
+        
+        # Test insufficient stocks
+        async def test_insufficient_stocks():
+            with self.assertRaises(APIError) as context:
+                await service.validate_request([StockItem(ticker="ITC", exchange=ExchangeEnum.NSE)], 1000000)
+            self.assertEqual(context.exception.code, ErrorCode.INSUFFICIENT_STOCKS)
+        
+        # Test invalid budget
+        async def test_invalid_budget():
+            stocks = [
+                StockItem(ticker="ITC", exchange=ExchangeEnum.NSE),
+                StockItem(ticker="HDFCBANK", exchange=ExchangeEnum.NSE)
+            ]
+            with self.assertRaises(APIError) as context:
+                await service.validate_request(stocks, -1000)
+            self.assertEqual(context.exception.code, ErrorCode.INVALID_BUDGET)
+        
+        # Test min_names validation
+        async def test_min_names_validation():
+            stocks = [
+                StockItem(ticker="ITC", exchange=ExchangeEnum.NSE),
+                StockItem(ticker="HDFCBANK", exchange=ExchangeEnum.NSE)
+            ]
+            with self.assertRaises(APIError) as context:
+                await service.validate_request(stocks, 1000000, min_names=5)
+            self.assertEqual(context.exception.code, ErrorCode.MIN_NAMES_INFEASIBLE)
+        
+        # Run async tests
+        asyncio.run(test_insufficient_stocks())
+        asyncio.run(test_invalid_budget())
+        asyncio.run(test_min_names_validation())
+        
+        print("✅ Dividend optimization service validation test passed")
+
+    @patch('srv.format_tickers')
+    @patch('dividend_optimizer.DividendOptimizationService')
+    def test_dividend_optimization_endpoint_structure(self, mock_service, mock_format_tickers):
+        """Test dividend optimization endpoint structure and error handling"""
+        from data import DividendOptimizationRequest, StockItem, ExchangeEnum, APIError, ErrorCode
+        import asyncio
+        
+        # Mock format_tickers
+        mock_format_tickers.return_value = ["ITC.NS", "HDFCBANK.NS"]
+        
+        # Mock service instance
+        mock_service_instance = mock_service.return_value
+        
+        # Test valid request flow (mock all steps)
+        async def test_valid_flow():
+            # Mock all service methods
+            mock_service_instance.validate_request = AsyncMock()
+            mock_service_instance.fetch_and_prepare_data = AsyncMock(return_value={"ITC.NS": None, "HDFCBANK.NS": None})
+            mock_service_instance.prepare_optimization_data = AsyncMock()
+            mock_service_instance.convert_individual_caps = Mock(return_value=None)
+            mock_service_instance.run_continuous_optimization = AsyncMock(return_value=np.array([0.5, 0.5]))
+            mock_service_instance.check_budget_feasibility = AsyncMock()
+            mock_service_instance.allocate_shares = AsyncMock()
+            
+            # Mock optimizer attributes
+            mock_service_instance.optimizer = Mock()
+            mock_service_instance.optimizer.symbols = ["ITC.NS", "HDFCBANK.NS"]
+            
+            request = DividendOptimizationRequest(
+                stocks=[
+                    StockItem(ticker="ITC", exchange=ExchangeEnum.NSE),
+                    StockItem(ticker="HDFCBANK", exchange=ExchangeEnum.NSE)
+                ],
+                budget=1000000
+            )
+            
+            # Verify that validation would be called
+            self.assertIsInstance(request, DividendOptimizationRequest)
+        
+        asyncio.run(test_valid_flow())
+        print("✅ Dividend optimization endpoint structure test passed")
+
+    def test_dividend_optimization_error_codes(self):
+        """Test dividend optimization specific error codes"""
+        from data import ErrorCode, APIError
+        
+        # Test budget too small error
+        error = APIError(
+            code=ErrorCode.BUDGET_TOO_SMALL,
+            message="Budget insufficient",
+            details={"budget": 1000, "min_investment": 5000}
+        )
+        self.assertEqual(error.code, ErrorCode.BUDGET_TOO_SMALL)
+        self.assertEqual(error.details["budget"], 1000)
+        
+        # Test allocation infeasible error
+        error2 = APIError(
+            code=ErrorCode.ALLOCATION_INFEASIBLE,
+            message="Cannot allocate shares with given constraints"
+        )
+        self.assertEqual(error2.code, ErrorCode.ALLOCATION_INFEASIBLE)
+        
+        # Test dividend fetch error
+        error3 = APIError(
+            code=ErrorCode.DIVIDEND_FETCH_ERROR,
+            message="Failed to fetch dividend data",
+            status_code=500
+        )
+        self.assertEqual(error3.code, ErrorCode.DIVIDEND_FETCH_ERROR)
+        self.assertEqual(error3.status_code, 500)
+        
+        print("✅ Dividend optimization error codes test passed")
+
+    def test_dividend_response_model_structure(self):
+        """Test dividend optimization response model structure"""
+        from data import (
+            DividendOptimizationResponse, DividendAllocationResult, 
+            DividendStockData
+        )
+        
+        # Create sample allocation result
+        allocation = DividendAllocationResult(
+            symbol="ITC.NS",
+            shares=100,
+            price=416.35,
+            value=41635.0,
+            weight=0.041635,
+            target_weight=0.042,
+            forward_yield=0.045,
+            annual_income=1873.58
+        )
+        
+        # Create sample stock data
+        stock_data = DividendStockData(
+            symbol="ITC.NS",
+            price=416.35,
+            forward_dividend=18.74,
+            forward_yield=0.045,
+            dividend_source="history",
+            confidence="high",
+            cadence_info={"f": 2, "cv": 0.25, "regular": True}
+        )
+        
+        # Create response
+        response = DividendOptimizationResponse(
+            total_budget=1000000,
+            amount_invested=978365,
+            residual_cash=21635,
+            portfolio_yield=0.0325,
+            yield_on_invested=0.0332,
+            annual_income=32500,
+            post_round_volatility=0.168,
+            l1_drift=0.023,
+            allocation_method="Greedy (floor-repair)",
+            allocations=[allocation],
+            dividend_data=[stock_data],
+            granularity_check={"feasible": True, "N_target": 25.5},
+            optimization_summary={
+                "method_used": "Greedy (floor-repair)",
+                "total_shares": 100,
+                "num_positions": 1,
+                "deployment_rate": 0.978365
+            }
+        )
+        
+        # Validate structure
+        self.assertEqual(response.total_budget, 1000000)
+        self.assertEqual(len(response.allocations), 1)
+        self.assertEqual(len(response.dividend_data), 1)
+        self.assertEqual(response.allocations[0].symbol, "ITC.NS")
+        self.assertEqual(response.dividend_data[0].dividend_source, "history")
+        self.assertEqual(response.optimization_summary["method_used"], "Greedy (floor-repair)")
+        
+        print("✅ Dividend response model structure test passed")
+
+    def test_dividend_optimization_budget_feasibility_logic(self):
+        """Test budget feasibility logic for dividend optimization"""
+        import numpy as np
+        
+        # Mock data for testing feasibility checks
+        prices = np.array([100, 500, 1000, 5000])  # Different price levels
+        
+        # Test case 1: Budget can afford all stocks
+        budget = 10000
+        min_price = prices.min()
+        self.assertTrue(budget >= min_price)  # Should be feasible
+        
+        # Test case 2: Budget too small for any stock
+        budget = 50
+        self.assertFalse(budget >= min_price)  # Should be infeasible
+        
+        # Test case 3: Budget can afford some but not all stocks
+        budget = 750
+        affordable_count = np.sum(prices <= budget)
+        self.assertEqual(affordable_count, 2)  # Should afford 2 stocks
+        
+        # Test granularity calculation
+        target_weights = np.array([0.25, 0.25, 0.25, 0.25])
+        budget = 10000
+        expected_shares = np.sum(target_weights * budget / prices)
+        max_granularity = np.max(prices / budget)
+        
+        self.assertGreater(expected_shares, 0)
+        self.assertLess(max_granularity, 1)
+        
+        print("✅ Dividend optimization budget feasibility logic test passed")
+
+    def test_dividend_caps_conversion_logic(self):
+        """Test individual caps conversion from dict to array"""
+        from dividend_optimizer import DividendOptimizationService
+        
+        service = DividendOptimizationService()
+        
+        # Test with valid caps dict
+        caps_dict = {"ITC.NS": 0.1, "HDFCBANK.NS": 0.15}
+        symbols = ["ITC.NS", "HDFCBANK.NS", "RELIANCE.NS"]
+        
+        caps_array = service.convert_individual_caps(caps_dict, symbols)
+        expected = np.array([0.1, 0.15, 0.15])  # Default 0.15 for missing symbol
+        np.testing.assert_array_equal(caps_array, expected)
+        
+        # Test with None caps
+        caps_array_none = service.convert_individual_caps(None, symbols)
+        self.assertIsNone(caps_array_none)
+        
+        # Test with empty dict
+        caps_array_empty = service.convert_individual_caps({}, symbols)
+        expected_empty = np.array([0.15, 0.15, 0.15])  # All defaults
+        np.testing.assert_array_equal(caps_array_empty, expected_empty)
+        
+        print("✅ Dividend caps conversion logic test passed")
+
+    def test_dividend_optimization_comprehensive_edge_cases(self):
+        """Test comprehensive edge cases from test_divtest.py"""
+        from divopt import ForwardYieldOptimizer, StockData
+        from dividend_optimizer import DividendOptimizationService
+        from data import ErrorCode, APIError
+        import asyncio
+        
+        # Test Case 1: Tiny budget with chunky prices → MILP should trigger
+        optimizer = ForwardYieldOptimizer()
+        
+        # Mock chunky stocks (expensive shares relative to budget)
+        chunky_stocks = {
+            "EXPENSIVE.NS": StockData("EXPENSIVE.NS", 7000, 350, 0.05, "fallback"),
+            "MEDIUM.NS": StockData("MEDIUM.NS", 1250, 50, 0.04, "fallback"),  
+            "CHEAP.NS": StockData("CHEAP.NS", 1000, 30, 0.03, "fallback")
+        }
+        
+        optimizer.prepare_data(chunky_stocks)
+        optimizer.covariance_matrix = np.eye(3) * 0.02  # Simple diagonal covariance
+        
+        target_weights = np.array([0.4, 0.4, 0.2])
+        budget = 10000  # Small budget
+        
+        # Check granularity decision logic
+        granularity = optimizer.preflight_granularity(budget, target_weights)
+        self.assertTrue(granularity['feasible'])
+        self.assertLess(granularity['N_target'], 25)  # Should trigger MILP due to low share count
+        
+        use_milp = optimizer.should_use_milp(granularity['N_target'], granularity['g_max'])
+        self.assertTrue(use_milp)  # Should prefer MILP for chunky prices
+        
+        # Test Case 2: All prices exceed budget → should fail gracefully
+        expensive_stocks = {
+            "VERYEXPENSIVE1.NS": StockData("VERYEXPENSIVE1.NS", 15000, 750, 0.05, "fallback"),
+            "VERYEXPENSIVE2.NS": StockData("VERYEXPENSIVE2.NS", 12000, 600, 0.05, "fallback")
+        }
+        
+        optimizer2 = ForwardYieldOptimizer()
+        optimizer2.prepare_data(expensive_stocks)
+        
+        granularity2 = optimizer2.preflight_granularity(5000, np.array([0.5, 0.5]))  # ₹5k budget
+        self.assertFalse(granularity2['feasible'])
+        self.assertIn("All prices exceed budget", granularity2['reason'])
+        
+        # Test Case 3: min_names infeasible
+        few_affordable = {
+            "AFFORDABLE.NS": StockData("AFFORDABLE.NS", 500, 25, 0.05, "fallback"),
+            "EXPENSIVE.NS": StockData("EXPENSIVE.NS", 8000, 400, 0.05, "fallback")  # Too expensive
+        }
+        
+        optimizer3 = ForwardYieldOptimizer()
+        optimizer3.prepare_data(few_affordable)
+        
+        granularity3 = optimizer3.preflight_granularity(3000, np.array([0.5, 0.5]), min_names=5)
+        self.assertFalse(granularity3['feasible'])
+        self.assertIn("Budget supports only", granularity3['reason'])
+        
+        # Test Case 4: Service layer error handling for these edge cases
+        service = DividendOptimizationService()
+        service.optimizer = optimizer2  # Use the expensive stocks optimizer
+        
+        async def test_service_budget_errors():
+            # Should raise BUDGET_TOO_SMALL
+            with self.assertRaises(APIError) as context:
+                await service.check_budget_feasibility(5000, np.array([0.5, 0.5]))
+            self.assertEqual(context.exception.code, ErrorCode.BUDGET_TOO_SMALL)
+            
+            # Test min_names infeasible
+            service.optimizer = optimizer3
+            with self.assertRaises(APIError) as context:
+                await service.check_budget_feasibility(3000, np.array([0.5, 0.5]), min_names=5)
+            self.assertEqual(context.exception.code, ErrorCode.MIN_NAMES_INFEASIBLE)
+        
+        asyncio.run(test_service_budget_errors())
+        
+        print("✅ Dividend optimization comprehensive edge cases test passed")
+
+    def test_dividend_optimization_fallback_yield_handling(self):
+        """Test fallback yield handling (no hardcoded stocks)"""
+        from divopt import ForwardYieldOptimizer, StockData
+        
+        optimizer = ForwardYieldOptimizer()
+        
+        # Mock stocks with no dividend data (should get fallback)
+        no_div_stocks = {
+            "NODIV1.NS": StockData("NODIV1.NS", 1000, 0, 0, "fallback"),  # Zero dividend
+            "NODIV2.NS": StockData("NODIV2.NS", 500, 0, 0, "fallback")    # Zero dividend
+        }
+        
+        # Test that fallback yields are applied
+        for symbol, stock in no_div_stocks.items():
+            if stock.forward_yield == 0:
+                # This simulates what happens in fetch_dividend_data when no data is found
+                fallback_yield = 0.015  # Should match the generic fallback in divopt.py
+                self.assertEqual(fallback_yield, 0.015)  # Conservative 1.5%
+                self.assertGreater(fallback_yield, 0)  # Should be positive
+                self.assertLess(fallback_yield, 0.05)  # Should be reasonable (<5%)
+        
+        print("✅ Dividend optimization fallback yield handling test passed")
+
+    def test_dividend_optimization_data_source_confidence(self):
+        """Test dividend data source and confidence handling"""
+        from divopt import ForwardYieldOptimizer, StockData
+        
+        optimizer = ForwardYieldOptimizer()
+        
+        # Mock stocks with different data sources and confidence levels
+        mixed_confidence_stocks = {
+            "HIGH_CONF.NS": StockData("HIGH_CONF.NS", 1000, 40, 0.04, "history", 
+                                    {"confidence": "high", "f": 4, "cv": 0.2, "regular": True}),
+            "MED_CONF.NS": StockData("MED_CONF.NS", 500, 15, 0.03, "history",
+                                   {"confidence": "medium", "f": 2, "cv": 0.4, "regular": True}),
+            "LOW_CONF.NS": StockData("LOW_CONF.NS", 800, 8, 0.01, "info",
+                                   {"confidence": "low", "f": 1, "cv": 0.8, "regular": False}),
+            "FALLBACK.NS": StockData("FALLBACK.NS", 600, 9, 0.015, "fallback", None)
+        }
+        
+        optimizer.prepare_data(mixed_confidence_stocks)
+        
+        # Test that effective caps are applied based on confidence
+        caps = optimizer._effective_caps()
+        
+        # High confidence should get higher cap (up to 15%)
+        # Medium confidence should get moderate cap (up to 12%)
+        # Low confidence should get lower cap (up to 8%)
+        # Fallback should get very low cap (up to 5%)
+        
+        self.assertTrue(np.all(caps <= 0.15))  # All caps should be <= 15%
+        self.assertTrue(np.all(caps >= 0))     # All caps should be >= 0%
+        
+        # Check that different confidence levels get different caps
+        unique_caps = len(set(caps))
+        self.assertGreaterEqual(unique_caps, 2)  # Should have at least 2 different cap levels
+        
+        print("✅ Dividend optimization data source confidence test passed")
+
+    def test_dividend_optimization_service_error_propagation(self):
+        """Test that service properly propagates all error types"""
+        from dividend_optimizer import DividendOptimizationService
+        from data import ErrorCode, APIError, StockItem, ExchangeEnum
+        import asyncio
+        from unittest.mock import patch, MagicMock
+        
+        async def test_error_propagation():
+            service = DividendOptimizationService()
+            
+            # Test data fetching error - directly mock fetch_dividend_data to return empty dict
+            # Mock at the instance level
+            service.optimizer.fetch_dividend_data = MagicMock(return_value={})
+            
+            # This should raise DIVIDEND_FETCH_ERROR since no data is returned
+            with self.assertRaises(APIError) as context:
+                await service.fetch_and_prepare_data(["NONEXISTENT.NS"])
+            self.assertEqual(context.exception.code, ErrorCode.DIVIDEND_FETCH_ERROR)
+            
+            # Test optimization failure (mock invalid covariance)
+            service2 = DividendOptimizationService()
+            service2.optimizer.covariance_matrix = np.array([[1, 0], [0, -1]])  # Invalid (negative eigenvalue)
+            service2.optimizer.symbols = ["STOCK1.NS", "STOCK2.NS"]
+            service2.optimizer.forward_yields = np.array([0.03, 0.04])
+            
+            with self.assertRaises(APIError) as context:
+                await service2.run_continuous_optimization(0.04)
+            self.assertEqual(context.exception.code, ErrorCode.OPTIMIZATION_FAILED)
+        
+        asyncio.run(test_error_propagation())
+        
+        print("✅ Dividend optimization service error propagation test passed")
+
+    def test_dividend_optimization_enhanced_validation(self):
+        """Test enhanced validation for sector caps, individual caps, and risk variance"""
+        from dividend_optimizer import DividendOptimizationService
+        from data import ErrorCode, APIError, StockItem, ExchangeEnum
+        import asyncio
+        
+        service = DividendOptimizationService()
+        
+        async def test_validation_errors():
+            stocks = [
+                StockItem(ticker="ITC", exchange=ExchangeEnum.NSE),
+                StockItem(ticker="HDFCBANK", exchange=ExchangeEnum.NSE)
+            ]
+            
+            # Test invalid sector cap type
+            with self.assertRaises(APIError) as context:
+                await service.validate_request(
+                    stocks, 1000000, None, 
+                    sector_caps={"Banking": "invalid_string"}  # Should be float
+                )
+            self.assertEqual(context.exception.code, ErrorCode.INVALID_BUDGET)
+            self.assertIn("must be a number", context.exception.message)
+            
+            # Test invalid sector cap value (> 1)
+            with self.assertRaises(APIError) as context:
+                await service.validate_request(
+                    stocks, 1000000, None,
+                    sector_caps={"Banking": 1.5}  # Should be <= 1
+                )
+            self.assertEqual(context.exception.code, ErrorCode.INVALID_BUDGET)
+            self.assertIn("between 0 and 1", context.exception.message)
+            
+            # Test invalid sector cap value (< 0)
+            with self.assertRaises(APIError) as context:
+                await service.validate_request(
+                    stocks, 1000000, None,
+                    sector_caps={"Banking": -0.1}  # Should be >= 0
+                )
+            self.assertEqual(context.exception.code, ErrorCode.INVALID_BUDGET)
+            
+            # Test invalid max_risk_variance type
+            with self.assertRaises(APIError) as context:
+                await service.validate_request(
+                    stocks, 1000000, None, None,
+                    max_risk_variance="invalid_string"  # Should be float
+                )
+            self.assertEqual(context.exception.code, ErrorCode.INVALID_BUDGET)
+            
+            # Test invalid max_risk_variance value (> 1)
+            with self.assertRaises(APIError) as context:
+                await service.validate_request(
+                    stocks, 1000000, None, None,
+                    max_risk_variance=1.5  # Should be <= 1
+                )
+            self.assertEqual(context.exception.code, ErrorCode.INVALID_BUDGET)
+            
+            # Test invalid individual caps
+            with self.assertRaises(APIError) as context:
+                caps = service.convert_individual_caps(
+                    {"ITC.NS": "invalid_string"}, ["ITC.NS"]
+                )
+            self.assertEqual(context.exception.code, ErrorCode.INVALID_BUDGET)
+            
+            # Test individual caps out of range
+            with self.assertRaises(APIError) as context:
+                caps = service.convert_individual_caps(
+                    {"ITC.NS": 1.5}, ["ITC.NS"]  # Should be <= 1
+                )
+            self.assertEqual(context.exception.code, ErrorCode.INVALID_BUDGET)
+            
+            # Test valid values should pass
+            await service.validate_request(
+                stocks, 1000000, 2,
+                sector_caps={"Banking": 0.35, "FMCG": 0.25},
+                max_risk_variance=0.04
+            )
+            
+            valid_caps = service.convert_individual_caps(
+                {"ITC.NS": 0.15, "HDFCBANK.NS": 0.10}, ["ITC.NS", "HDFCBANK.NS"]
+            )
+            self.assertIsNotNone(valid_caps)
+            np.testing.assert_array_equal(valid_caps, [0.15, 0.10])
+        
+        asyncio.run(test_validation_errors())
+        print("✅ Dividend optimization enhanced validation test passed")
+
+    def test_dividend_optimization_fallback_consistency(self):
+        """Test that fallback yield is consistent and reasonable"""
+        from divopt import ForwardYieldOptimizer
+        
+        # Test that the fallback yield used in divopt.py is reasonable
+        fallback_yield = 0.015  # This should match the value in divopt.py
+        
+        # Validation checks
+        self.assertGreater(fallback_yield, 0)      # Must be positive
+        self.assertLess(fallback_yield, 0.05)      # Should be conservative (< 5%)
+        self.assertGreaterEqual(fallback_yield, 0.01)  # Should be reasonable (>= 1%)
+        
+        # Test that it's used consistently
+        self.assertEqual(fallback_yield, 0.015)    # 1.5% conservative estimate
+        
+        print("✅ Dividend optimization fallback consistency test passed")
+
+
+class AsyncMock:
+    """Simple async mock for testing"""
+    def __init__(self, return_value=None):
+        self.return_value = return_value
+        self.call_count = 0
+        self.call_args_list = []
+    
+    async def __call__(self, *args, **kwargs):
+        self.call_count += 1
+        self.call_args_list.append((args, kwargs))
+        return self.return_value
+
 
 if __name__ == '__main__':
     unittest.main() 

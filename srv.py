@@ -66,10 +66,13 @@ builtins.json = json
 from data import (
     ErrorCode, APIError, ExchangeEnum, OptimizationMethod, CLAOptimizationMethod,
     BenchmarkName, Benchmarks, BenchmarkReturn, PortfolioPerformance,
-    OptimizationResult, PortfolioOptimizationResponse, StockItem, TickerRequest
+    OptimizationResult, PortfolioOptimizationResponse, StockItem, TickerRequest,
+    DividendOptimizationMethod, DividendOptimizationRequest, DividendOptimizationResponse,
+    DividendStockData, DividendAllocationResult
 )
 from signals import build_technical_scores, TECHNICAL_INDICATORS
 from settings import settings
+from dividend_optimizer import DividendOptimizationService
 
 # Custom JSON encoder to handle NaN, Infinity, etc.
 class CustomJSONEncoderMeta(type):
@@ -95,6 +98,8 @@ class CustomJSONEncoder(JSONEncoder, metaclass=CustomJSONEncoderMeta):
             return int(obj)
         elif isinstance(obj, (np.floating, float)):
             return self._sanitize_float(obj)
+        elif isinstance(obj, (np.bool_, bool)):
+            return bool(obj)
         elif isinstance(obj, pd.Series):
             return self._sanitize_obj(obj.to_dict())
         elif isinstance(obj, pd.DataFrame):
@@ -123,6 +128,8 @@ class CustomJSONEncoder(JSONEncoder, metaclass=CustomJSONEncoderMeta):
             return self._sanitize_float(obj)
         elif isinstance(obj, (np.integer, np.int_)):
             return int(obj)
+        elif isinstance(obj, (np.bool_, bool)):
+            return bool(obj)
         elif pd.isna(obj):  # Add explicit pandas NaN check
             return None
         elif isinstance(obj, str) and obj.lower() == 'nan':  # Handle string "NaN"
@@ -2578,6 +2585,187 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         logger.exception("Unexpected error in optimize_portfolio: %s", error_message)
         raise
 
+########################################
+# Dividend Optimization Endpoint
+########################################
+
+@app.post("/dividend-optimize")
+async def optimize_dividend_portfolio(
+    request: DividendOptimizationRequest = Body(...), 
+    background_tasks: BackgroundTasks = None
+) -> DividendOptimizationResponse:
+    """
+    Forward yield dividend optimization endpoint.
+    Maximizes dividend income subject to risk and diversification constraints.
+    """
+    logger.info(f"Dividend optimization request: {len(request.stocks)} stocks, budget ₹{request.budget:,.0f}, method {request.method}")
+    
+    # Initialize service
+    service = DividendOptimizationService()
+    
+    try:
+        # Step 1: Validate request (this one is async)
+        await service.validate_request(
+            request.stocks, 
+            request.budget, 
+            request.min_names,
+            request.sector_caps,
+            request.max_risk_variance
+        )
+        
+        # Step 2: Format tickers and fetch data (sync → threadpool)
+        tickers = format_tickers(request.stocks)
+        logger.info(f"Formatted tickers: {tickers}")
+        
+        stocks_data = await run_in_threadpool(service.fetch_and_prepare_data, tickers)
+        
+        # Step 3: Prepare optimization data (sync → threadpool)
+        await run_in_threadpool(service.prepare_optimization_data, stocks_data)
+        
+        # Step 4: Convert individual caps to array format (sync)
+        individual_caps = service.convert_individual_caps(
+            request.individual_caps, service.optimizer.symbols
+        )
+        
+        # Step 5: Run continuous optimization (sync → threadpool)
+        target_weights = await run_in_threadpool(
+            service.run_continuous_optimization,
+            request.max_risk_variance,
+            individual_caps,
+            request.sector_caps,
+            request.sector_mapping
+        )
+        
+        # Step 6: Check budget feasibility (sync → threadpool)
+        await run_in_threadpool(
+            service.check_budget_feasibility,
+            request.budget,
+            target_weights,
+            request.min_names
+        )
+        
+        # Step 7: Allocate shares (sync → threadpool)
+        result = await run_in_threadpool(
+            service.allocate_shares,
+            target_weights,
+            request.budget,
+            request.method.value,
+            individual_caps,
+            request.sector_caps,
+            request.sector_mapping,
+            request.min_names,
+            request.seed
+        )
+        
+        # Step 8: Build response (sync → threadpool)
+        response = await run_in_threadpool(_build_dividend_response, service, result, request)
+        
+        logger.info(f"Dividend optimization completed successfully: {result.allocation_method}, "
+                   f"yield {result.portfolio_yield:.4%}, vol {response.post_round_volatility:.4%}, "
+                   f"positions {len(response.allocations)}")
+        
+        # Use CustomJSONResponse with jsonable_encoder for extra safety against serialization issues
+        payload = jsonable_encoder(response, exclude_none=True)
+        return CustomJSONResponse(content=payload)
+        
+    except APIError as e:
+        logger.error(f"Dividend optimization failed: {e.code} - {e.message}")
+        raise
+    except Exception as e:
+        logger.exception("Unexpected error in dividend optimization")
+        raise APIError(
+            code=ErrorCode.UNEXPECTED_ERROR,
+            message=f"Dividend optimization failed: {str(e)}",
+            status_code=500
+        )
+
+def _build_dividend_response(
+    service: DividendOptimizationService, 
+    result, # PortfolioResult type from divopt module
+    request: DividendOptimizationRequest
+) -> DividendOptimizationResponse:
+    """Build the dividend optimization response object"""
+    
+    # Build allocations (only non-zero positions)
+    allocations = []
+    for i, symbol in enumerate(service.optimizer.symbols):
+        if result.shares[i] > 0:
+            allocations.append(DividendAllocationResult(
+                symbol=symbol,
+                shares=int(result.shares[i]),
+                price=float(service.optimizer.prices[i]),
+                value=float(result.shares[i] * service.optimizer.prices[i]),
+                weight=float(result.executed_weights[i]),
+                target_weight=float(result.target_weights[i]),
+                forward_yield=float(service.optimizer.forward_yields[i]),
+                annual_income=float(result.shares[i] * service.optimizer.forward_dividends[i])
+            ))
+    
+    # Build dividend data summary
+    dividend_data = []
+    for symbol in service.optimizer.symbols:
+        stock_data = service.optimizer.stocks_data[symbol]
+        dividend_data.append(DividendStockData(
+            symbol=symbol,
+            price=stock_data.price,
+            forward_dividend=stock_data.forward_dividend,
+            forward_yield=stock_data.forward_yield,
+            dividend_source=stock_data.dividend_source,
+            confidence=stock_data.dividend_metadata.get('confidence') if stock_data.dividend_metadata else None,
+            cadence_info=stock_data.dividend_metadata if stock_data.dividend_metadata else None
+        ))
+    
+    # Calculate sector allocations if mapping provided
+    sector_allocations = None
+    if request.sector_mapping:
+        sector_allocations = {}
+        for i, symbol in enumerate(service.optimizer.symbols):
+            if result.shares[i] > 0:
+                sector = request.sector_mapping.get(symbol, "Other")
+                value = float(result.shares[i] * service.optimizer.prices[i])
+                sector_allocations[sector] = sector_allocations.get(sector, 0) + value
+    
+    # Get granularity check
+    granularity = service.optimizer.preflight_granularity(
+        request.budget, result.target_weights, request.min_names
+    )
+    
+    # Ensure granularity flags are native Python booleans
+    granularity_check = {
+        **granularity,
+        "feasible": bool(granularity.get("feasible", True)),
+    }
+    
+    # Calculate post-round volatility
+    post_vol = service.calculate_post_round_volatility(result.shares)
+    
+    # Calculate yield on invested
+    amount_invested = float(np.sum(result.shares * service.optimizer.prices))
+    yield_on_invested = result.annual_income / amount_invested if amount_invested > 0 else 0.0
+    
+    return DividendOptimizationResponse(
+        total_budget=request.budget,
+        amount_invested=amount_invested,
+        residual_cash=result.residual_cash,
+        portfolio_yield=result.portfolio_yield,
+        yield_on_invested=yield_on_invested,
+        annual_income=result.annual_income,
+        post_round_volatility=post_vol,
+        l1_drift=result.drift_l1,
+        allocation_method=result.allocation_method,
+        allocations=allocations,
+        dividend_data=dividend_data,
+        granularity_check=granularity_check,
+        optimization_summary={
+            "method_used": result.allocation_method,
+            "total_shares": int(np.sum(result.shares)),
+            "num_positions": int(np.sum(result.shares > 0)),
+            "deployment_rate": (request.budget - result.residual_cash) / request.budget,
+            "risk_adjusted": bool(post_vol <= (request.max_risk_variance ** 0.5 + 0.01))  # Within tolerance
+        },
+        sector_allocations=sector_allocations
+    )
+
 # ==== Dependency Injection Wrappers ====
 def download_close_prices(ticker: str, start_date: datetime) -> pd.Series:
     # wrapper around yfinance.download for easier mocking/testing
@@ -3808,6 +3996,8 @@ def sanitize_json_values(obj):
             return float(obj)  # Ensure it's a Python float, not numpy float
     elif isinstance(obj, (np.integer, np.int_)):
         return int(obj)  # Convert numpy integers to Python int
+    elif isinstance(obj, (np.bool_, bool)):
+        return bool(obj)  # Convert numpy booleans to Python bool
     elif isinstance(obj, np.ndarray):
         # Handle numpy arrays by converting to list first
         return sanitize_json_values(obj.tolist())
