@@ -31,6 +31,9 @@ export default function TopNav() {
             </IconButton>
             <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleClose}>
               <MenuItem onClick={handleClose}>
+                <Link href="/dividend" style={{ color: 'inherit', textDecoration: 'none' }}>Dividend Optimizer</Link>
+              </MenuItem>
+              <MenuItem onClick={handleClose}>
                 <Link href="/docs" style={{ color: 'inherit', textDecoration: 'none' }}>Docs</Link>
               </MenuItem>
               <MenuItem onClick={handleClose}>
@@ -40,6 +43,9 @@ export default function TopNav() {
           </div>
           {/* Desktop menu */}
           <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: '32px' }}>
+            <Link href="/dividend" style={{ color: '#0052cc', textDecoration: 'none', fontWeight: 500, fontSize: '1.08rem' }}>
+              Dividend Optimizer
+            </Link>
             <Link href="/docs" style={{ color: '#0052cc', textDecoration: 'none', fontWeight: 500, fontSize: '1.08rem' }}>
               Docs
             </Link>

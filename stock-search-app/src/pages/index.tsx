@@ -1085,8 +1085,11 @@ const HomePage: React.FC = () => {
         >
           Optimize your Indian stock portfolio with AI-driven quantitative models—tailored for NSE and BSE. Run Mean-Variance, CVaR, HERC, NCO and more. India-specific benchmarks, rolling betas, and robust risk metrics empower you to build portfolios for the Indian market.
         </Typography>
-        <Typography variant="body2" sx={{ color: '#2e8b57', mb: 4, textAlign: { xs: 'center', md: 'left' } }}>
+        <Typography variant="body2" sx={{ color: '#2e8b57', mb: 2, textAlign: { xs: 'center', md: 'left' } }}>
           Learn more about <Link href="/docs" style={{ color: '#0052cc', textDecoration: 'underline' }}>portfolio optimization methods</Link> for Indian stocks.
+        </Typography>
+        <Typography variant="body2" sx={{ color: '#1976d2', mb: 4, textAlign: { xs: 'center', md: 'left' } }}>
+          Looking for dividend income? Try our <Link href="/dividend" style={{ color: '#1976d2', textDecoration: 'underline', fontWeight: 'bold' }}>Dividend Optimizer</Link> to build yield-focused portfolios.
         </Typography>
       </Box>
 

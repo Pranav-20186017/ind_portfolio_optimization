@@ -197,3 +197,60 @@ export interface BenchmarkReturn {
   name: BenchmarkName;
   returns: number[];
 }
+
+// Dividend Optimization Types
+export enum DividendOptimizationMethod {
+  AUTO = "AUTO",          // Intelligent greedy/MILP selection
+  GREEDY = "GREEDY",      // Fast round-repair 
+  MILP = "MILP"           // Exact share-level optimization
+}
+
+export interface DividendOptimizationRequest {
+  stocks: StockItem[];
+  budget: number;
+  max_risk_variance: number;
+  method: DividendOptimizationMethod;
+  individual_caps?: { [symbol: string]: number };
+  sector_caps?: { [sector: string]: number };
+  sector_mapping?: { [symbol: string]: string };
+  min_names?: number;
+  seed?: number;
+}
+
+export interface DividendStockData {
+  symbol: string;
+  price: number;
+  forward_dividend: number;
+  forward_yield: number;
+  dividend_source: string;
+  confidence?: string;
+  cadence_info?: Record<string, any>;
+}
+
+export interface DividendAllocationResult {
+  symbol: string;
+  shares: number;
+  price: number;
+  value: number;
+  weight: number;
+  target_weight: number;
+  forward_yield: number;
+  annual_income: number;
+}
+
+export interface DividendOptimizationResponse {
+  total_budget: number;
+  amount_invested: number;
+  residual_cash: number;
+  portfolio_yield: number;
+  yield_on_invested: number;
+  annual_income: number;
+  post_round_volatility: number;
+  l1_drift: number;
+  allocation_method: string;
+  allocations: DividendAllocationResult[];
+  dividend_data: DividendStockData[];
+  granularity_check: Record<string, any>;
+  optimization_summary: Record<string, any>;
+  sector_allocations?: { [sector: string]: number };
+}

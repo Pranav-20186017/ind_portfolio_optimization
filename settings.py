@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # CORS Origins
     allowed_origins: list[AnyHttpUrl] = Field(
-        ["https://indportfoliooptimization.vercel.app","http://localhost:3000","http://localhost"],
+        ["https://indportfoliooptimization.vercel.app"],
         env="ALLOWED_ORIGINS"
     )
     
