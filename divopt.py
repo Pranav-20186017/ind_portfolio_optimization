@@ -323,38 +323,22 @@ class ForwardYieldOptimizer:
         
         return self.covariance_matrix
     
-    def _inflate_caps_to_cover_budget(
-        self, caps: np.ndarray, active_mask: np.ndarray, hard_cap: float = 0.40
-    ) -> np.ndarray:
+    def _normalize_caps_to_cover_budget(self, caps: np.ndarray, hard_cap: float = 0.40) -> np.ndarray:
         """
-        Ensure the sum of active caps is >= 1 so a fully-invested portfolio is feasible.
-        Scales caps proportionally and clips by `hard_cap`.
+        Ensure caps can cover at least 100% of budget for feasible deployment.
+        Simple renormalization approach with safety margin.
         """
         caps = caps.copy()
-        caps = np.clip(caps, 0.0, hard_cap)
-        total = float(np.sum(caps[active_mask]))
-        if total < 0.999 and total > 0:
-            # Scale to reach exactly 1.0, then clip individual caps at hard_cap
-            scale = 1.0 / total
-            caps_scaled = caps * scale
-            # If any cap exceeds hard_cap after scaling, clip and redistribute
-            if np.any(caps_scaled > hard_cap):
-                caps_scaled = np.minimum(caps_scaled, hard_cap)
-                # Recalculate to ensure we still reach close to 1.0
-                new_total = float(np.sum(caps_scaled[active_mask]))
-                if new_total < 0.999 and new_total > 0:
-                    # Apply a secondary smaller scale to non-maxed caps
-                    remaining_mask = active_mask & (caps_scaled < hard_cap)
-                    if np.any(remaining_mask):
-                        shortfall = 1.0 - new_total
-                        available_capacity = np.sum((hard_cap - caps_scaled)[remaining_mask])
-                        if available_capacity > 0:
-                            additional_scale = min(1.0, shortfall / np.sum(caps_scaled[remaining_mask]))
-                            caps_scaled[remaining_mask] *= (1.0 + additional_scale)
-                            caps_scaled = np.minimum(caps_scaled, hard_cap)
-                caps = caps_scaled
-            else:
-                caps = caps_scaled
+        caps = np.clip(caps, 0.0, 0.999)  # Initial safety clip
+        
+        total_cap = float(caps.sum())
+        target_total = 1.01  # Target 1% above 1.0 for safety margin
+        
+        if total_cap < target_total and total_cap > 0:
+            # Scale up proportionally so that Σ caps ≈ 1.01
+            scale = target_total / max(1e-12, total_cap)
+            caps = np.clip(caps * scale, 0.0, hard_cap)
+        
         return caps
     
     def _effective_caps(self, base_cap: float = 0.15) -> np.ndarray:
@@ -393,13 +377,13 @@ class ForwardYieldOptimizer:
                 elif not metadata.get('regular', True):  # Irregular but not too bad
                     caps[i] = min(caps[i], 0.08)  # Max 8% for irregular payers
         
-        # Zero-cap very low yield names (< 0.5%) to reduce noise
+        # Reduce caps for very low yield names (< 0.5%) but don't zero them completely
+        # Keep small caps for emergency cash deployment in share allocation
         low_yield_mask = self.forward_yields < 0.005
-        caps[low_yield_mask] = 0.0
+        caps[low_yield_mask] = np.minimum(caps[low_yield_mask], 0.01)  # Max 1% for emergency use
         
-        # Inflate caps to ensure feasible deployment
-        active = caps > 0
-        caps = self._inflate_caps_to_cover_budget(caps, active_mask=active, hard_cap=0.40)
+        # Normalize caps to ensure feasible deployment (sum ≥ 1.0)
+        caps = self._normalize_caps_to_cover_budget(caps, hard_cap=0.40)
         
         return caps
     
@@ -495,18 +479,21 @@ class ForwardYieldOptimizer:
         else:
             effective_caps = individual_caps.copy()
         
-        # ALWAYS apply a zero-cap mask to very low yield names
-        low_yield_mask = (self.forward_yields >= LOW_YIELD_FLOOR).astype(float)
-        effective_caps = np.minimum(effective_caps, low_yield_mask)
+        # Note: Low-yield filtering is now handled in _effective_caps method
+        # to allow emergency deployment while preferring higher-yield names
         
-        # Filter out stocks with very low yield (< 0.5%) to improve optimization
+        # Filter out stocks with very low yield (< 0.5%) for QP target weight calculation
+        # Note: These stocks will still be available for share allocation to deploy residual cash
         valid_indices = self.forward_yields >= 0.005  # 0.5% minimum
         if not np.any(valid_indices):
-            print("Warning: No stocks with sufficient yields (≥0.5%) found!")
+            logger.warning("No stocks with sufficient yields (≥0.5%) found!")
             return np.full(n, 1.0/n)
         
-        print(f"Optimizing {np.sum(valid_indices)} stocks with yields ≥0.5%")
-        print(f"Yield range: {self.forward_yields[valid_indices].min():.4%} - {self.forward_yields[valid_indices].max():.4%}")
+        logger.info(f"QP optimizing {np.sum(valid_indices)} stocks with yields ≥0.5%")
+        logger.info(f"Yield range: {self.forward_yields[valid_indices].min():.4%} - {self.forward_yields[valid_indices].max():.4%}")
+        excluded_count = np.sum(~valid_indices)
+        if excluded_count > 0:
+            logger.info(f"Excluded {excluded_count} low-yield stocks from QP (still available for share allocation)")
         
         # Decision variables
         w = cp.Variable(n, nonneg=True)
@@ -739,67 +726,75 @@ class ForwardYieldOptimizer:
             if remaining_cash / budget <= residual_threshold:
                 break
         
-        # === Cash-sweep pass (best bang-per-buck), optional light risk guard ===
-        # Get dynamic thresholds to determine when cash-sweep should stop
-        dynamic_thresh = self.dynamic_thresholds(budget)
-        sweep_stop = dynamic_thresh.get("residual_threshold", 0.002)
+        # === Progressive Slack Cash-sweep: Never stall with large residual ===
+        value = shares * self.prices
+        executed_weights = value / float(budget)
+        remaining_cash = float(budget - value.sum())
         
-        invested = np.sum(shares * self.prices)
-        remaining_cash = budget - invested
-        residual_frac = remaining_cash / budget
-        
-        if residual_frac > sweep_stop and np.min(self.prices) <= remaining_cash:
-            print(f"Starting cash-sweep pass (residual: {residual_frac:.2%} > {sweep_stop:.2%})")
+        if remaining_cash > 0 and np.min(self.prices) <= remaining_cash:
+            logger.info(f"Starting progressive slack cash-sweep (residual: ₹{remaining_cash:,.0f}, {remaining_cash/budget:.2%})")
             
-            # rank by forward_dividend / price (dividend per rupee)
-            bang_for_buck = self.forward_dividends / np.maximum(self.prices, 1e-9)
-            order = np.argsort(-bang_for_buck)  # descending
+            # Income per rupee ranking
+            income_per_rupee = np.divide(self.forward_dividends, self.prices, 
+                                       out=np.zeros_like(self.prices), where=self.prices > 0)
+            order_by_yield = np.argsort(-income_per_rupee)  # Descending order
             
-            # optional risk cap: only enforce if you passed max_risk_variance earlier
-            def ok_after_buy(idx):
-                # prevent breaking per-name caps if you use them elsewhere
-                # (simple per-name cap: executed weight ≤ individual_caps[idx])
-                if individual_caps is not None:
-                    new_val = (shares[idx] + 1) * self.prices[idx] / budget
-                    if new_val > individual_caps[idx] + 1e-12:
-                        return False
-                
-                # Check sector cap feasibility if applicable
-                if sector_caps and sector_mapping:
-                    symbol = self.symbols[idx]
-                    sector = sector_mapping.get(symbol)
-                    if sector and sector in sector_caps:
-                        # Calculate current sector weight 
-                        sector_indices = [j for j, s in enumerate(self.symbols) 
-                                        if sector_mapping.get(s) == sector]
-                        current_sector_weight = np.sum([shares[j] * self.prices[j] 
-                                                      for j in sector_indices]) / budget
-                        new_sector_weight = current_sector_weight + (self.prices[idx] / budget)
-                        if new_sector_weight > sector_caps[sector] + 1e-12:
-                            return False
-                
-                # light risk guard: recompute vol only every few steps for speed, or skip entirely
-                return True
+            # Progressive slack parameters
+            caps_base = individual_caps if individual_caps is not None else self._effective_caps()
+            slack = 1.00        # Start at no slack
+            max_slack = 1.15    # Allow up to +15% over name caps to finish deployment
+            no_progress_passes = 0
+            max_passes = 3      # Maximum passes without progress before giving up
             
-            # buy while we can afford the cheapest name
-            sweep_iterations = 0
-            max_sweep_iterations = 500  # Prevent infinite loops
-            
-            while (budget - invested) >= np.min(self.prices) and sweep_iterations < max_sweep_iterations:
+            while remaining_cash >= np.min(self.prices) and no_progress_passes < max_passes:
                 bought = False
-                for idx in order:
-                    if self.prices[idx] <= (budget - invested) and ok_after_buy(idx):
-                        shares[idx] += 1
-                        invested += float(self.prices[idx])
-                        bought = True
-                        break
+                current_executed_weights = (shares * self.prices) / budget
+                
+                # Try to buy from each stock in yield order
+                for i in order_by_yield:
+                    if self.prices[i] <= remaining_cash:
+                        # Check headroom under current slack
+                        current_headroom = (caps_base[i] * slack) - current_executed_weights[i]
+                        new_weight_increment = self.prices[i] / budget
+                        
+                        if current_headroom >= new_weight_increment - 1e-9:
+                            # Check sector constraints if applicable
+                            sector_ok = True
+                            if sector_caps and sector_mapping:
+                                symbol = self.symbols[i]
+                                sector = sector_mapping.get(symbol)
+                                if sector and sector in sector_caps:
+                                    sector_indices = [j for j, s in enumerate(self.symbols) 
+                                                    if sector_mapping.get(s) == sector]
+                                    current_sector_weight = np.sum([shares[j] * self.prices[j] 
+                                                                  for j in sector_indices]) / budget
+                                    new_sector_weight = current_sector_weight + new_weight_increment
+                                    if new_sector_weight > sector_caps[sector] + 1e-12:
+                                        sector_ok = False
+                            
+                            if sector_ok:
+                                # Buy one share
+                                shares[i] += 1
+                                remaining_cash -= float(self.prices[i])
+                                bought = True
+                                break  # Continue with next iteration
+                
                 if not bought:
-                    break  # no feasible single-share buy remains
-                sweep_iterations += 1
+                    # No progress at current slack level
+                    no_progress_passes += 1
+                    if slack < max_slack:
+                        slack = min(slack * 1.05, max_slack)  # Increase slack by 5%
+                        logger.info(f"No progress at slack {slack/1.05:.2f}, increasing to {slack:.2f}")
+                    else:
+                        logger.info(f"Reached max slack {max_slack:.2f}, no more purchases possible")
+                        break
+                else:
+                    no_progress_passes = 0  # Reset counter on successful purchase
             
-            # Update remaining cash after sweep
-            remaining_cash = budget - invested
-            print(f"Cash-sweep completed: {sweep_iterations} purchases, residual: {remaining_cash/budget:.2%}")
+            final_remaining = budget - np.sum(shares * self.prices)
+            final_deployment = 1.0 - (final_remaining / budget)
+            logger.info(f"Progressive cash-sweep completed: final deployment {final_deployment:.2%}, "
+                       f"residual: ₹{final_remaining:,.0f}, max slack used: {slack:.2f}")
         
         # Calculate final portfolio metrics
         final_invested = np.sum(shares * self.prices)
@@ -920,6 +915,7 @@ class ForwardYieldOptimizer:
                          min_names: Optional[int] = None,
                          min_lot: int = 1,
                          epsilon_income: float = 1.0,
+                         x_lb: Optional[np.ndarray] = None,
                          verbose: bool = False) -> PortfolioResult:
         """
         Exact share-level income MILP with 2-phase optimization:
@@ -934,10 +930,9 @@ class ForwardYieldOptimizer:
         if individual_caps is None:
             individual_caps = self._effective_caps(base_cap=0.15)
         
-        # Ensure caps are inflated for feasible deployment
+        # Ensure caps are normalized for feasible deployment
         caps = individual_caps.copy()
-        active = caps > 0
-        caps = self._inflate_caps_to_cover_budget(caps, active_mask=active, hard_cap=0.40)
+        caps = self._normalize_caps_to_cover_budget(caps, hard_cap=0.40)
         
         # Max shares from caps and budget
         max_by_cap = np.floor(caps * budget / self.prices).astype(int)
@@ -962,14 +957,30 @@ class ForwardYieldOptimizer:
         x = cp.Variable(n, integer=True)
         s = cp.Variable(n, nonneg=True)  # soft-cap slack (fraction of budget)
         
+        # Set up lower bounds
+        if x_lb is None:
+            x_lb = np.zeros(n, dtype=int)
+        else:
+            x_lb = np.asarray(x_lb, dtype=int)
+        
         # Small penalty per unit of slack to prefer staying within caps
         lambda_slack = 0.05 * float(np.max(self.forward_yields))
         
+        # Investment amount variable for easier constraint handling
+        invest = cp.sum(cp.multiply(self.prices, x))
+        
         constraints = [
-            x >= 0,  # Nonnegativity constraint
-            cp.sum(cp.multiply(self.prices, x)) <= budget,
-            cp.sum(cp.multiply(self.prices, x)) >= min_invest_frac * budget,
+            x >= x_lb,  # Lower bounds (from greedy or zero)
+            invest <= budget,
+            invest >= min_invest_frac * budget,  # Ensure minimum deployment
         ]
+        
+        # Objective: maximize income with tiny cash penalty and slack penalty
+        objective1 = cp.Maximize(
+            self.forward_dividends @ x 
+            - lambda_slack * budget * cp.sum(s)
+            - 1e-6 * (budget - invest)  # Tiny preference for full deployment
+        )
         
         # Soft cap constraints: allow exceeding caps with penalty
         for i in range(n):
@@ -991,8 +1002,6 @@ class ForwardYieldOptimizer:
                 x <= U * z
             ])
         
-        # Phase 1 objective: maximize income - penalty for soft cap violations
-        objective1 = cp.Maximize(self.forward_dividends @ x - lambda_slack * budget * cp.sum(s))
         problem1 = cp.Problem(objective1, constraints)
         
         # Solve Phase 1
@@ -1025,9 +1034,12 @@ class ForwardYieldOptimizer:
         t = cp.Variable(n, nonneg=True)  # absolute deviation auxiliaries
         # Reuse slack variables from Phase 1
         
+        invest2 = cp.sum(cp.multiply(self.prices, x))
+        
         constraints2 = [
-            cp.sum(cp.multiply(self.prices, x)) <= budget,
-            cp.sum(cp.multiply(self.prices, x)) >= min_invest_frac * budget,
+            x >= x_lb,  # Lower bounds (same as Phase 1)
+            invest2 <= budget,
+            invest2 >= min_invest_frac * budget,
             self.forward_dividends @ x >= income_star - epsilon_income,  # Preserve income
         ]
         
@@ -1177,14 +1189,32 @@ class ForwardYieldOptimizer:
                 seed=seed
             )
 
-            # NEW: under-deployment safety net
+            # Aggressive under-deployment safety net with dual triggers  
             thresholds = thresholds or self.dynamic_thresholds(budget)
             deploy = 1.0 - (greedy_res.residual_cash / budget)
-            if deploy + 1e-9 < float(thresholds.get("min_deploy", 0.95)):
+            min_deploy_threshold = float(thresholds.get("min_deploy", 0.95))
+            residual_cash_threshold = max(0.02 * budget, 2000)  # 2% of budget or ₹2000
+            
+            # Dual trigger conditions for MILP escalation
+            deploy_trigger = deploy + 1e-9 < min_deploy_threshold
+            cash_trigger = greedy_res.residual_cash > residual_cash_threshold
+            
+            if deploy_trigger or cash_trigger:
+                trigger_reason = []
+                if deploy_trigger:
+                    trigger_reason.append(f"low deployment ({deploy:.2%} < {min_deploy_threshold:.2%})")
+                if cash_trigger:
+                    trigger_reason.append(f"excess cash (₹{greedy_res.residual_cash:,.0f} > ₹{residual_cash_threshold:,.0f})")
+                
                 logger.info(
-                    f"Under-deployment detected ({deploy:.2%} < "
-                    f"{thresholds.get('min_deploy', 0.95):.2%}). Escalating to MILP…"
+                    f"AUTO escalating to MILP due to: {' and '.join(trigger_reason)}. "
+                    f"Using greedy shares as lower bounds..."
                 )
+                
+                # Calculate aggressive min_invest_frac to ensure full deployment
+                target_min_invest = max(0.995, min_deploy_threshold, 1.0 - (residual_cash_threshold / budget) + 0.01)
+                
+                # Use greedy shares as lower bounds so MILP only "tops up"
                 return self.solve_income_milp(
                     target_weights=target_weights,
                     budget=budget,
@@ -1192,8 +1222,8 @@ class ForwardYieldOptimizer:
                     sector_caps=sector_caps,
                     sector_mapping=sector_mapping,
                     min_names=min_names,
-                    # invest essentially all the cash (a touch below min_deploy to leave rupee dust)
-                    min_invest_frac=max(0.99, thresholds.get("min_deploy", 0.95) - 0.005),
+                    min_invest_frac=target_min_invest,
+                    x_lb=greedy_res.shares.astype(int),  # Lower bounds from greedy
                     verbose=False
                 )
             return greedy_res

@@ -395,10 +395,16 @@ class DividendOptimizationService:
                     seed=seed
                 )
                 
-                # Safety net at service level
+                # Enhanced safety net at service level - dual triggers
                 deploy = 1.0 - (result.residual_cash / budget)
-                if deploy < 0.95 and result.allocation_method.startswith("Greedy"):
-                    logger.info(f"Under-deployed ({deploy:.2%}). Rerunning with MILP.")
+                excess_cash_threshold = max(0.02 * budget, 2000)  # 2% or ₹2000
+                
+                needs_milp = (deploy < 0.97 or result.residual_cash > excess_cash_threshold) and \
+                           result.allocation_method.startswith("Greedy")
+                           
+                if needs_milp:
+                    logger.info(f"Service-level safety net triggered: deployment={deploy:.2%}, "
+                               f"residual=₹{result.residual_cash:,.0f}. Escalating to MILP.")
                     result = self.optimizer.solve_income_milp(
                         target_weights=target_weights,
                         budget=budget,
@@ -406,6 +412,9 @@ class DividendOptimizationService:
                         sector_caps=sector_caps,
                         sector_mapping=sector_mapping,
                         min_names=min_names,
+                        min_invest_frac=0.98,
+                        x_lb=result.shares.astype(int),  # Use greedy result as lower bound
+                        verbose=False
                     )
             elif method == "GREEDY":
                 result = self.optimizer.allocate_shares_greedy(

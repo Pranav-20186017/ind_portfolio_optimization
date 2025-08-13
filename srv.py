@@ -2668,13 +2668,18 @@ async def optimize_dividend_portfolio(
             request.min_names
         )
         
-        # Step 7: Allocate shares (sync → threadpool)
+        # Step 7: Allocate shares with normalized caps from QP (sync → threadpool)
+        # CRITICAL FIX: Use the same normalized effective caps from the QP stage for shares
+        effective_caps = await run_in_threadpool(
+            lambda: service.optimizer._effective_caps(base_cap=0.15)
+        )
+        
         result = await run_in_threadpool(
             service.allocate_shares,
             target_weights,
             request.budget,
             request.method.value,
-            individual_caps,
+            effective_caps,  # Use normalized caps from QP, not raw user caps
             request.sector_caps,
             request.sector_mapping,
             request.min_names,
@@ -2715,6 +2720,12 @@ def _build_dividend_response(
     
     # Calculate weight_on_invested denominator (sum of executed weights for positions with shares > 0)
     total_invested_weight = float(np.sum(result.executed_weights[result.shares > 0]))
+    deployment_rate = total_invested_weight  # This equals the deployment rate
+    
+    logger.info(f"Weight calculation: deployment_rate={deployment_rate:.4f}, "
+               f"positions_with_shares={np.sum(result.shares > 0)}")
+    logger.info(f"Weight verification: weight_on_budget will sum to {deployment_rate:.4f}, "
+               f"weight_on_invested will sum to 1.0000")
     
     for i, symbol in enumerate(service.optimizer.symbols):
         if result.shares[i] > 0:
