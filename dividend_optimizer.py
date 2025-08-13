@@ -154,6 +154,11 @@ class DividendOptimizationService:
             
             logger.info(f"Data fetch completed: {valid_data_count} stocks, {fallback_count} using fallback yields")
             
+            # Log individual stock details for visibility in logfire
+            for symbol, stock in stocks_data.items():
+                logger.info(f"Stock {symbol}: price=₹{stock.price:.2f}, yield={stock.forward_yield:.2%}, "
+                           f"source={stock.dividend_source}, confidence={stock.dividend_metadata.get('confidence', 'unknown') if stock.dividend_metadata else 'unknown'}")
+            
             if valid_data_count < 2:
                 logger.error(f"Insufficient valid data: only {valid_data_count} stocks")
                 raise APIError(

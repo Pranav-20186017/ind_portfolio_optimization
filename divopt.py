@@ -323,6 +323,40 @@ class ForwardYieldOptimizer:
         
         return self.covariance_matrix
     
+    def _inflate_caps_to_cover_budget(
+        self, caps: np.ndarray, active_mask: np.ndarray, hard_cap: float = 0.40
+    ) -> np.ndarray:
+        """
+        Ensure the sum of active caps is >= 1 so a fully-invested portfolio is feasible.
+        Scales caps proportionally and clips by `hard_cap`.
+        """
+        caps = caps.copy()
+        caps = np.clip(caps, 0.0, hard_cap)
+        total = float(np.sum(caps[active_mask]))
+        if total < 0.999 and total > 0:
+            # Scale to reach exactly 1.0, then clip individual caps at hard_cap
+            scale = 1.0 / total
+            caps_scaled = caps * scale
+            # If any cap exceeds hard_cap after scaling, clip and redistribute
+            if np.any(caps_scaled > hard_cap):
+                caps_scaled = np.minimum(caps_scaled, hard_cap)
+                # Recalculate to ensure we still reach close to 1.0
+                new_total = float(np.sum(caps_scaled[active_mask]))
+                if new_total < 0.999 and new_total > 0:
+                    # Apply a secondary smaller scale to non-maxed caps
+                    remaining_mask = active_mask & (caps_scaled < hard_cap)
+                    if np.any(remaining_mask):
+                        shortfall = 1.0 - new_total
+                        available_capacity = np.sum((hard_cap - caps_scaled)[remaining_mask])
+                        if available_capacity > 0:
+                            additional_scale = min(1.0, shortfall / np.sum(caps_scaled[remaining_mask]))
+                            caps_scaled[remaining_mask] *= (1.0 + additional_scale)
+                            caps_scaled = np.minimum(caps_scaled, hard_cap)
+                caps = caps_scaled
+            else:
+                caps = caps_scaled
+        return caps
+    
     def _effective_caps(self, base_cap: float = 0.15) -> np.ndarray:
         """
         Compute effective caps based on data quality, confidence, and yield validity.
@@ -360,7 +394,12 @@ class ForwardYieldOptimizer:
                     caps[i] = min(caps[i], 0.08)  # Max 8% for irregular payers
         
         # Zero-cap very low yield names (< 0.5%) to reduce noise
-        caps = caps * (self.forward_yields >= 0.005).astype(float)  # 0.5% minimum
+        low_yield_mask = self.forward_yields < 0.005
+        caps[low_yield_mask] = 0.0
+        
+        # Inflate caps to ensure feasible deployment
+        active = caps > 0
+        caps = self._inflate_caps_to_cover_budget(caps, active_mask=active, hard_cap=0.40)
         
         return caps
     
@@ -539,9 +578,9 @@ class ForwardYieldOptimizer:
         portfolio_yield = self.forward_yields @ optimal_weights
         portfolio_risk = np.sqrt(optimal_weights @ self.covariance_matrix @ optimal_weights)
         
-        print(f"Optimal portfolio yield: {portfolio_yield:.4%}")
-        print(f"Portfolio risk (volatility): {portfolio_risk:.4%}")
-        print(f"Number of non-zero weights: {np.sum(optimal_weights > 1e-6)}")
+        logger.info(f"Optimal portfolio yield: {portfolio_yield:.4%}")
+        logger.info(f"Portfolio risk (volatility): {portfolio_risk:.4%}")
+        logger.info(f"Number of non-zero weights: {np.sum(optimal_weights > 1e-6)}")
         
         return optimal_weights
     
@@ -568,7 +607,7 @@ class ForwardYieldOptimizer:
         Returns:
             PortfolioResult with integer shares allocation
         """
-        print(f"Allocating shares with budget: ₹{budget:,.0f}")
+        logger.info(f"Allocating shares with budget: ₹{budget:,.0f}")
         
         n = len(self.symbols)
         
@@ -791,14 +830,14 @@ class ForwardYieldOptimizer:
             yield_on_invested = annual_income / invested if invested > 0 else 0.0
             drift_l1 = np.sum(np.abs(executed_weights - target_weights))
         
-        print(f"Final allocation:")
-        print(f"  Shares bought: {np.sum(shares)} total shares")
-        print(f"  Amount invested: ₹{final_invested:,.0f}")
-        print(f"  Residual cash: ₹{remaining_cash:,.0f} ({remaining_cash/budget:.2%})")
-        print(f"  Portfolio yield (on budget): {portfolio_yield:.4%}")
-        print(f"  Yield on invested amount: {yield_on_invested:.4%}")
-        print(f"  Post-round volatility: {post_vol:.4%}")
-        print(f"  L1 drift from target: {drift_l1:.4%}")
+        logger.info(f"Final allocation:")
+        logger.info(f"  Shares bought: {np.sum(shares)} total shares")
+        logger.info(f"  Amount invested: ₹{final_invested:,.0f}")
+        logger.info(f"  Residual cash: ₹{remaining_cash:,.0f} ({remaining_cash/budget:.2%})")
+        logger.info(f"  Portfolio yield (on budget): {portfolio_yield:.4%}")
+        logger.info(f"  Yield on invested amount: {yield_on_invested:.4%}")
+        logger.info(f"  Post-round volatility: {post_vol:.4%}")
+        logger.info(f"  L1 drift from target: {drift_l1:.4%}")
         
         return PortfolioResult(
             target_weights=target_weights,
@@ -887,16 +926,21 @@ class ForwardYieldOptimizer:
         Phase 1: Maximize income
         Phase 2: Minimize L1 drift to target weights while preserving income
         """
-        print(f"Running exact share-level MILP optimization with budget: ₹{budget:,.0f}")
+        logger.info(f"Running exact share-level MILP optimization with budget: ₹{budget:,.0f}")
         
         n = len(self.symbols)
         
-        # Use consistent cap logic
+        # Use consistent cap logic with inflation
         if individual_caps is None:
             individual_caps = self._effective_caps(base_cap=0.15)
         
+        # Ensure caps are inflated for feasible deployment
+        caps = individual_caps.copy()
+        active = caps > 0
+        caps = self._inflate_caps_to_cover_budget(caps, active_mask=active, hard_cap=0.40)
+        
         # Max shares from caps and budget
-        max_by_cap = np.floor(individual_caps * budget / self.prices).astype(int)
+        max_by_cap = np.floor(caps * budget / self.prices).astype(int)
         max_by_budget = np.floor(budget / self.prices).astype(int)
         U = np.minimum(max_by_cap, max_by_budget)
         U = np.maximum(U, 0)
@@ -916,13 +960,20 @@ class ForwardYieldOptimizer:
         
         # -------- Phase 1: Maximize Income --------
         x = cp.Variable(n, integer=True)
+        s = cp.Variable(n, nonneg=True)  # soft-cap slack (fraction of budget)
+        
+        # Small penalty per unit of slack to prefer staying within caps
+        lambda_slack = 0.05 * float(np.max(self.forward_yields))
         
         constraints = [
             x >= 0,  # Nonnegativity constraint
-            x <= U,
             cp.sum(cp.multiply(self.prices, x)) <= budget,
             cp.sum(cp.multiply(self.prices, x)) >= min_invest_frac * budget,
         ]
+        
+        # Soft cap constraints: allow exceeding caps with penalty
+        for i in range(n):
+            constraints.append(self.prices[i] * x[i] <= (caps[i] + s[i]) * budget)
         
         # Sector constraints
         for sector, cap in (sector_caps or {}).items():
@@ -940,8 +991,8 @@ class ForwardYieldOptimizer:
                 x <= U * z
             ])
         
-        # Phase 1 objective: maximize income
-        objective1 = cp.Maximize(self.forward_dividends @ x)
+        # Phase 1 objective: maximize income - penalty for soft cap violations
+        objective1 = cp.Maximize(self.forward_dividends @ x - lambda_slack * budget * cp.sum(s))
         problem1 = cp.Problem(objective1, constraints)
         
         # Solve Phase 1
@@ -968,17 +1019,21 @@ class ForwardYieldOptimizer:
         x_phase1 = np.round(np.maximum(0, x.value)).astype(int)
         income_star = float(self.forward_dividends @ x_phase1)
         
-        print(f"Phase 1 complete: optimal income = ₹{income_star:,.2f}")
+        logger.info(f"Phase 1 complete: optimal income = ₹{income_star:,.2f}")
         
         # -------- Phase 2: Minimize L1 drift while preserving income --------
         t = cp.Variable(n, nonneg=True)  # absolute deviation auxiliaries
+        # Reuse slack variables from Phase 1
         
         constraints2 = [
-            x <= U,
             cp.sum(cp.multiply(self.prices, x)) <= budget,
             cp.sum(cp.multiply(self.prices, x)) >= min_invest_frac * budget,
             self.forward_dividends @ x >= income_star - epsilon_income,  # Preserve income
         ]
+        
+        # Soft cap constraints (same as Phase 1)
+        for i in range(n):
+            constraints2.append(self.prices[i] * x[i] <= (caps[i] + s[i]) * budget)
         
         # Sector constraints (same as Phase 1)
         for sector, cap in (sector_caps or {}).items():
@@ -1022,10 +1077,10 @@ class ForwardYieldOptimizer:
         # Use Phase 2 solution if successful, otherwise fallback to Phase 1
         if solved2:
             shares = np.round(np.maximum(0, x.value)).astype(int)
-            print("Phase 2 complete: optimized for closeness to target weights")
+            logger.info("Phase 2 complete: optimized for closeness to target weights")
         else:
             shares = x_phase1
-            print("Phase 2 failed: using Phase 1 solution (income-optimal)")
+            logger.info("Phase 2 failed: using Phase 1 solution (income-optimal)")
         
         # Calculate final metrics
         final_invested = np.sum(shares * self.prices)
@@ -1041,14 +1096,14 @@ class ForwardYieldOptimizer:
         w_exec = (shares * self.prices) / invested if invested > 0 else np.zeros_like(self.prices)
         post_vol = float(np.sqrt(w_exec @ self.covariance_matrix @ w_exec))
         
-        print(f"Exact MILP solution:")
-        print(f"  Shares bought: {np.sum(shares)} total shares")
-        print(f"  Amount invested: ₹{final_invested:,.0f}")
-        print(f"  Residual cash: ₹{remaining_cash:,.0f} ({remaining_cash/budget:.2%})")
-        print(f"  Portfolio yield (on budget): {portfolio_yield:.4%}")
-        print(f"  Yield on invested amount: {yield_on_invested:.4%}")
-        print(f"  Post-round volatility: {post_vol:.4%}")
-        print(f"  L1 drift from target: {drift_l1:.4%}")
+        logger.info(f"Exact MILP solution:")
+        logger.info(f"  Shares bought: {np.sum(shares)} total shares")
+        logger.info(f"  Amount invested: ₹{final_invested:,.0f}")
+        logger.info(f"  Residual cash: ₹{remaining_cash:,.0f} ({remaining_cash/budget:.2%})")
+        logger.info(f"  Portfolio yield (on budget): {portfolio_yield:.4%}")
+        logger.info(f"  Yield on invested amount: {yield_on_invested:.4%}")
+        logger.info(f"  Post-round volatility: {post_vol:.4%}")
+        logger.info(f"  L1 drift from target: {drift_l1:.4%}")
         
         return PortfolioResult(
             target_weights=target_weights,
@@ -1093,13 +1148,13 @@ class ForwardYieldOptimizer:
             max_g=thresholds.get("g_max", 0.10)
         )
         
-        print(f"Granularity check:")
-        print(f"  Expected shares: {granularity['N_target']:.1f}")
-        print(f"  Max granularity: {granularity['g_max']:.2%}")
-        print(f"  Method: {'Exact MILP' if use_milp else 'Greedy allocation'}")
+        logger.info(f"Granularity check:")
+        logger.info(f"  Expected shares: {granularity['N_target']:.1f}")
+        logger.info(f"  Max granularity: {granularity['g_max']:.2%}")
+        logger.info(f"  Method: {'Exact MILP' if use_milp else 'Greedy allocation'}")
         
         if use_milp:
-            print("\nUsing exact share-level optimization due to budget/price granularity")
+            logger.info("Using exact share-level optimization due to budget/price granularity")
             return self.solve_income_milp(
                 target_weights=target_weights,
                 budget=budget,
@@ -1111,7 +1166,7 @@ class ForwardYieldOptimizer:
                 verbose=verbose
             )
         else:
-            print("\nUsing fast greedy allocation")
+            logger.info("Using fast greedy allocation")
             greedy_res = self.allocate_shares_greedy(
                 target_weights=target_weights,
                 budget=budget,
@@ -1126,7 +1181,7 @@ class ForwardYieldOptimizer:
             thresholds = thresholds or self.dynamic_thresholds(budget)
             deploy = 1.0 - (greedy_res.residual_cash / budget)
             if deploy + 1e-9 < float(thresholds.get("min_deploy", 0.95)):
-                print(
+                logger.info(
                     f"Under-deployment detected ({deploy:.2%} < "
                     f"{thresholds.get('min_deploy', 0.95):.2%}). Escalating to MILP…"
                 )

@@ -231,7 +231,8 @@ class DividendAllocationResult(BaseModel):
     shares: int
     price: float
     value: float
-    weight: float
+    weight: float               # weight on budget (backward compatible)
+    weight_on_invested: float   # new: sums to 1 across holdings
     target_weight: float
     forward_yield: float
     annual_income: float

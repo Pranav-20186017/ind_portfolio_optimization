@@ -3113,6 +3113,7 @@ class TestPortfolioOptimization(unittest.TestCase):
             price=416.35,
             value=41635.0,
             weight=0.041635,
+            weight_on_invested=0.0485,  # Added the new required field
             target_weight=0.042,
             forward_yield=0.045,
             annual_income=1873.58
@@ -3345,8 +3346,24 @@ class TestPortfolioOptimization(unittest.TestCase):
         # Low confidence should get lower cap (up to 8%)
         # Fallback should get very low cap (up to 5%)
         
-        self.assertTrue(np.all(caps <= 0.15))  # All caps should be <= 15%
+        # NOTE: Caps may exceed 15% due to cap inflation feature that ensures feasible deployment
+        # This is expected behavior when original caps sum < 100%
+        self.assertTrue(np.all(caps <= 0.40))  # All caps should be <= 40% (hard cap ceiling)
         self.assertTrue(np.all(caps >= 0))     # All caps should be >= 0%
+        
+        # Check that total caps are feasible for deployment (should be much higher than original)
+        active_caps = caps[caps > 0]
+        if len(active_caps) > 0:
+            total_caps = np.sum(active_caps)
+            # With cap inflation, should get close to 100% coverage (allowing some numerical precision)
+            self.assertGreaterEqual(total_caps, 0.995)  # Should allow near-full deployment
+            
+            # Log the actual caps for debugging
+            print(f"Cap inflation test - Total active caps: {total_caps:.4f}")
+            for i, cap in enumerate(caps):
+                if cap > 0:
+                    symbol = list(mixed_confidence_stocks.keys())[i]
+                    print(f"  {symbol}: {cap:.4f}")
         
         # Check that different confidence levels get different caps
         unique_caps = len(set(caps))

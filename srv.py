@@ -72,7 +72,7 @@ from data import (
 )
 from signals import build_technical_scores, TECHNICAL_INDICATORS
 from settings import settings
-from dividend_optimizer import DividendOptimizationService
+# Note: dividend_optimizer import moved to after logging configuration
 
 # Custom JSON encoder to handle NaN, Infinity, etc.
 class CustomJSONEncoderMeta(type):
@@ -563,8 +563,19 @@ if not is_testing:
     lf_handler = logfire.LogfireLoggingHandler()
     lf_handler.setLevel(logging.INFO)
     lf_handler.setFormatter(formatter)
-    logger.addHandler(lf_handler)
-    root_logger.addHandler(lf_handler)
+    
+    # Add logfire handler to key loggers
+    key_loggers = [
+        root_logger,
+        logger,
+        logging.getLogger("dividend_optimizer"),  # Dividend optimization service
+        logging.getLogger("divopt"),              # Core dividend optimizer
+    ]
+    
+    for key_logger in key_loggers:
+        key_logger.addHandler(lf_handler)
+        key_logger.setLevel(logging.INFO)
+        
 else:
     # Add a simple StreamHandler for testing
     console_handler = logging.StreamHandler()
@@ -574,12 +585,25 @@ else:
         datefmt="%Y-%m-%d %H:%M:%S"
     )
     console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    root_logger.addHandler(console_handler)
+    
+    # Add console handler to key loggers
+    key_loggers = [
+        root_logger,
+        logger,
+        logging.getLogger("dividend_optimizer"),
+        logging.getLogger("divopt"),
+    ]
+    
+    for key_logger in key_loggers:
+        key_logger.addHandler(console_handler)
+        key_logger.setLevel(logging.INFO)
 
 # Prevent double-logging up the hierarchy
 logger.propagate = False
 # ──────────────────────────────────────────────────────────────────────────────
+
+# Import dividend optimization after logging is configured
+from dividend_optimizer import DividendOptimizationService
 
 from io import StringIO
 warnings.filterwarnings("ignore")
@@ -2688,14 +2712,22 @@ def _build_dividend_response(
     
     # Build allocations (only non-zero positions)
     allocations = []
+    
+    # Calculate weight_on_invested denominator (sum of executed weights for positions with shares > 0)
+    total_invested_weight = float(np.sum(result.executed_weights[result.shares > 0]))
+    
     for i, symbol in enumerate(service.optimizer.symbols):
         if result.shares[i] > 0:
+            weight = float(result.executed_weights[i])  # weight on budget
+            weight_on_invested = float(result.executed_weights[i] / max(1e-12, total_invested_weight))  # weight on invested
+            
             allocations.append(DividendAllocationResult(
                 symbol=symbol,
                 shares=int(result.shares[i]),
                 price=float(service.optimizer.prices[i]),
                 value=float(result.shares[i] * service.optimizer.prices[i]),
-                weight=float(result.executed_weights[i]),
+                weight=weight,
+                weight_on_invested=weight_on_invested,
                 target_weight=float(result.target_weights[i]),
                 forward_yield=float(service.optimizer.forward_yields[i]),
                 annual_income=float(result.shares[i] * service.optimizer.forward_dividends[i])
