@@ -64,6 +64,7 @@ class DividendOptimizationMethod(str, Enum):
     AUTO = "AUTO"          # Intelligent greedy/MILP selection
     GREEDY = "GREEDY"      # Fast round-repair 
     MILP = "MILP"          # Exact share-level optimization
+    AGGRESSIVE = "AGGRESSIVE"  # Maximum deployment with relaxed constraints
 
 # New enum for CLA sub-methods
 class CLAOptimizationMethod(str, Enum):

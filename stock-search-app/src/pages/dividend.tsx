@@ -67,6 +67,11 @@ const dividendMethodOptions = [
     value: DividendOptimizationMethod.MILP,
     description: 'Exact mixed-integer linear programming optimization (slower but optimal)'
   },
+  { 
+    label: 'AGGRESSIVE (Max Deployment)', 
+    value: DividendOptimizationMethod.AGGRESSIVE,
+    description: 'Prioritizes maximum capital deployment with relaxed constraints - deploys 95%+ of budget'
+  },
 ];
 
 const DividendOptimizer: React.FC = () => {
@@ -832,6 +837,9 @@ const DividendOptimizer: React.FC = () => {
                     <Typography><strong>Total Budget:</strong> {formatCurrency(optimizationResult.total_budget)}</Typography>
                     <Typography><strong>Amount Invested:</strong> {formatCurrency(optimizationResult.amount_invested)}</Typography>
                     <Typography><strong>Residual Cash:</strong> {formatCurrency(optimizationResult.residual_cash)}</Typography>
+                    <Typography sx={{ color: optimizationResult.amount_invested / optimizationResult.total_budget >= 0.95 ? 'green' : 'orange' }}>
+                      <strong>Deployment Rate:</strong> {formatPercentage(optimizationResult.amount_invested / optimizationResult.total_budget)}
+                    </Typography>
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <Typography><strong>Portfolio Yield:</strong> {formatPercentage(optimizationResult.portfolio_yield)}</Typography>
@@ -860,7 +868,16 @@ const DividendOptimizer: React.FC = () => {
                       <TableCell align="right" sx={{ fontWeight: 'bold' }}>Shares</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'bold' }}>Price</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'bold' }}>Value</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Weight</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                        <Tooltip title="Weight as % of total budget">
+                          <span>Weight</span>
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                        <Tooltip title="Weight as % of invested amount">
+                          <span>Weight (Inv)</span>
+                        </Tooltip>
+                      </TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'bold' }}>Yield</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'bold' }}>Annual Income</TableCell>
                     </TableRow>
@@ -876,6 +893,9 @@ const DividendOptimizer: React.FC = () => {
                           <TableCell align="right">{formatCurrency(allocation.value)}</TableCell>
                           <TableCell align="right" sx={{ fontWeight: allocation.weight > 0.1 ? 'bold' : 'normal' }}>
                             {formatPercentage(allocation.weight)}
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: (allocation.weight_on_invested || allocation.weight) > 0.1 ? 'bold' : 'normal', color: '#2e8b57' }}>
+                            {formatPercentage(allocation.weight_on_invested || allocation.weight)}
                           </TableCell>
                           <TableCell align="right">{formatPercentage(allocation.forward_yield)}</TableCell>
                           <TableCell align="right">{formatCurrency(allocation.annual_income)}</TableCell>

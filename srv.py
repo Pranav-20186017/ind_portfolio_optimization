@@ -2671,7 +2671,7 @@ async def optimize_dividend_portfolio(
         # Step 7: Allocate shares with normalized caps from QP (sync → threadpool)
         # CRITICAL FIX: Use the same normalized effective caps from the QP stage for shares
         effective_caps = await run_in_threadpool(
-            lambda: service.optimizer._effective_caps(base_cap=0.15)
+            lambda: service.optimizer._effective_caps(base_cap=0.25)
         )
         
         result = await run_in_threadpool(

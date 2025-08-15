@@ -341,10 +341,11 @@ class ForwardYieldOptimizer:
         
         return caps
     
-    def _effective_caps(self, base_cap: float = 0.15) -> np.ndarray:
+    def _effective_caps(self, base_cap: float = 0.25) -> np.ndarray:
         """
         Compute effective caps based on data quality, confidence, and yield validity.
         Uses sophisticated dividend metadata for precise confidence assessment.
+        INCREASED base_cap from 0.15 to 0.25 for better capital deployment.
         """
         caps = np.full(len(self.symbols), base_cap)
         
@@ -357,33 +358,36 @@ class ForwardYieldOptimizer:
                 confidence = metadata.get('confidence', 'low')
                 
                 # Primary adjustment based on confidence from cadence analysis
+                # INCREASED all caps for better deployment
                 if confidence == 'very_low':
-                    caps[i] = min(caps[i], 0.03)  # Max 3% for very low confidence
+                    caps[i] = min(caps[i], 0.08)  # Max 8% for very low confidence (was 3%)
                 elif confidence == 'low':
-                    caps[i] = min(caps[i], 0.05)  # Max 5% for low confidence
+                    caps[i] = min(caps[i], 0.12)  # Max 12% for low confidence (was 5%)
                 elif confidence == 'medium':
-                    caps[i] = min(caps[i], 0.12)  # Max 12% for medium confidence (relaxed from 10%)
-                # high confidence keeps base_cap (15%)
+                    caps[i] = min(caps[i], 0.20)  # Max 20% for medium confidence (was 12%)
+                # high confidence keeps base_cap (now 25%)
                 
                 # Secondary adjustment based on data source
+                # INCREASED for better deployment
                 if source == 'fallback':
-                    caps[i] = min(caps[i], 0.05)  # Max 5% for fallback data
+                    caps[i] = min(caps[i], 0.10)  # Max 10% for fallback data (was 5%)
                 elif source == 'info':
-                    caps[i] = min(caps[i], 0.08)  # Max 8% for info data (often unreliable)
+                    caps[i] = min(caps[i], 0.15)  # Max 15% for info data (was 8%)
                 
                 # Additional adjustment for irregular dividend patterns
+                # INCREASED for better deployment
                 if metadata.get('cv', 0) > 0.6:  # Very irregular
-                    caps[i] = min(caps[i], 0.06)  # Max 6% for very irregular payers
+                    caps[i] = min(caps[i], 0.12)  # Max 12% for very irregular payers (was 6%)
                 elif not metadata.get('regular', True):  # Irregular but not too bad
-                    caps[i] = min(caps[i], 0.08)  # Max 8% for irregular payers
+                    caps[i] = min(caps[i], 0.15)  # Max 15% for irregular payers (was 8%)
         
         # Reduce caps for very low yield names (< 0.5%) but don't zero them completely
-        # Keep small caps for emergency cash deployment in share allocation
+        # Keep reasonable caps for emergency cash deployment in share allocation
         low_yield_mask = self.forward_yields < 0.005
-        caps[low_yield_mask] = np.minimum(caps[low_yield_mask], 0.01)  # Max 1% for emergency use
+        caps[low_yield_mask] = np.minimum(caps[low_yield_mask], 0.05)  # Max 5% for emergency use (was 1%)
         
         # Normalize caps to ensure feasible deployment (sum ≥ 1.0)
-        caps = self._normalize_caps_to_cover_budget(caps, hard_cap=0.40)
+        caps = self._normalize_caps_to_cover_budget(caps, hard_cap=0.50)  # Increased hard cap to 50%
         
         return caps
     
@@ -466,7 +470,7 @@ class ForwardYieldOptimizer:
         LOW_YIELD_FLOOR = 0.005  # 0.5%
         
         if individual_caps is None:
-            effective_caps = self._effective_caps(base_cap=0.15)
+            effective_caps = self._effective_caps(base_cap=0.25)
             
             # Report cap adjustments
             for i, symbol in enumerate(self.symbols):
@@ -600,7 +604,7 @@ class ForwardYieldOptimizer:
         
         # Use consistent cap logic
         if individual_caps is None:
-            individual_caps = self._effective_caps(base_cap=0.15)
+            individual_caps = self._effective_caps(base_cap=0.25)
             
         # Step 1: Floor to lots (1 share = 1 lot for equity)
         max_shares_by_cap = np.floor(individual_caps * budget / self.prices).astype(int)
@@ -722,8 +726,8 @@ class ForwardYieldOptimizer:
             
             iteration += 1
             
-            # Check residual threshold
-            if remaining_cash / budget <= residual_threshold:
+            # Check residual threshold - made much smaller for better deployment
+            if remaining_cash / budget <= residual_threshold * 0.1:  # 0.05% instead of 0.5%
                 break
         
         # === Progressive Slack Cash-sweep: Never stall with large residual ===
@@ -739,12 +743,12 @@ class ForwardYieldOptimizer:
                                        out=np.zeros_like(self.prices), where=self.prices > 0)
             order_by_yield = np.argsort(-income_per_rupee)  # Descending order
             
-            # Progressive slack parameters
-            caps_base = individual_caps if individual_caps is not None else self._effective_caps()
+            # Progressive slack parameters - MORE AGGRESSIVE for better deployment
+            caps_base = individual_caps if individual_caps is not None else self._effective_caps(base_cap=0.25)
             slack = 1.00        # Start at no slack
-            max_slack = 1.15    # Allow up to +15% over name caps to finish deployment
+            max_slack = 2.00    # Allow up to +100% over name caps to finish deployment
             no_progress_passes = 0
-            max_passes = 3      # Maximum passes without progress before giving up
+            max_passes = 10     # Many more passes to try harder
             
             while remaining_cash >= np.min(self.prices) and no_progress_passes < max_passes:
                 bought = False
@@ -783,8 +787,8 @@ class ForwardYieldOptimizer:
                     # No progress at current slack level
                     no_progress_passes += 1
                     if slack < max_slack:
-                        slack = min(slack * 1.05, max_slack)  # Increase slack by 5%
-                        logger.info(f"No progress at slack {slack/1.05:.2f}, increasing to {slack:.2f}")
+                        slack = min(slack * 1.15, max_slack)  # Increase slack by 15% (much more aggressive)
+                        logger.info(f"No progress at slack {slack/1.15:.2f}, increasing to {slack:.2f}")
                     else:
                         logger.info(f"Reached max slack {max_slack:.2f}, no more purchases possible")
                         break
@@ -843,6 +847,132 @@ class ForwardYieldOptimizer:
             residual_cash=remaining_cash,
             drift_l1=drift_l1,
             allocation_method="Greedy (floor-repair)"
+        )
+    
+    def allocate_shares_aggressive(self,
+                                  target_weights: np.ndarray,
+                                  budget: float,
+                                  individual_caps: Optional[np.ndarray] = None,
+                                  sector_caps: Optional[Dict[str, float]] = None,
+                                  sector_mapping: Optional[Dict[str, str]] = None,
+                                  min_names: Optional[int] = None,
+                                  seed: Optional[int] = 42) -> PortfolioResult:
+        """
+        AGGRESSIVE allocation method that prioritizes deployment over everything else.
+        This method will deploy as much capital as possible, even if it means deviating
+        significantly from target weights.
+        """
+        logger.info(f"AGGRESSIVE allocation with budget: ₹{budget:,.0f}")
+        
+        n = len(self.symbols)
+        shares = np.zeros(n, dtype=int)
+        
+        # Use very relaxed caps for aggressive deployment
+        if individual_caps is None:
+            individual_caps = np.full(n, 0.40)  # 40% cap per position
+        else:
+            # Relax provided caps by 50%
+            individual_caps = np.minimum(individual_caps * 1.5, 0.5)
+        
+        # Sort stocks by a combination of yield and price efficiency
+        # Prefer high yield but also consider price granularity
+        price_efficiency = self.prices / budget  # Lower is better for deployment
+        # Combine yield (higher better) with inverse price efficiency
+        scores = self.forward_yields / (price_efficiency + 0.001)
+        order = np.argsort(-scores)  # Descending order
+        
+        remaining_cash = budget
+        
+        # First pass: Buy at least 1 share of top stocks until min_names met
+        if min_names and min_names > 0:
+            for i in order:
+                if np.sum(shares > 0) >= min_names:
+                    break
+                if self.prices[i] <= remaining_cash:
+                    shares[i] = 1
+                    remaining_cash -= self.prices[i]
+        
+        # Second pass: Greedily fill with highest yield stocks, ignoring most constraints
+        for _ in range(1000):  # Max iterations
+            if remaining_cash < np.min(self.prices):
+                break
+                
+            # Find best stock to buy more of
+            best_idx = -1
+            best_score = -1
+            
+            for i in order:
+                if self.prices[i] > remaining_cash:
+                    continue
+                    
+                # Check if we're not exceeding the relaxed cap
+                current_weight = (shares[i] * self.prices[i]) / budget
+                new_weight = current_weight + (self.prices[i] / budget)
+                
+                if new_weight > individual_caps[i]:
+                    continue
+                
+                # Simple scoring: just use yield
+                score = self.forward_yields[i]
+                
+                if score > best_score:
+                    best_score = score
+                    best_idx = i
+            
+            if best_idx == -1:
+                # No valid stock found, try to buy ANY stock we can afford
+                for i in range(n):
+                    if self.prices[i] <= remaining_cash:
+                        shares[i] += 1
+                        remaining_cash -= self.prices[i]
+                        break
+                else:
+                    break  # Can't buy anything
+            else:
+                shares[best_idx] += 1
+                remaining_cash -= self.prices[best_idx]
+        
+        # Final aggressive sweep: Buy cheapest stocks repeatedly until cash exhausted
+        cheapest_indices = np.argsort(self.prices)
+        sweep_iterations = 0
+        max_sweep = 100
+        
+        while remaining_cash >= np.min(self.prices) and sweep_iterations < max_sweep:
+            bought_any = False
+            for i in cheapest_indices:
+                if self.prices[i] <= remaining_cash:
+                    # Just buy it, ignore caps for final sweep
+                    shares[i] += 1
+                    remaining_cash -= self.prices[i]
+                    bought_any = True
+                    break
+            
+            if not bought_any:
+                break
+            sweep_iterations += 1
+        
+        # Calculate metrics
+        final_invested = np.sum(shares * self.prices)
+        executed_weights = (shares * self.prices) / budget
+        annual_income = np.sum(self.forward_dividends * shares)
+        portfolio_yield = annual_income / budget
+        drift_l1 = np.sum(np.abs(executed_weights - target_weights))
+        
+        logger.info(f"AGGRESSIVE allocation results:")
+        logger.info(f"  Deployment rate: {final_invested/budget:.2%}")
+        logger.info(f"  Residual cash: ₹{remaining_cash:,.0f}")
+        logger.info(f"  Positions: {np.sum(shares > 0)}")
+        logger.info(f"  Portfolio yield: {portfolio_yield:.4%}")
+        
+        return PortfolioResult(
+            target_weights=target_weights,
+            shares=shares,
+            executed_weights=executed_weights,
+            annual_income=annual_income,
+            portfolio_yield=portfolio_yield,
+            residual_cash=remaining_cash,
+            drift_l1=drift_l1,
+            allocation_method="Aggressive Deployment"
         )
     
     def preflight_granularity(self, budget: float, w_star: Optional[np.ndarray] = None, 
@@ -928,7 +1058,7 @@ class ForwardYieldOptimizer:
         
         # Use consistent cap logic with inflation
         if individual_caps is None:
-            individual_caps = self._effective_caps(base_cap=0.15)
+            individual_caps = self._effective_caps(base_cap=0.25)
         
         # Ensure caps are normalized for feasible deployment
         caps = individual_caps.copy()
@@ -1422,7 +1552,7 @@ class ForwardYieldOptimizer:
         
         # Use consistent cap logic
         if individual_caps is None:
-            individual_caps = self._effective_caps(base_cap=0.15)
+            individual_caps = self._effective_caps(base_cap=0.25)
             
         # Decision variables
         x = cp.Variable(n, integer=True)  # shares

@@ -202,7 +202,8 @@ export interface BenchmarkReturn {
 export enum DividendOptimizationMethod {
   AUTO = "AUTO",          // Intelligent greedy/MILP selection
   GREEDY = "GREEDY",      // Fast round-repair 
-  MILP = "MILP"           // Exact share-level optimization
+  MILP = "MILP",          // Exact share-level optimization
+  AGGRESSIVE = "AGGRESSIVE" // Maximum deployment with relaxed constraints
 }
 
 export interface DividendOptimizationRequest {
@@ -233,6 +234,7 @@ export interface DividendAllocationResult {
   price: number;
   value: number;
   weight: number;
+  weight_on_invested?: number;  // Weight as % of invested amount (vs total budget)
   target_weight: number;
   forward_yield: number;
   annual_income: number;

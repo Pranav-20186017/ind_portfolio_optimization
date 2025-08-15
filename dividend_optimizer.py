@@ -426,6 +426,17 @@ class DividendOptimizationService:
                     min_names=min_names,
                     seed=seed
                 )
+            elif method == "AGGRESSIVE":
+                # Use aggressive allocation for maximum deployment
+                result = self.optimizer.allocate_shares_aggressive(
+                    target_weights=target_weights,
+                    budget=budget,
+                    individual_caps=individual_caps,
+                    sector_caps=sector_caps,
+                    sector_mapping=sector_mapping,
+                    min_names=min_names,
+                    seed=seed
+                )
             elif method == "MILP":
                 result = self.optimizer.solve_income_milp(
                     target_weights=target_weights,
@@ -440,7 +451,7 @@ class DividendOptimizationService:
                 raise APIError(
                     code=ErrorCode.INVALID_OPTIMIZATION_METHOD,
                     message=f"Invalid allocation method: {method}",
-                    details={"valid_methods": ["AUTO", "GREEDY", "MILP"]}
+                    details={"valid_methods": ["AUTO", "GREEDY", "AGGRESSIVE", "MILP"]}
                 )
             
             # Log allocation results
@@ -483,7 +494,7 @@ class DividendOptimizationService:
             return None
         elif not caps_dict:
             # Return default caps array for empty dict
-            return np.array([0.15] * len(symbols))
+            return np.array([0.25] * len(symbols))  # Increased from 0.15 for better deployment
         
         # Validate caps values
         for symbol, cap in caps_dict.items():
@@ -503,7 +514,7 @@ class DividendOptimizationService:
                     details={"symbol": symbol, "cap": cap, "valid_range": "0.0 to 1.0"}
                 )
         
-        caps_array = np.array([caps_dict.get(symbol, 0.15) for symbol in symbols])
+        caps_array = np.array([caps_dict.get(symbol, 0.25) for symbol in symbols])  # Default 0.25 for better deployment
         logger.debug(f"Converted individual caps for {len(symbols)} symbols")
         return caps_array
     
