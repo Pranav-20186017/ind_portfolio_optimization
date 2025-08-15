@@ -20,7 +20,8 @@ class Settings(BaseSettings):
 
     # CORS Origins
     allowed_origins: list[AnyHttpUrl] = Field(
-        ["https://indportfoliooptimization.vercel.app"],
+        ["https://indportfoliooptimization.vercel.app",
+         "https://indportfoliooptimization.vercel.app/dividend"],
         env="ALLOWED_ORIGINS"
     )
     
