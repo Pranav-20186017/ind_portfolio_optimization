@@ -313,7 +313,7 @@ const DividendOptimizer: React.FC = () => {
     };
     
     try {
-      const response = await axios.post('http://localhost:8000/dividend-optimize', dataToSend);
+      const response = await axios.post('https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/dividend-optimize', dataToSend);
       console.log('Backend response:', response.data);
       const result = response.data as DividendOptimizationResponse;
       setOptimizationResult(result);
