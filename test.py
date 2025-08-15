@@ -3205,7 +3205,7 @@ class TestPortfolioOptimization(unittest.TestCase):
         symbols = ["ITC.NS", "HDFCBANK.NS", "RELIANCE.NS"]
         
         caps_array = service.convert_individual_caps(caps_dict, symbols)
-        expected = np.array([0.1, 0.15, 0.15])  # Default 0.15 for missing symbol
+        expected = np.array([0.1, 0.15, 0.25])  # Default 0.25 for missing symbol (improved deployment)
         np.testing.assert_array_equal(caps_array, expected)
         
         # Test with None caps
@@ -3214,7 +3214,7 @@ class TestPortfolioOptimization(unittest.TestCase):
         
         # Test with empty dict
         caps_array_empty = service.convert_individual_caps({}, symbols)
-        expected_empty = np.array([0.15, 0.15, 0.15])  # All defaults
+        expected_empty = np.array([0.25, 0.25, 0.25])  # All defaults (0.25 for better deployment)
         np.testing.assert_array_equal(caps_array_empty, expected_empty)
         
         print("✅ Dividend caps conversion logic test passed")
