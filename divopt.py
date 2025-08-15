@@ -32,6 +32,47 @@ class EntropyYieldResult:
     last_close: Dict[str, float]
     start_date: pd.Timestamp
     end_date: pd.Timestamp
+    
+    def calculate_shares(self, budget: float) -> Dict[str, int]:
+        """Calculate integer number of shares for a given budget."""
+        shares = {}
+        remaining_budget = budget
+        
+        # Sort by weight descending to allocate to largest positions first
+        sorted_stocks = sorted(self.weights.items(), key=lambda x: x[1], reverse=True)
+        
+        for ticker, weight in sorted_stocks:
+            if ticker in self.last_close and self.last_close[ticker] > 0:
+                price = self.last_close[ticker]
+                target_value = budget * weight
+                target_shares = target_value / price
+                
+                # Floor to get integer shares
+                actual_shares = int(target_shares)
+                
+                # Check if we can afford these shares
+                cost = actual_shares * price
+                if cost <= remaining_budget:
+                    shares[ticker] = actual_shares
+                    remaining_budget -= cost
+                else:
+                    # Buy as many shares as we can afford
+                    affordable_shares = int(remaining_budget / price)
+                    if affordable_shares > 0:
+                        shares[ticker] = affordable_shares
+                        remaining_budget -= affordable_shares * price
+            else:
+                shares[ticker] = 0
+                
+        return shares
+    
+    def calculate_invested_amount(self, shares: Dict[str, int]) -> float:
+        """Calculate total amount invested based on share allocation."""
+        total = 0.0
+        for ticker, num_shares in shares.items():
+            if ticker in self.last_close and self.last_close[ticker] > 0:
+                total += num_shares * self.last_close[ticker]
+        return total
 
 
 class EntropyYieldOptimizer:
@@ -53,6 +94,10 @@ class EntropyYieldOptimizer:
         if prices.empty or prices.shape[1] != len(self.tickers):
             raise ValueError("No overlapping 'Close' history across all tickers.")
 
+        # Ensure index is timezone-naive
+        if prices.index.tz is not None:
+            prices.index = prices.index.tz_localize(None)
+        
         ttm_yield, last_close = self._compute_ttm_yields(prices.index[-1])
 
         rets = prices.pct_change().dropna()
@@ -86,11 +131,16 @@ class EntropyYieldOptimizer:
     # ---------- internals ----------
     def _download_close_matrix(self, tickers: List[str], lookback_days: int) -> pd.DataFrame:
         end = pd.Timestamp.today().normalize()
+        # Ensure timezone-naive
+        if end.tz is not None:
+            end = end.tz_localize(None)
+        
         start = end - pd.Timedelta(days=int(lookback_days * 1.4))  # pad for holidays
+        
         df = yf.download(
             tickers,
-            start=start.tz_localize(None),
-            end=end.tz_localize(None),
+            start=start,
+            end=end,
             auto_adjust=False,             # IMPORTANT: use raw 'Close'
             progress=False,
             group_by="column",
@@ -108,8 +158,12 @@ class EntropyYieldOptimizer:
         return pd.DataFrame()
 
     def _compute_ttm_yields(self, ref_date: pd.Timestamp) -> Tuple[pd.Series, pd.Series]:
-        start_div = (ref_date - pd.Timedelta(days=365*5)).tz_localize(None)
-        end_div = ref_date.tz_localize(None)
+        # Ensure ref_date is timezone-naive
+        if ref_date.tz is not None:
+            ref_date = ref_date.tz_localize(None)
+        
+        start_div = (ref_date - pd.Timedelta(days=365*5))
+        end_div = ref_date
 
         last_prices = yf.download(
             self.tickers,
@@ -136,6 +190,9 @@ class EntropyYieldOptimizer:
                 ttm = 0.0 if self.cfg.drop_na_dividends_to_zero else np.nan
             else:
                 div = div.sort_index()
+                # Ensure dividend index is timezone-naive for comparison
+                if div.index.tz is not None:
+                    div.index = div.index.tz_localize(None)
                 div = div[(div.index >= start_div) & (div.index <= end_div)]
                 if div.empty:
                     ttm = 0.0

@@ -41,6 +41,7 @@ import Alert from '@mui/material/Alert';
 import Slider from '@mui/material/Slider';
 import Switch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import InputAdornment from '@mui/material/InputAdornment';
 
 // Import TopNav component
 import TopNav from '../components/TopNav';
@@ -53,7 +54,8 @@ const DividendOptimizer: React.FC = () => {
   const [filteredOptions, setFilteredOptions] = useState<StockOption[]>([]);
   const [selectedExchange, setSelectedExchange] = useState<ExchangeEnum | null>(null);
   
-  // New optimization parameters
+  // Investment and optimization parameters
+  const [budget, setBudget] = useState<string>('1000000'); // Default 10L
   const [entropyWeight, setEntropyWeight] = useState<number>(0.05);
   const [volCap, setVolCap] = useState<number | null>(null);
   const [useVolCap, setUseVolCap] = useState<boolean>(false);
@@ -192,6 +194,7 @@ const DividendOptimizer: React.FC = () => {
     
     const dataToSend: DividendOptRequest = {
       stocks: selectedStocks.map((s) => ({ ticker: s.ticker, exchange: s.exchange as ExchangeEnum })),
+      budget: budget ? parseFloat(budget) : undefined,
       entropy_weight: entropyWeight,
       vol_cap: useVolCap && volCap ? volCap : undefined,
       use_median_ttm: useMedianTtm
@@ -231,6 +234,7 @@ const DividendOptimizer: React.FC = () => {
   const handleReset = () => {
     setSelectedStocks([]);
     setInputValue('');
+    setBudget('1000000');
     setEntropyWeight(0.05);
     setVolCap(null);
     setUseVolCap(false);
@@ -374,7 +378,7 @@ const DividendOptimizer: React.FC = () => {
         </Box>
       </Card>
 
-      {/* Optimization Parameters */}
+      {/* Investment & Optimization Parameters */}
       <Card sx={{ 
         maxWidth: 900, 
         mx: 'auto', 
@@ -384,10 +388,26 @@ const DividendOptimizer: React.FC = () => {
         pointerEvents: selectedExchange ? 'auto' : 'none'
       }}>
         <Typography variant="h6" component="h2" gutterBottom sx={{ fontWeight: 600 }}>
-          Optimization Parameters
+          Investment & Optimization Parameters
         </Typography>
         
         <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Investment Budget (Optional)"
+              type="number"
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              variant="outlined"
+              InputProps={{
+                startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                inputProps: { min: 0, step: 10000 }
+              }}
+              helperText="Enter amount to see share allocation. Leave empty for weights only."
+            />
+          </Grid>
+          
           <Grid item xs={12}>
             <Typography gutterBottom>
               Entropy Weight (λ): {entropyWeight.toFixed(2)}
@@ -558,15 +578,71 @@ const DividendOptimizer: React.FC = () => {
                     <Typography><strong>Portfolio Yield:</strong> {formatPercentage(optimizationResult.portfolio_yield)}</Typography>
                     <Typography><strong>Entropy (Diversification):</strong> {optimizationResult.entropy.toFixed(3)}</Typography>
                     <Typography><strong>Effective N:</strong> {optimizationResult.effective_n.toFixed(2)} stocks</Typography>
+                    <Typography><strong>Annual Volatility:</strong> {formatPercentage(Math.sqrt(optimizationResult.realized_variance))}</Typography>
                   </Grid>
                   <Grid item xs={12} md={6}>
-                    <Typography><strong>Annual Volatility:</strong> {formatPercentage(Math.sqrt(optimizationResult.realized_variance))}</Typography>
+                    {optimizationResult.budget && (
+                      <>
+                        <Typography><strong>Budget:</strong> {formatCurrency(optimizationResult.budget)}</Typography>
+                        <Typography><strong>Amount Invested:</strong> {formatCurrency(optimizationResult.amount_invested || 0)}</Typography>
+                        <Typography><strong>Residual Cash:</strong> {formatCurrency(optimizationResult.residual_cash || 0)}</Typography>
+                        <Typography><strong>Deployment Rate:</strong> {formatPercentage(optimizationResult.deployment_rate || 0)}</Typography>
+                        <Typography sx={{ color: '#2e8b57', fontWeight: 'bold' }}>
+                          <strong>Annual Income:</strong> {formatCurrency(optimizationResult.annual_income || 0)}
+                        </Typography>
+                      </>
+                    )}
                     <Typography><strong>Data Period:</strong> {new Date(optimizationResult.start_date).toLocaleDateString()} - {new Date(optimizationResult.end_date).toLocaleDateString()}</Typography>
                   </Grid>
                 </Grid>
               </Alert>
 
-              {/* Weights Table */}
+              {/* Share Allocation Table (when budget is provided) */}
+              {optimizationResult.shares && (
+                <>
+                  <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mt: 3 }}>
+                    Share Allocation
+                  </Typography>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 'bold' }}>Stock</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Shares</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Price</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Investment</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Weight</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Yield</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Annual Income</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {Object.entries(optimizationResult.shares)
+                        .filter(([_, shares]) => shares > 0)
+                        .sort(([a], [b]) => (optimizationResult.weights[b] || 0) - (optimizationResult.weights[a] || 0))
+                        .map(([ticker, shares]) => {
+                          const price = optimizationResult.last_close[ticker] || 0;
+                          const investment = shares * price;
+                          const tickerYield = optimizationResult.per_ticker_yield[ticker] || 0;
+                          const annualIncome = investment * tickerYield;
+                          
+                          return (
+                            <TableRow key={ticker}>
+                              <TableCell>{ticker}</TableCell>
+                              <TableCell align="right">{shares.toLocaleString()}</TableCell>
+                              <TableCell align="right">{formatCurrency(price)}</TableCell>
+                              <TableCell align="right">{formatCurrency(investment)}</TableCell>
+                              <TableCell align="right">{formatPercentage(optimizationResult.weights[ticker] || 0)}</TableCell>
+                              <TableCell align="right">{formatPercentage(tickerYield)}</TableCell>
+                              <TableCell align="right">{formatCurrency(annualIncome)}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                    </TableBody>
+                  </Table>
+                </>
+              )}
+
+              {/* Weights Table (always shown) */}
               <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mt: 3 }}>
                 Optimal Weights
               </Typography>
@@ -581,7 +657,7 @@ const DividendOptimizer: React.FC = () => {
                 </TableHead>
                 <TableBody>
                   {Object.entries(optimizationResult.weights)
-                    .filter(([_, weight]) => weight > 0.001) // Only show non-zero weights
+                    .filter(([_, weight]) => weight > 0.001)
                     .sort(([, a], [, b]) => b - a)
                     .map(([ticker, weight]) => (
                       <TableRow key={ticker}>
@@ -604,49 +680,26 @@ const DividendOptimizer: React.FC = () => {
                 </TableBody>
               </Table>
 
-              {/* Investment Calculator */}
-              <Alert severity="info" sx={{ mt: 3 }}>
-                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                  💡 Investment Calculator
-                </Typography>
-                <Typography variant="body2">
-                  With ₹10,00,000 invested in this portfolio:
-                </Typography>
-                <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                  <li>Expected Annual Dividend: {formatCurrency(1000000 * optimizationResult.portfolio_yield)}</li>
-                  <li>Monthly Income: {formatCurrency((1000000 * optimizationResult.portfolio_yield) / 12)}</li>
-                  <li>Quarterly Income: {formatCurrency((1000000 * optimizationResult.portfolio_yield) / 4)}</li>
-                </ul>
-              </Alert>
+              {/* Investment Calculator (if no budget provided) */}
+              {!optimizationResult.budget && (
+                <Alert severity="info" sx={{ mt: 3 }}>
+                  <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                    💡 Investment Calculator
+                  </Typography>
+                  <Typography variant="body2">
+                    Enter a budget above to see exact share allocation. Example with ₹10,00,000:
+                  </Typography>
+                  <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
+                    <li>Expected Annual Dividend: {formatCurrency(1000000 * optimizationResult.portfolio_yield)}</li>
+                    <li>Monthly Income: {formatCurrency((1000000 * optimizationResult.portfolio_yield) / 12)}</li>
+                    <li>Quarterly Income: {formatCurrency((1000000 * optimizationResult.portfolio_yield) / 4)}</li>
+                  </ul>
+                </Alert>
+              )}
             </CardContent>
           </Card>
         )
       )}
-
-      {/* Information Card */}
-      <Card sx={{ maxWidth: 900, mx: 'auto', backgroundColor: '#f8f9ff', border: '1px solid #e3f2fd' }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom color="primary" sx={{ fontWeight: 600 }}>
-            📊 About Entropy-Based Dividend Optimization
-          </Typography>
-          <Typography paragraph>
-            This optimizer uses a mathematical approach that balances two objectives:
-          </Typography>
-          <ul style={{ paddingLeft: '20px' }}>
-            <li><strong>Maximize Yield:</strong> Seeks stocks with the highest dividend yields (TTM)</li>
-            <li><strong>Maximize Entropy:</strong> Ensures diversification by maximizing portfolio entropy H(w) = -Σ w_i log(w_i)</li>
-          </ul>
-          <Typography paragraph sx={{ mt: 2 }}>
-            The objective function is: <code>maximize Y^T w + λ * H(w)</code>
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            • λ (entropy weight) controls the trade-off between yield and diversification<br/>
-            • Higher λ = more diversification, lower concentration<br/>
-            • Lower λ = focus on highest yielding stocks<br/>
-            • Effective N = exp(H) measures the "effective number" of stocks in the portfolio
-          </Typography>
-        </CardContent>
-      </Card>
     </>
   );
 };

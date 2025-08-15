@@ -3020,28 +3020,10 @@ class TestPortfolioOptimization(unittest.TestCase):
         
         print("✅ Dividend optimization function test passed")
 
-    @patch('divopt.EntropyYieldOptimizer')
-    def test_dividend_optimization_core_optimizer(self, mock_optimizer_class):
-        """Test dividend optimization core optimizer"""
+    def test_dividend_optimization_core_optimizer(self):
+        """Test dividend optimization core optimizer with share calculation"""
         from divopt import EntropyYieldConfig, EntropyYieldResult
         import pandas as pd
-        
-        # Mock the optimizer instance
-        mock_optimizer = mock_optimizer_class.return_value
-        
-        # Mock the run method to return a result
-        mock_result = MagicMock(spec=EntropyYieldResult)
-        mock_result.weights = {"ITC.NS": 0.6, "HDFCBANK.NS": 0.4}
-        mock_result.portfolio_yield = 0.035
-        mock_result.entropy = 0.673
-        mock_result.effective_n = 1.96
-        mock_result.realized_variance = 0.025
-        mock_result.per_ticker_yield = {"ITC.NS": 0.04, "HDFCBANK.NS": 0.028}
-        mock_result.last_close = {"ITC.NS": 416.35, "HDFCBANK.NS": 1520.45}
-        mock_result.start_date = pd.Timestamp("2021-01-01")
-        mock_result.end_date = pd.Timestamp("2024-01-01")
-        
-        mock_optimizer.run.return_value = mock_result
         
         # Test configuration
         config = EntropyYieldConfig(
@@ -3054,6 +3036,35 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertEqual(config.price_lookback_days, 756)
         self.assertEqual(config.entropy_weight, 0.05)
         self.assertEqual(config.vol_cap, 0.25)
+        
+        # Test share calculation
+        result = EntropyYieldResult(
+            weights={"ITC.NS": 0.6, "HDFCBANK.NS": 0.4},
+            portfolio_yield=0.035,
+            entropy=0.673,
+            effective_n=1.96,
+            realized_variance=0.025,
+            per_ticker_yield={"ITC.NS": 0.04, "HDFCBANK.NS": 0.028},
+            last_close={"ITC.NS": 416.35, "HDFCBANK.NS": 1520.45},
+            start_date=pd.Timestamp("2021-01-01"),
+            end_date=pd.Timestamp("2024-01-01")
+        )
+        
+        # Test share calculation with budget
+        budget = 1000000  # 10L
+        shares = result.calculate_shares(budget)
+        
+        # Check shares are integers
+        for ticker, num_shares in shares.items():
+            self.assertIsInstance(num_shares, int)
+            self.assertGreaterEqual(num_shares, 0)
+        
+        # Check total invested doesn't exceed budget
+        total_invested = result.calculate_invested_amount(shares)
+        self.assertLessEqual(total_invested, budget)
+        
+        # Check shares are allocated to highest weight first
+        self.assertGreater(shares.get("ITC.NS", 0), 0)
         
         print("✅ Dividend optimization core optimizer test passed")
 
@@ -3082,7 +3093,7 @@ class TestPortfolioOptimization(unittest.TestCase):
         from dividend_optimizer import DividendOptResponse
         from datetime import datetime
         
-        # Create response with all required fields
+        # Create response with all required fields (without budget)
         response = DividendOptResponse(
             weights={"ITC.NS": 0.6, "HDFCBANK.NS": 0.4},
             portfolio_yield=0.035,
@@ -3101,6 +3112,32 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertEqual(response.entropy, 0.673)
         self.assertEqual(response.effective_n, 1.96)
         self.assertIn("ITC.NS", response.per_ticker_yield)
+        self.assertIsNone(response.shares)  # No shares without budget
+        
+        # Create response with budget and shares
+        response_with_budget = DividendOptResponse(
+            weights={"ITC.NS": 0.6, "HDFCBANK.NS": 0.4},
+            portfolio_yield=0.035,
+            entropy=0.673,
+            effective_n=1.96,
+            realized_variance=0.025,
+            per_ticker_yield={"ITC.NS": 0.04, "HDFCBANK.NS": 0.028},
+            last_close={"ITC.NS": 416.35, "HDFCBANK.NS": 1520.45},
+            start_date=datetime(2021, 1, 1),
+            end_date=datetime(2024, 1, 1),
+            shares={"ITC.NS": 1440, "HDFCBANK.NS": 263},
+            budget=1000000,
+            amount_invested=999524.85,
+            residual_cash=475.15,
+            deployment_rate=0.999525,
+            annual_income=34983.37
+        )
+        
+        # Validate budget-related fields
+        self.assertIsNotNone(response_with_budget.shares)
+        self.assertEqual(response_with_budget.budget, 1000000)
+        self.assertGreater(response_with_budget.deployment_rate, 0.99)
+        self.assertGreater(response_with_budget.annual_income, 0)
         
         print("✅ Dividend response model structure test passed")
 

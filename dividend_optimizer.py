@@ -10,6 +10,7 @@ from divopt import EntropyYieldConfig, EntropyYieldOptimizer
 
 class DividendOptRequest(BaseModel):
     stocks: List[StockItem]
+    budget: Optional[float] = None  # Investment amount in INR
     entropy_weight: float = 0.05
     price_lookback_days: int = 756
     yield_lookback_days: int = 365
@@ -28,6 +29,13 @@ class DividendOptResponse(BaseModel):
     last_close: Dict[str, float]
     start_date: datetime
     end_date: datetime
+    # Share allocation fields (when budget is provided)
+    shares: Optional[Dict[str, int]] = None
+    budget: Optional[float] = None
+    amount_invested: Optional[float] = None
+    residual_cash: Optional[float] = None
+    deployment_rate: Optional[float] = None
+    annual_income: Optional[float] = None
 
 
 def _format_tickers(stocks: List[StockItem]) -> List[str]:
@@ -68,14 +76,33 @@ def optimize_dividend_portfolio(req: DividendOptRequest) -> DividendOptResponse:
     opt = EntropyYieldOptimizer(tickers, cfg)
     res = opt.run()
 
-    return DividendOptResponse(
-        weights=res.weights,
-        portfolio_yield=res.portfolio_yield,
-        entropy=res.entropy,
-        effective_n=res.effective_n,
-        realized_variance=res.realized_variance,
-        per_ticker_yield=res.per_ticker_yield,
-        last_close=res.last_close,
-        start_date=res.start_date.to_pydatetime(),
-        end_date=res.end_date.to_pydatetime(),
-    )
+    response_data = {
+        "weights": res.weights,
+        "portfolio_yield": res.portfolio_yield,
+        "entropy": res.entropy,
+        "effective_n": res.effective_n,
+        "realized_variance": res.realized_variance,
+        "per_ticker_yield": res.per_ticker_yield,
+        "last_close": res.last_close,
+        "start_date": res.start_date.to_pydatetime(),
+        "end_date": res.end_date.to_pydatetime(),
+    }
+    
+    # If budget is provided, calculate share allocation
+    if req.budget and req.budget > 0:
+        shares = res.calculate_shares(req.budget)
+        amount_invested = res.calculate_invested_amount(shares)
+        residual_cash = req.budget - amount_invested
+        deployment_rate = amount_invested / req.budget if req.budget > 0 else 0
+        annual_income = amount_invested * res.portfolio_yield
+        
+        response_data.update({
+            "shares": shares,
+            "budget": req.budget,
+            "amount_invested": amount_invested,
+            "residual_cash": residual_cash,
+            "deployment_rate": deployment_rate,
+            "annual_income": annual_income
+        })
+    
+    return DividendOptResponse(**response_data)

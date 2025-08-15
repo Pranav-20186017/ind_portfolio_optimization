@@ -201,6 +201,7 @@ export interface BenchmarkReturn {
 // Dividend Optimization Types - New Entropy Yield Approach
 export interface DividendOptRequest {
   stocks: StockItem[];
+  budget?: number;  // Investment amount (optional)
   entropy_weight?: number;  // λ for entropy term (default: 0.05)
   price_lookback_days?: number;  // For covariance (default: 756)
   yield_lookback_days?: number;  // TTM dividends (default: 365)
@@ -219,4 +220,11 @@ export interface DividendOptResponse {
   last_close: { [ticker: string]: number };  // Last closing prices
   start_date: string;  // Data start date
   end_date: string;  // Data end date
+  // Share allocation fields (when budget is provided)
+  shares?: { [ticker: string]: number };  // Integer number of shares
+  budget?: number;  // Investment budget
+  amount_invested?: number;  // Actual amount invested
+  residual_cash?: number;  // Remaining cash
+  deployment_rate?: number;  // Percentage of budget deployed
+  annual_income?: number;  // Expected annual dividend income
 }
