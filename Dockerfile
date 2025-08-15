@@ -32,7 +32,7 @@ ENV CFLAGS=""
 
 # 5) Create directories & copy your app
 RUN mkdir -p /app/mosek /app/outputs
-COPY data.py srv.py settings.py main.py signals.py dividend_optimizer_new.py divopt_new.py ./
+COPY data.py srv.py settings.py main.py signals.py dividend_optimizer.py divopt.py ./
 
 # 6) Entrypoint for MOSEK license handling
 RUN printf '%s\n' \
