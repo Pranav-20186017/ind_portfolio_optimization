@@ -198,69 +198,25 @@ export interface BenchmarkReturn {
   returns: number[];
 }
 
-// Dividend Optimization Types
-export enum DividendOptimizationMethod {
-  AUTO = "AUTO",          // Intelligent greedy/MILP selection
-  GREEDY = "GREEDY",      // Fast round-repair 
-  MILP = "MILP",          // Exact share-level optimization
-  AGGRESSIVE = "AGGRESSIVE" // Maximum deployment with relaxed constraints
-}
-
-export interface DividendOptimizationRequest {
+// Dividend Optimization Types - New Entropy Yield Approach
+export interface DividendOptRequest {
   stocks: StockItem[];
-  budget: number;
-  method: DividendOptimizationMethod;
-  max_position_size: number;  // Maximum weight per position (e.g., 0.25 = 25%)
-  min_positions: number;  // Minimum number of positions for diversification
-  min_yield: number;  // Minimum acceptable yield (e.g., 0.005 = 0.5%)
-  
-  // Legacy fields - kept for backward compatibility but ignored
-  max_risk_variance?: number;  // Deprecated
-  individual_caps?: { [symbol: string]: number };  // Deprecated
-  sector_caps?: { [sector: string]: number };  // Deprecated
-  sector_mapping?: { [symbol: string]: string };  // Deprecated
-  min_names?: number;  // Deprecated - use min_positions
-  seed?: number;
+  entropy_weight?: number;  // λ for entropy term (default: 0.05)
+  price_lookback_days?: number;  // For covariance (default: 756)
+  yield_lookback_days?: number;  // TTM dividends (default: 365)
+  min_weight_floor?: number;  // Minimum weight per stock
+  vol_cap?: number;  // Optional volatility cap (annualized)
+  use_median_ttm?: boolean;  // Stabilize TTM calculation
 }
 
-export interface DividendStockData {
-  symbol: string;
-  price: number;
-  forward_dividend: number;
-  forward_yield: number;
-  dividend_source: string;
-  confidence?: string;
-  cadence_info?: Record<string, any>;
-}
-
-export interface DividendAllocationResult {
-  symbol: string;
-  shares: number;
-  price: number;
-  value: number;
-  weight: number;
-  weight_on_invested?: number;  // Weight as % of invested amount (vs total budget)
-  target_weight: number;
-  forward_yield: number;
-  annual_income: number;
-}
-
-export interface DividendOptimizationResponse {
-  total_budget: number;
-  amount_invested: number;
-  residual_cash: number;
-  deployment_rate: number;  // NEW: percentage of budget deployed (0.99 = 99%)
-  portfolio_yield: number;
-  yield_on_invested: number;
-  annual_income: number;
-  allocation_method: string;
-  allocations: DividendAllocationResult[];
-  dividend_data: DividendStockData[];
-  optimization_summary: Record<string, any>;
-  
-  // Legacy fields - may be null
-  post_round_volatility?: number | null;  // Deprecated
-  l1_drift?: number | null;  // Deprecated
-  granularity_check?: Record<string, any> | null;  // Deprecated
-  sector_allocations?: { [sector: string]: number } | null;  // Deprecated
+export interface DividendOptResponse {
+  weights: { [ticker: string]: number };  // Optimal weights
+  portfolio_yield: number;  // Expected portfolio yield
+  entropy: number;  // Portfolio entropy (diversification measure)
+  effective_n: number;  // Effective number of stocks
+  realized_variance: number;  // Portfolio variance
+  per_ticker_yield: { [ticker: string]: number };  // Individual yields
+  last_close: { [ticker: string]: number };  // Last closing prices
+  start_date: string;  // Data start date
+  end_date: string;  // Data end date
 }

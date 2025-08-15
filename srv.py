@@ -66,13 +66,15 @@ builtins.json = json
 from data import (
     ErrorCode, APIError, ExchangeEnum, OptimizationMethod, CLAOptimizationMethod,
     BenchmarkName, Benchmarks, BenchmarkReturn, PortfolioPerformance,
-    OptimizationResult, PortfolioOptimizationResponse, StockItem, TickerRequest,
-    DividendOptimizationMethod, DividendOptimizationRequest, DividendOptimizationResponse,
-    DividendStockData, DividendAllocationResult
+    OptimizationResult, PortfolioOptimizationResponse, StockItem, TickerRequest
 )
 from signals import build_technical_scores, TECHNICAL_INDICATORS
 from settings import settings
-# Note: dividend_optimizer import moved to after logging configuration
+from dividend_optimizer import (
+    DividendOptRequest,
+    DividendOptResponse,
+    optimize_dividend_portfolio,
+)
 
 # Custom JSON encoder to handle NaN, Infinity, etc.
 class CustomJSONEncoderMeta(type):
@@ -602,8 +604,6 @@ else:
 logger.propagate = False
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Import dividend optimization after logging is configured
-from dividend_optimizer_new import NewDividendOptimizationService
 
 from io import StringIO
 warnings.filterwarnings("ignore")
@@ -2609,81 +2609,35 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         logger.exception("Unexpected error in optimize_portfolio: %s", error_message)
         raise
 
-########################################
-# Dividend Optimization Endpoint
-########################################
 
-@app.post("/dividend-optimize")
-async def optimize_dividend_portfolio(
-    request: DividendOptimizationRequest = Body(...), 
-    background_tasks: BackgroundTasks = None
-) -> DividendOptimizationResponse:
+@app.post("/dividend-optimize", response_model=DividendOptResponse)
+def dividend_optimize_endpoint(req: DividendOptRequest = Body(...)) -> DividendOptResponse:
     """
-    Practitioner-focused dividend optimization endpoint.
-    Maximizes dividend income and ensures full capital deployment (>99%).
-    Risk/volatility is secondary - dividend investing is about cash flow.
+    Endpoint for entropy-based dividend yield optimization.
+    Uses yfinance to fetch historical prices and dividend data.
+    Returns optimal weights maximizing yield with entropy diversification.
     """
-    logger.info(f"Dividend optimization request: {len(request.stocks)} stocks, budget ₹{request.budget:,.0f}, method {request.method}")
-    
-    # Initialize new service
-    service = NewDividendOptimizationService()
-    
     try:
-        # Step 1: Validate request - simplified
-        min_positions = request.min_positions if request.min_positions else (request.min_names if request.min_names else 3)
-        await service.validate_request(
-            request.stocks, 
-            request.budget,
-            min_positions,
-            request.max_position_size
-        )
-        
-        # Step 2: Format tickers and fetch data
-        tickers = format_tickers(request.stocks)
-        logger.info(f"Formatted tickers: {tickers}")
-        
-        stocks_data = await service.fetch_and_prepare_data(tickers)
-        
-        # Step 3: Run optimization - much simpler now!
-        result = await service.optimize_portfolio(
-            budget=request.budget,
-            method=request.method.value,
-            max_position_size=request.max_position_size,
-            min_positions=min_positions,
-            min_yield=request.min_yield
-        )
-        
-        # Step 4: Format response
-        response_dict = service.format_response(result, request.budget)
-        
-        # Add backward compatibility fields
-        response_dict['post_round_volatility'] = None  # No longer calculated
-        response_dict['l1_drift'] = None  # No longer relevant
-        response_dict['granularity_check'] = None  # Deprecated
-        
-        # Convert to response model
-        response = DividendOptimizationResponse(**response_dict)
-        
-        logger.info(f"Dividend optimization completed: {result.allocation_method}, "
-                   f"deployment {result.deployment_rate:.1%}, yield {result.portfolio_yield:.2%}, "
-                   f"positions {result.num_positions}")
-        
-        # Use CustomJSONResponse with jsonable_encoder for extra safety against serialization issues
-        payload = jsonable_encoder(response, exclude_none=True)
-        return CustomJSONResponse(content=payload)
-        
-    except APIError as e:
-        logger.error(f"Dividend optimization failed: {e.code} - {e.message}")
+        return optimize_dividend_portfolio(req)
+    except APIError:
+        # Re-raise API errors as-is
         raise
-    except Exception as e:
-        logger.exception("Unexpected error in dividend optimization")
+    except ValueError as e:
+        # Handle validation errors
         raise APIError(
-            code=ErrorCode.UNEXPECTED_ERROR,
+            code=ErrorCode.INVALID_TICKER,
+            message=str(e),
+            status_code=422
+        )
+    except Exception as e:
+        # Handle unexpected errors
+        logger.exception("Unexpected error in dividend_optimize_endpoint: %s", str(e))
+        raise APIError(
+            code=ErrorCode.OPTIMIZATION_FAILED,
             message=f"Dividend optimization failed: {str(e)}",
             status_code=500
         )
 
-# Removed old _build_dividend_response - no longer needed with new simplified approach
 
 # ==== Dependency Injection Wrappers ====
 def download_close_prices(ticker: str, start_date: datetime) -> pd.Series:

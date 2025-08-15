@@ -2,10 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   StockData, 
   StockOption, 
-  ExchangeEnum, 
-  DividendOptimizationMethod,
-  DividendOptimizationRequest,
-  DividendOptimizationResponse,
+  ExchangeEnum,
+  DividendOptRequest,
+  DividendOptResponse,
   APIError,
   StockItem
 } from '../types';
@@ -38,41 +37,13 @@ import TableHead from '@mui/material/TableHead';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import Tooltip from '@mui/material/Tooltip';
 import Box from '@mui/material/Box';
-import Accordion from '@mui/material/Accordion';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Alert from '@mui/material/Alert';
-import InputAdornment from '@mui/material/InputAdornment';
+import Slider from '@mui/material/Slider';
 import Switch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
 
 // Import TopNav component
 import TopNav from '../components/TopNav';
-
-// Method options for dividend optimization
-const dividendMethodOptions = [
-  { 
-    label: 'AUTO (Recommended)', 
-    value: DividendOptimizationMethod.AUTO,
-    description: 'Automatically selects the best method based on portfolio complexity and constraints'
-  },
-  { 
-    label: 'GREEDY', 
-    value: DividendOptimizationMethod.GREEDY,
-    description: 'Fast greedy allocation with round-repair optimization'
-  },
-  { 
-    label: 'MILP', 
-    value: DividendOptimizationMethod.MILP,
-    description: 'Exact mixed-integer linear programming optimization (slower but optimal)'
-  },
-  { 
-    label: 'AGGRESSIVE (Max Deployment)', 
-    value: DividendOptimizationMethod.AGGRESSIVE,
-    description: 'Prioritizes maximum capital deployment with relaxed constraints - deploys 95%+ of budget'
-  },
-];
 
 const DividendOptimizer: React.FC = () => {
   const [stockData, setStockData] = useState<StockData>({});
@@ -81,51 +52,46 @@ const DividendOptimizer: React.FC = () => {
   const [selectedStocks, setSelectedStocks] = useState<StockOption[]>([]);
   const [filteredOptions, setFilteredOptions] = useState<StockOption[]>([]);
   const [selectedExchange, setSelectedExchange] = useState<ExchangeEnum | null>(null);
-  const [selectedMethod, setSelectedMethod] = useState<DividendOptimizationMethod>(DividendOptimizationMethod.AUTO);
-  const [budget, setBudget] = useState<string>('1000000'); // Default 10L
-  const [maxPositionSize, setMaxPositionSize] = useState<string>('0.25'); // 25% max per position
-  const [minPositions, setMinPositions] = useState<string>('4'); // Minimum 4 positions
-  const [minYield, setMinYield] = useState<string>('0.005'); // 0.5% minimum yield
+  
+  // New optimization parameters
+  const [entropyWeight, setEntropyWeight] = useState<number>(0.05);
+  const [volCap, setVolCap] = useState<number | null>(null);
+  const [useVolCap, setUseVolCap] = useState<boolean>(false);
+  const [useMedianTtm, setUseMedianTtm] = useState<boolean>(false);
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<APIError | null>(null);
-  const [optimizationResult, setOptimizationResult] = useState<DividendOptimizationResponse | null>(null);
+  const [optimizationResult, setOptimizationResult] = useState<DividendOptResponse | null>(null);
 
-  // Default stocks - same as main page
+  // Default high-dividend yield stocks
   const defaultNSEStocks: StockOption[] = [
-    { ticker: 'TCS', name: 'Tata Consultancy Services Ltd', exchange: 'NSE' },
-    { ticker: 'INFY', name: 'Infosys Ltd', exchange: 'NSE' },
-    { ticker: 'RELIANCE', name: 'Reliance Industries Ltd', exchange: 'NSE' },
-    { ticker: 'HDFCBANK', name: 'HDFC Bank Ltd', exchange: 'NSE' },
-    { ticker: 'ICICIBANK', name: 'ICICI Bank Ltd', exchange: 'NSE' },
-    { ticker: 'HINDUNILVR', name: 'Hindustan Unilever Ltd', exchange: 'NSE' },
     { ticker: 'ITC', name: 'ITC Ltd', exchange: 'NSE' },
-    { ticker: 'SBIN', name: 'State Bank of India', exchange: 'NSE' },
-    { ticker: 'BHARTIARTL', name: 'Bharti Airtel Ltd', exchange: 'NSE' },
-    { ticker: 'KOTAKBANK', name: 'Kotak Mahindra Bank Ltd', exchange: 'NSE' },
-    // Add more high-dividend yield stocks
     { ticker: 'COALINDIA', name: 'Coal India Ltd', exchange: 'NSE' },
     { ticker: 'ONGC', name: 'Oil and Natural Gas Corporation Ltd', exchange: 'NSE' },
     { ticker: 'NTPC', name: 'NTPC Ltd', exchange: 'NSE' },
     { ticker: 'POWERGRID', name: 'Power Grid Corporation of India Ltd', exchange: 'NSE' },
     { ticker: 'IOC', name: 'Indian Oil Corporation Ltd', exchange: 'NSE' },
+    { ticker: 'VEDL', name: 'Vedanta Ltd', exchange: 'NSE' },
+    { ticker: 'SJVN', name: 'SJVN Ltd', exchange: 'NSE' },
+    { ticker: 'NMDC', name: 'NMDC Ltd', exchange: 'NSE' },
+    { ticker: 'HINDPETRO', name: 'Hindustan Petroleum Corporation Ltd', exchange: 'NSE' },
+    { ticker: 'GAIL', name: 'GAIL India Ltd', exchange: 'NSE' },
+    { ticker: 'BPCL', name: 'Bharat Petroleum Corporation Ltd', exchange: 'NSE' },
   ];
 
   const defaultBSEStocks: StockOption[] = [
-    { ticker: 'TCS', name: 'Tata Consultancy Services Ltd', exchange: 'BSE' },
-    { ticker: 'INFY', name: 'Infosys Ltd', exchange: 'BSE' },
-    { ticker: 'RELIANCE', name: 'Reliance Industries Ltd', exchange: 'BSE' },
-    { ticker: 'HDFCBANK', name: 'HDFC Bank Ltd', exchange: 'BSE' },
-    { ticker: 'ICICIBANK', name: 'ICICI Bank Ltd', exchange: 'BSE' },
-    { ticker: 'HINDUNILVR', name: 'Hindustan Unilever Ltd', exchange: 'BSE' },
     { ticker: 'ITC', name: 'ITC Ltd', exchange: 'BSE' },
-    { ticker: 'SBIN', name: 'State Bank of India', exchange: 'BSE' },
-    { ticker: 'BHARTIARTL', name: 'Bharti Airtel Ltd', exchange: 'BSE' },
-    { ticker: 'KOTAKBANK', name: 'Kotak Mahindra Bank Ltd', exchange: 'BSE' },
     { ticker: 'COALINDIA', name: 'Coal India Ltd', exchange: 'BSE' },
     { ticker: 'ONGC', name: 'Oil and Natural Gas Corporation Ltd', exchange: 'BSE' },
     { ticker: 'NTPC', name: 'NTPC Ltd', exchange: 'BSE' },
     { ticker: 'POWERGRID', name: 'Power Grid Corporation of India Ltd', exchange: 'BSE' },
     { ticker: 'IOC', name: 'Indian Oil Corporation Ltd', exchange: 'BSE' },
+    { ticker: 'VEDL', name: 'Vedanta Ltd', exchange: 'BSE' },
+    { ticker: 'SJVN', name: 'SJVN Ltd', exchange: 'BSE' },
+    { ticker: 'NMDC', name: 'NMDC Ltd', exchange: 'BSE' },
+    { ticker: 'HINDPETRO', name: 'Hindustan Petroleum Corporation Ltd', exchange: 'BSE' },
+    { ticker: 'GAIL', name: 'GAIL India Ltd', exchange: 'BSE' },
+    { ticker: 'BPCL', name: 'Bharat Petroleum Corporation Ltd', exchange: 'BSE' },
   ];
 
   // Get default stocks based on selected exchange
@@ -135,16 +101,11 @@ const DividendOptimizer: React.FC = () => {
   };
 
   // Validation
-  const canSubmit = selectedStocks.length >= 2 && 
-                   selectedExchange !== null && 
-                   budget && 
-                   parseFloat(budget) >= 10000;  // Minimum ₹10,000
+  const canSubmit = selectedStocks.length >= 2 && selectedExchange !== null;
 
   let submitError = '';
   if (selectedStocks.length < 2) {
-    submitError = 'Please select at least 2 stocks.';
-  } else if (!budget || parseFloat(budget) < 10000) {
-    submitError = 'Minimum budget is ₹10,000.';
+    submitError = 'Please select at least 2 stocks for diversification.';
   }
 
   // Load stock data
@@ -222,8 +183,6 @@ const DividendOptimizer: React.FC = () => {
     setSelectedStocks(selectedStocks.filter((s) => !(s.ticker === stockToRemove.ticker && s.exchange === stockToRemove.exchange)));
   };
 
-
-
   // Submit optimization
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -231,19 +190,17 @@ const DividendOptimizer: React.FC = () => {
     setLoading(true);
     setError(null);
     
-    const dataToSend: DividendOptimizationRequest = {
+    const dataToSend: DividendOptRequest = {
       stocks: selectedStocks.map((s) => ({ ticker: s.ticker, exchange: s.exchange as ExchangeEnum })),
-      budget: parseFloat(budget),
-      method: selectedMethod,
-      max_position_size: parseFloat(maxPositionSize) || 0.25,
-      min_positions: parseInt(minPositions) || 3,
-      min_yield: parseFloat(minYield) || 0.005
+      entropy_weight: entropyWeight,
+      vol_cap: useVolCap && volCap ? volCap : undefined,
+      use_median_ttm: useMedianTtm
     };
     
     try {
       const response = await axios.post('https://vgb7u5iqyb.execute-api.us-east-2.amazonaws.com/dividend-optimize', dataToSend);
       console.log('Backend response:', response.data);
-      const result = response.data as DividendOptimizationResponse;
+      const result = response.data as DividendOptResponse;
       setOptimizationResult(result);
     } catch (error) {
       console.error('API Error:', error);
@@ -274,11 +231,10 @@ const DividendOptimizer: React.FC = () => {
   const handleReset = () => {
     setSelectedStocks([]);
     setInputValue('');
-    setBudget('1000000');
-    setMaxPositionSize('0.25');
-    setMinPositions('4');
-    setMinYield('0.005');
-    setSelectedMethod(DividendOptimizationMethod.AUTO);
+    setEntropyWeight(0.05);
+    setVolCap(null);
+    setUseVolCap(false);
+    setUseMedianTtm(false);
     setOptimizationResult(null);
     setError(null);
   };
@@ -291,6 +247,11 @@ const DividendOptimizer: React.FC = () => {
     setError(null);
   }, [selectedExchange]);
 
+  // Format percentage
+  const formatPercentage = (value: number) => {
+    return `${(value * 100).toFixed(2)}%`;
+  };
+
   // Format currency
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -301,20 +262,15 @@ const DividendOptimizer: React.FC = () => {
     }).format(amount);
   };
 
-  // Format percentage
-  const formatPercentage = (value: number) => {
-    return `${(value * 100).toFixed(2)}%`;
-  };
-
   return (
     <>
       <Head>
-        <title>Dividend Portfolio Optimizer | High-Yield Indian Stocks</title>
+        <title>Dividend Yield Optimizer | Entropy-Based Portfolio Optimization</title>
         <meta
           name="description"
-          content="Optimize your dividend portfolio with Indian stocks. Maximize yield while managing risk with NSE & BSE stocks. AI-driven allocation for sustainable income."
+          content="Optimize your dividend portfolio using entropy-based diversification. Maximize yield while maintaining portfolio diversity with NSE & BSE stocks."
         />
-        <meta name="keywords" content="dividend portfolio optimization, high yield Indian stocks, NSE dividend stocks, BSE dividend stocks, income investing India" />
+        <meta name="keywords" content="dividend yield optimization, entropy diversification, Indian dividend stocks, NSE dividend, BSE dividend, portfolio optimization" />
       </Head>
       
       <TopNav />
@@ -325,7 +281,7 @@ const DividendOptimizer: React.FC = () => {
           variant="h4"
           sx={{ fontWeight: 700, mb: 2, color: '#222', textAlign: { xs: 'center', md: 'left' } }}
         >
-          Dividend Portfolio Optimizer
+          Dividend Yield Optimizer
         </Typography>
         <Typography
           variant="body1"
@@ -337,7 +293,8 @@ const DividendOptimizer: React.FC = () => {
             textAlign: { xs: 'center', md: 'left' }
           }}
         >
-          Build a high-yield dividend portfolio with Indian stocks. Our optimizer maximizes dividend income while managing risk through intelligent allocation across NSE and BSE stocks.
+          Maximize dividend yield while maintaining portfolio diversity using entropy-based optimization. 
+          Balance income generation with intelligent diversification.
         </Typography>
         <Typography variant="body2" sx={{ color: '#2e8b57', mb: 4, textAlign: { xs: 'center', md: 'left' } }}>
           Want risk-return optimization instead? Try our <Link href="/" style={{ color: '#0052cc', textDecoration: 'underline' }}>Portfolio Optimizer</Link>.
@@ -345,29 +302,11 @@ const DividendOptimizer: React.FC = () => {
       </Box>
 
       {/* Exchange Selection */}
-      <div className="mb-6" style={{ 
-        background: 'white', 
-        borderRadius: '8px', 
-        padding: '20px',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-        border: '1px solid #f0f0f0',
-        maxWidth: '900px',
-        margin: '0 auto 24px auto'
-      }}>
-        <Typography 
-          variant="h6" 
-          component="h2" 
-          gutterBottom
-          style={{ 
-            fontWeight: 600, 
-            fontSize: '1.25rem',
-            color: '#1e293b',
-            marginBottom: '16px'
-          }}
-        >
+      <Card sx={{ maxWidth: 900, mx: 'auto', mb: 3, p: 3 }}>
+        <Typography variant="h6" component="h2" gutterBottom sx={{ fontWeight: 600 }}>
           Select Exchange
         </Typography>
-        <FormControl fullWidth variant="outlined" style={{ maxWidth: 600 }}>
+        <FormControl fullWidth variant="outlined" sx={{ maxWidth: 600 }}>
           <InputLabel id="exchange-select-label">Choose Exchange</InputLabel>
           <Select
             labelId="exchange-select-label"
@@ -379,35 +318,22 @@ const DividendOptimizer: React.FC = () => {
             <MenuItem value={ExchangeEnum.BSE}>BSE</MenuItem>
           </Select>
         </FormControl>
-      </div>
+      </Card>
 
       {/* Stock Selection */}
-      <div className="mb-6" style={{ 
+      <Card sx={{ 
+        maxWidth: 900, 
+        mx: 'auto', 
+        mb: 3, 
+        p: 3,
         opacity: selectedExchange ? 1 : 0.5, 
-        pointerEvents: selectedExchange ? 'auto' : 'none',
-        background: 'white', 
-        borderRadius: '8px', 
-        padding: '20px',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-        border: '1px solid #f0f0f0',
-        maxWidth: '900px',
-        margin: '0 auto 24px auto'
+        pointerEvents: selectedExchange ? 'auto' : 'none'
       }}>
-        <Typography 
-          variant="h6" 
-          component="h2" 
-          gutterBottom
-          style={{ 
-            fontWeight: 600, 
-            fontSize: '1.25rem',
-            color: '#1e293b',
-            marginBottom: '16px'
-          }}
-        >
-          Search and Select Dividend Stocks
+        <Typography variant="h6" component="h2" gutterBottom sx={{ fontWeight: 600 }}>
+          Select Dividend Stocks
         </Typography>
         <Alert severity="info" sx={{ mb: 2 }}>
-          Focus on high-dividend yield stocks like PSUs (ONGC, NTPC, Coal India), banks, and utilities for better income generation.
+          💡 Tip: Focus on high-dividend yield stocks like PSUs (ONGC, NTPC, Coal India), utilities, and oil companies.
         </Alert>
         <Autocomplete
           options={filteredOptions}
@@ -421,17 +347,16 @@ const DividendOptimizer: React.FC = () => {
               label="Search Dividend Stock" 
               variant="outlined"
               placeholder="Type to search dividend-paying stocks..."
-              helperText="Select stocks known for consistent dividend payments"
             />
           )}
-          style={{ width: '100%', maxWidth: 600 }}
+          sx={{ width: '100%', maxWidth: 600 }}
           openOnFocus={true}
           filterOptions={(x) => x}
           clearOnBlur={false}
           value={null}
         />
-        <div className="mt-4">
-          <Typography variant="subtitle1" style={{ marginBottom: '8px', fontWeight: 500 }}>
+        <Box sx={{ mt: 3 }}>
+          <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 500 }}>
             Selected Stocks ({selectedStocks.length})
           </Typography>
           <Stack direction="row" spacing={1} flexWrap="wrap">
@@ -440,150 +365,118 @@ const DividendOptimizer: React.FC = () => {
                 key={idx}
                 label={`${stock.ticker} (${stock.exchange})`}
                 onDelete={() => handleRemoveStock(stock)}
-                className="m-1"
+                sx={{ m: 0.5 }}
                 color="primary"
                 variant="outlined"
               />
             ))}
           </Stack>
-        </div>
-      </div>
+        </Box>
+      </Card>
 
-      {/* Budget and Method Selection */}
-      <div className="mb-6" style={{ 
+      {/* Optimization Parameters */}
+      <Card sx={{ 
+        maxWidth: 900, 
+        mx: 'auto', 
+        mb: 3, 
+        p: 3,
         opacity: selectedExchange ? 1 : 0.5, 
-        pointerEvents: selectedExchange ? 'auto' : 'none',
-        background: 'white', 
-        borderRadius: '8px', 
-        padding: '20px',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-        border: '1px solid #f0f0f0',
-        maxWidth: '900px',
-        margin: '0 auto 24px auto'
+        pointerEvents: selectedExchange ? 'auto' : 'none'
       }}>
-        <Typography 
-          variant="h6" 
-          component="h2" 
-          gutterBottom
-          style={{ 
-            fontWeight: 600, 
-            fontSize: '1.25rem',
-            color: '#1e293b',
-            marginBottom: '16px'
-          }}
-        >
-          Investment Parameters
+        <Typography variant="h6" component="h2" gutterBottom sx={{ fontWeight: 600 }}>
+          Optimization Parameters
         </Typography>
         
-        <Alert severity="info" sx={{ mb: 2 }}>
-          New approach: Focus on income generation and full capital deployment. Risk/volatility is secondary in dividend investing.
-        </Alert>
         <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Typography gutterBottom>
+              Entropy Weight (λ): {entropyWeight.toFixed(2)}
+            </Typography>
+            <Tooltip title="Higher values increase diversification, lower values focus more on yield">
+              <Slider
+                value={entropyWeight}
+                onChange={(e, v) => setEntropyWeight(v as number)}
+                min={0}
+                max={0.5}
+                step={0.01}
+                marks={[
+                  { value: 0, label: 'Pure Yield' },
+                  { value: 0.05, label: '0.05 (Default)' },
+                  { value: 0.1, label: '0.1' },
+                  { value: 0.25, label: '0.25' },
+                  { value: 0.5, label: 'Max Diversification' }
+                ]}
+                valueLabelDisplay="auto"
+              />
+            </Tooltip>
+          </Grid>
+          
           <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              label="Investment Budget"
-              type="number"
-              value={budget}
-              onChange={(e) => setBudget(e.target.value)}
-              variant="outlined"
-              InputProps={{
-                startAdornment: <InputAdornment position="start">₹</InputAdornment>,
-                inputProps: { min: 10000, step: 10000 }
-              }}
-              helperText="Total amount to invest (min ₹10,000)"
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={useVolCap}
+                  onChange={(e) => {
+                    setUseVolCap(e.target.checked);
+                    if (e.target.checked && !volCap) {
+                      setVolCap(0.25); // Default 25% volatility cap
+                    }
+                  }}
+                />
+              }
+              label="Apply Volatility Cap"
             />
+            {useVolCap && (
+              <TextField
+                fullWidth
+                label="Max Annual Volatility"
+                type="number"
+                value={volCap || ''}
+                onChange={(e) => setVolCap(parseFloat(e.target.value) || null)}
+                variant="outlined"
+                sx={{ mt: 1 }}
+                helperText="E.g., 0.25 = 25% annual volatility"
+                inputProps={{ min: 0.05, max: 1, step: 0.05 }}
+              />
+            )}
           </Grid>
+          
           <Grid item xs={12} md={6}>
-            <FormControl fullWidth variant="outlined">
-              <InputLabel>Optimization Method</InputLabel>
-              <Select
-                value={selectedMethod}
-                onChange={(e) => setSelectedMethod(e.target.value as DividendOptimizationMethod)}
-                label="Optimization Method"
-              >
-                {dividendMethodOptions.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    <Tooltip title={option.description} placement="right">
-                      <span>{option.label}</span>
-                    </Tooltip>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <TextField
-              fullWidth
-              label="Max Position Size"
-              type="number"
-              value={maxPositionSize}
-              onChange={(e) => setMaxPositionSize(e.target.value)}
-              variant="outlined"
-              InputProps={{
-                inputProps: { min: 0.05, max: 0.5, step: 0.05 }
-              }}
-              helperText="Max % per stock (0.25 = 25%)"
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={useMedianTtm}
+                  onChange={(e) => setUseMedianTtm(e.target.checked)}
+                />
+              }
+              label="Use Median TTM Yield"
             />
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <TextField
-              fullWidth
-              label="Min Positions"
-              type="number"
-              value={minPositions}
-              onChange={(e) => setMinPositions(e.target.value)}
-              variant="outlined"
-              InputProps={{
-                inputProps: { min: 2, max: 20 }
-              }}
-              helperText="Minimum stocks for diversification"
-            />
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <TextField
-              fullWidth
-              label="Min Yield"
-              type="number"
-              value={minYield}
-              onChange={(e) => setMinYield(e.target.value)}
-              variant="outlined"
-              InputProps={{
-                inputProps: { min: 0, max: 0.1, step: 0.001 }
-              }}
-              helperText="Min acceptable yield (0.005 = 0.5%)"
-            />
+            <Typography variant="caption" color="text.secondary" display="block">
+              Stabilizes yield calculation by using median of trailing 90 days
+            </Typography>
           </Grid>
         </Grid>
-      </div>
-
-
+      </Card>
 
       {/* Action Buttons */}
-      <div className="mb-8" style={{ 
-        background: 'white', 
-        borderRadius: '8px', 
-        padding: '20px',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-        border: '1px solid #f0f0f0',
-        maxWidth: '900px',
-        margin: '0 auto 24px auto',
+      <Box sx={{ 
+        maxWidth: 900, 
+        mx: 'auto', 
+        mb: 3,
         display: 'flex',
-        justifyContent: 'flex-start',
-        gap: '16px'
+        gap: 2,
+        justifyContent: 'flex-start'
       }}>
         <Button
           variant="contained"
           color="primary"
           onClick={handleSubmit}
           disabled={!canSubmit || loading}
-          style={{
-            padding: '8px 24px',
+          sx={{
+            px: 3,
+            py: 1,
             fontWeight: 600,
-            fontSize: '0.95rem',
-            borderRadius: '6px',
             background: !canSubmit || loading ? 'gray' : 'linear-gradient(90deg, #2e8b57 30%, #1976d2 100%)',
-            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
           }}
         >
           {loading ? 'Optimizing...' : 'Optimize Portfolio'}
@@ -592,35 +485,30 @@ const DividendOptimizer: React.FC = () => {
           variant="outlined" 
           color="secondary" 
           onClick={handleReset}
-          style={{
-            padding: '8px 24px',
-            fontWeight: 600,
-            fontSize: '0.95rem',
-            borderRadius: '6px',
-          }}
+          sx={{ px: 3, py: 1, fontWeight: 600 }}
         >
           Reset
         </Button>
         {!canSubmit && (
-          <Typography color="error" style={{ marginTop: '0.5rem' }}>
+          <Typography color="error" sx={{ alignSelf: 'center' }}>
             {submitError}
           </Typography>
         )}
-      </div>
+      </Box>
 
       {/* Loading and Results */}
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
           <CircularProgress />
-          <div style={{ marginTop: '16px', fontSize: '1.1rem', fontWeight: 500 }}>
+          <Typography sx={{ mt: 2, fontSize: '1.1rem', fontWeight: 500 }}>
             Optimizing Dividend Portfolio
-          </div>
-          <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#666' }}>
-            This may take a few moments...
-          </div>
-        </div>
+          </Typography>
+          <Typography sx={{ mt: 1, fontSize: '0.9rem', color: '#666' }}>
+            Fetching dividend data and calculating optimal weights...
+          </Typography>
+        </Box>
       ) : error ? (
-        <Card style={{ marginTop: '2rem', backgroundColor: '#ffebee', maxWidth: '900px', margin: '0 auto' }}>
+        <Card sx={{ maxWidth: 900, mx: 'auto', backgroundColor: '#ffebee' }}>
           <CardContent>
             <Typography variant="h6" color="error" gutterBottom>
               Optimization Error
@@ -629,29 +517,23 @@ const DividendOptimizer: React.FC = () => {
               {error.message}
             </Typography>
             {error.details && (
-              <div style={{ marginTop: '1rem' }}>
+              <Box sx={{ mt: 2 }}>
                 <Typography variant="subtitle2" fontWeight="bold">
                   Details:
                 </Typography>
-                {Array.isArray(error.details) ? (
-                  <ul>
-                    {error.details.map((item, index) => (
-                      <li key={index}>{item}</li>
-                    ))}
-                  </ul>
-                ) : typeof error.details === 'object' ? (
-                  <pre style={{ whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: '200px' }}>
+                {typeof error.details === 'string' ? (
+                  <Typography>{error.details}</Typography>
+                ) : (
+                  <pre style={{ whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 200 }}>
                     {JSON.stringify(error.details, null, 2)}
                   </pre>
-                ) : (
-                  <Typography>{String(error.details)}</Typography>
                 )}
-              </div>
+              </Box>
             )}
             <Button 
               variant="contained" 
               color="primary" 
-              style={{ marginTop: '1rem' }}
+              sx={{ mt: 2 }}
               onClick={() => setError(null)}
             >
               Dismiss
@@ -660,235 +542,109 @@ const DividendOptimizer: React.FC = () => {
         </Card>
       ) : (
         optimizationResult && (
-          <div style={{
-            background: 'white', 
-            borderRadius: '8px', 
-            padding: '20px',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-            border: '1px solid #f0f0f0',
-            maxWidth: '900px',
-            margin: '0 auto 24px auto'
-          }}>
-            <Typography 
-              variant="h5" 
-              sx={{ 
-                fontWeight: 600, 
-                color: '#1e293b',
-                mb: 3
-              }}
-            >
-              Dividend Portfolio Results
-            </Typography>
-            
-            {/* Portfolio Summary */}
-            <Card sx={{ mb: 3, backgroundColor: '#f8fffe', border: '1px solid #d1fae5' }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom color="primary" sx={{ fontWeight: 600 }}>
-                  Portfolio Summary
+          <Card sx={{ maxWidth: 900, mx: 'auto', mb: 3 }}>
+            <CardContent>
+              <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
+                Optimization Results
+              </Typography>
+              
+              {/* Portfolio Summary */}
+              <Alert severity="success" sx={{ mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Portfolio Metrics
                 </Typography>
                 <Grid container spacing={2}>
                   <Grid item xs={12} md={6}>
-                    <Typography><strong>Total Budget:</strong> {formatCurrency(optimizationResult.total_budget)}</Typography>
-                    <Typography><strong>Amount Invested:</strong> {formatCurrency(optimizationResult.amount_invested)}</Typography>
-                    <Typography><strong>Residual Cash:</strong> {formatCurrency(optimizationResult.residual_cash)}</Typography>
-                    <Typography sx={{ 
-                      color: optimizationResult.deployment_rate >= 0.99 ? 'green' : 
-                             optimizationResult.deployment_rate >= 0.95 ? 'orange' : 'red',
-                      fontWeight: 'bold'
-                    }}>
-                      <strong>🎯 Deployment Rate:</strong> {formatPercentage(optimizationResult.deployment_rate)}
-                    </Typography>
+                    <Typography><strong>Portfolio Yield:</strong> {formatPercentage(optimizationResult.portfolio_yield)}</Typography>
+                    <Typography><strong>Entropy (Diversification):</strong> {optimizationResult.entropy.toFixed(3)}</Typography>
+                    <Typography><strong>Effective N:</strong> {optimizationResult.effective_n.toFixed(2)} stocks</Typography>
                   </Grid>
                   <Grid item xs={12} md={6}>
-                    <Typography sx={{ fontWeight: 'bold', color: '#2e8b57' }}>
-                      <strong>💰 Annual Income:</strong> {formatCurrency(optimizationResult.annual_income)}
-                    </Typography>
-                    <Typography><strong>Portfolio Yield:</strong> {formatPercentage(optimizationResult.portfolio_yield)}</Typography>
-                    <Typography><strong>Yield on Invested:</strong> {formatPercentage(optimizationResult.yield_on_invested)}</Typography>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Typography><strong>Method Used:</strong> {optimizationResult.allocation_method}</Typography>
-                    <Typography><strong>Number of Positions:</strong> {optimizationResult.allocations.length}</Typography>
+                    <Typography><strong>Annual Volatility:</strong> {formatPercentage(Math.sqrt(optimizationResult.realized_variance))}</Typography>
+                    <Typography><strong>Data Period:</strong> {new Date(optimizationResult.start_date).toLocaleDateString()} - {new Date(optimizationResult.end_date).toLocaleDateString()}</Typography>
                   </Grid>
                 </Grid>
-              </CardContent>
-            </Card>
+              </Alert>
 
-            {/* Stock Allocations */}
-            <Card sx={{ mb: 3 }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                  Stock Allocations
-                </Typography>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Stock</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Shares</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Price</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Value</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                        <Tooltip title="Weight as % of total budget">
-                          <span>Weight</span>
-                        </Tooltip>
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                        <Tooltip title="Weight as % of invested amount">
-                          <span>Weight (Inv)</span>
-                        </Tooltip>
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Yield</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Annual Income</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {optimizationResult.allocations
-                      .sort((a, b) => b.value - a.value)
-                      .map((allocation) => (
-                        <TableRow key={allocation.symbol}>
-                          <TableCell>{allocation.symbol}</TableCell>
-                          <TableCell align="right">{allocation.shares.toLocaleString()}</TableCell>
-                          <TableCell align="right">{formatCurrency(allocation.price)}</TableCell>
-                          <TableCell align="right">{formatCurrency(allocation.value)}</TableCell>
-                          <TableCell align="right" sx={{ fontWeight: allocation.weight > 0.1 ? 'bold' : 'normal' }}>
-                            {formatPercentage(allocation.weight)}
-                          </TableCell>
-                          <TableCell align="right" sx={{ fontWeight: (allocation.weight_on_invested || allocation.weight) > 0.1 ? 'bold' : 'normal', color: '#2e8b57' }}>
-                            {formatPercentage(allocation.weight_on_invested || allocation.weight)}
-                          </TableCell>
-                          <TableCell align="right">{formatPercentage(allocation.forward_yield)}</TableCell>
-                          <TableCell align="right">{formatCurrency(allocation.annual_income)}</TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            {/* Dividend Data */}
-            <Card sx={{ mb: 3 }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                  Dividend Information
-                </Typography>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Stock</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Price</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Forward Dividend</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Forward Yield</TableCell>
-                      <TableCell align="center" sx={{ fontWeight: 'bold' }}>Source</TableCell>
-                      <TableCell align="center" sx={{ fontWeight: 'bold' }}>Confidence</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {optimizationResult.dividend_data.map((stock) => (
-                      <TableRow key={stock.symbol}>
-                        <TableCell>{stock.symbol}</TableCell>
-                        <TableCell align="right">{formatCurrency(stock.price)}</TableCell>
-                        <TableCell align="right">{formatCurrency(stock.forward_dividend)}</TableCell>
-                        <TableCell align="right">{formatPercentage(stock.forward_yield)}</TableCell>
-                        <TableCell align="center">
-                          <Chip 
-                            size="small" 
-                            label={stock.dividend_source} 
-                            color={stock.dividend_source === 'info' ? 'primary' : 'default'}
-                          />
+              {/* Weights Table */}
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mt: 3 }}>
+                Optimal Weights
+              </Typography>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Stock</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Weight</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Yield</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>Last Price</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {Object.entries(optimizationResult.weights)
+                    .filter(([_, weight]) => weight > 0.001) // Only show non-zero weights
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([ticker, weight]) => (
+                      <TableRow key={ticker}>
+                        <TableCell>{ticker}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: weight > 0.1 ? 'bold' : 'normal' }}>
+                          {formatPercentage(weight)}
                         </TableCell>
-                        <TableCell align="center">
-                          {stock.confidence && (
-                            <Chip 
-                              size="small" 
-                              label={stock.confidence} 
-                              color={
-                                stock.confidence === 'high' ? 'success' : 
-                                stock.confidence === 'medium' ? 'warning' : 'error'
-                              }
-                            />
-                          )}
+                        <TableCell align="right">
+                          {optimizationResult.per_ticker_yield[ticker] 
+                            ? formatPercentage(optimizationResult.per_ticker_yield[ticker])
+                            : 'N/A'}
+                        </TableCell>
+                        <TableCell align="right">
+                          {optimizationResult.last_close[ticker] 
+                            ? formatCurrency(optimizationResult.last_close[ticker])
+                            : 'N/A'}
                         </TableCell>
                       </TableRow>
                     ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                </TableBody>
+              </Table>
 
-            {/* Sector Allocations */}
-            {optimizationResult.sector_allocations && Object.keys(optimizationResult.sector_allocations).length > 0 && (
-              <Card sx={{ mb: 3 }}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                    Sector Allocation
-                  </Typography>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 'bold' }}>Sector</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Allocation</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {Object.entries(optimizationResult.sector_allocations)
-                        .sort(([,a], [,b]) => b - a)
-                        .map(([sector, allocation]) => (
-                          <TableRow key={sector}>
-                            <TableCell>{sector}</TableCell>
-                            <TableCell align="right">{formatPercentage(allocation)}</TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Optimization Summary */}
-            {optimizationResult.optimization_summary && (
-              <Accordion>
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography variant="h6">Optimization Summary</Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                  <pre style={{ 
-                    whiteSpace: 'pre-wrap', 
-                    fontSize: '0.85rem',
-                    backgroundColor: '#f5f5f5',
-                    padding: '16px',
-                    borderRadius: '4px',
-                    overflow: 'auto'
-                  }}>
-                    {JSON.stringify(optimizationResult.optimization_summary, null, 2)}
-                  </pre>
-                </AccordionDetails>
-              </Accordion>
-            )}
-          </div>
+              {/* Investment Calculator */}
+              <Alert severity="info" sx={{ mt: 3 }}>
+                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                  💡 Investment Calculator
+                </Typography>
+                <Typography variant="body2">
+                  With ₹10,00,000 invested in this portfolio:
+                </Typography>
+                <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
+                  <li>Expected Annual Dividend: {formatCurrency(1000000 * optimizationResult.portfolio_yield)}</li>
+                  <li>Monthly Income: {formatCurrency((1000000 * optimizationResult.portfolio_yield) / 12)}</li>
+                  <li>Quarterly Income: {formatCurrency((1000000 * optimizationResult.portfolio_yield) / 4)}</li>
+                </ul>
+              </Alert>
+            </CardContent>
+          </Card>
         )
       )}
 
-      {/* Helpful Tips */}
-      <Card style={{ 
-        marginTop: '2rem', 
-        backgroundColor: '#f8f9ff', 
-        maxWidth: '900px', 
-        margin: '2rem auto',
-        border: '1px solid #e3f2fd'
-      }}>
+      {/* Information Card */}
+      <Card sx={{ maxWidth: 900, mx: 'auto', backgroundColor: '#f8f9ff', border: '1px solid #e3f2fd' }}>
         <CardContent>
           <Typography variant="h6" gutterBottom color="primary" sx={{ fontWeight: 600 }}>
-            💡 New Approach: Practitioner-Focused Dividend Investing
+            📊 About Entropy-Based Dividend Optimization
           </Typography>
-          <ul style={{ margin: 0, paddingLeft: '20px' }}>
-            <li><strong>Full Capital Deployment:</strong> Our optimizer targets 99%+ deployment rate - no cash sitting idle.</li>
-            <li><strong>Income First:</strong> Maximizes annual dividend income, not theoretical risk metrics.</li>
-            <li><strong>High-Yield Stocks:</strong> PSUs like ONGC, Coal India, NTPC, Power Grid often yield 5-8%+.</li>
-            <li><strong>Simple Diversification:</strong> Use min positions (e.g., 4-6 stocks) for practical portfolios.</li>
-            <li><strong>Position Sizing:</strong> Max 25-30% per stock prevents over-concentration.</li>
-            <li><strong>Tax Note:</strong> Dividends are taxed at slab rates - factor this into your strategy.</li>
-            <li><strong>Reinvestment Strategy:</strong> Use dividends to buy more shares quarterly for compounding.</li>
+          <Typography paragraph>
+            This optimizer uses a mathematical approach that balances two objectives:
+          </Typography>
+          <ul style={{ paddingLeft: '20px' }}>
+            <li><strong>Maximize Yield:</strong> Seeks stocks with the highest dividend yields (TTM)</li>
+            <li><strong>Maximize Entropy:</strong> Ensures diversification by maximizing portfolio entropy H(w) = -Σ w_i log(w_i)</li>
           </ul>
+          <Typography paragraph sx={{ mt: 2 }}>
+            The objective function is: <code>maximize Y^T w + λ * H(w)</code>
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            • λ (entropy weight) controls the trade-off between yield and diversification<br/>
+            • Higher λ = more diversification, lower concentration<br/>
+            • Lower λ = focus on highest yielding stocks<br/>
+            • Effective N = exp(H) measures the "effective number" of stocks in the portfolio
+          </Typography>
         </CardContent>
       </Card>
     </>

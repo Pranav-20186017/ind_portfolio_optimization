@@ -84,16 +84,23 @@ const docsIndexPage: React.FC = () => {
       path: '/docs/min-cdar',
       available: true
     },
-    {
+        {
       title: 'Technical Indicator Optimization',
       description: 'A signal-based optimization approach using cross-sectional z-scores of technical indicators combined through linear programming.',
       path: '/docs/technical',
       available: true,
       isNew: true
+    },
+    {
+      title: 'Entropy-Based Dividend Optimization',
+      description: 'Maximize dividend yield while maintaining portfolio diversity using entropy-based optimization. Balances income generation with intelligent diversification.',
+      path: '/dividend',
+      available: true,
+      isNew: true
     }
   ];
 
-    const financialConcepts = [    {      title: 'Capital Asset Pricing Model (CAPM)',      description: 'A model that describes the relationship between systematic risk and expected return for assets, particularly stocks.',      path: '/docs/capm',      available: true    },    {      title: 'Modern Portfolio Theory',      description: 'A framework for constructing portfolios that maximize expected return for a given level of market risk.',      path: '/docs/modern-portfolio-theory',      available: true    },    {      title: 'Efficient Frontier',      description: 'The set of optimal portfolios that offer the highest expected return for a defined level of risk.',      path: '/docs/efficient-frontier',      available: true    },    {      title: 'Expected Returns',      description: 'The anticipated return on an investment based on historical data or forward-looking estimates.',      path: '/docs/expected-returns',      available: true    },    {      title: 'Volatility (σ)',      description: 'A statistical measure of the dispersion of returns, usually measured using standard deviation.',      path: '/docs/volatility',      available: true    }
+  const financialConcepts = [    {      title: 'Capital Asset Pricing Model (CAPM)',      description: 'A model that describes the relationship between systematic risk and expected return for assets, particularly stocks.',      path: '/docs/capm',      available: true    },    {      title: 'Modern Portfolio Theory',      description: 'A framework for constructing portfolios that maximize expected return for a given level of market risk.',      path: '/docs/modern-portfolio-theory',      available: true    },    {      title: 'Efficient Frontier',      description: 'The set of optimal portfolios that offer the highest expected return for a defined level of risk.',      path: '/docs/efficient-frontier',      available: true    },    {      title: 'Expected Returns',      description: 'The anticipated return on an investment based on historical data or forward-looking estimates.',      path: '/docs/expected-returns',      available: true    },    {      title: 'Volatility (σ)',      description: 'A statistical measure of the dispersion of returns, usually measured using standard deviation.',      path: '/docs/volatility',      available: true    }
   ];
 
   const quantitativeMetrics = [
