@@ -83,18 +83,12 @@ const DividendOptimizer: React.FC = () => {
   const [selectedExchange, setSelectedExchange] = useState<ExchangeEnum | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<DividendOptimizationMethod>(DividendOptimizationMethod.AUTO);
   const [budget, setBudget] = useState<string>('1000000'); // Default 10L
-  const [maxRiskVariance, setMaxRiskVariance] = useState<string>('0.04'); // 20% volatility cap
-  const [minNames, setMinNames] = useState<string>('');
+  const [maxPositionSize, setMaxPositionSize] = useState<string>('0.25'); // 25% max per position
+  const [minPositions, setMinPositions] = useState<string>('4'); // Minimum 4 positions
+  const [minYield, setMinYield] = useState<string>('0.005'); // 0.5% minimum yield
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<APIError | null>(null);
   const [optimizationResult, setOptimizationResult] = useState<DividendOptimizationResponse | null>(null);
-  
-  // Advanced parameters
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [individualCapsText, setIndividualCapsText] = useState('');
-  const [sectorCapsText, setSectorCapsText] = useState('');
-  const [sectorMappingText, setSectorMappingText] = useState('');
-  const [seed, setSeed] = useState<string>('42');
 
   // Default stocks - same as main page
   const defaultNSEStocks: StockOption[] = [
@@ -144,17 +138,13 @@ const DividendOptimizer: React.FC = () => {
   const canSubmit = selectedStocks.length >= 2 && 
                    selectedExchange !== null && 
                    budget && 
-                   parseFloat(budget) > 0 &&
-                   maxRiskVariance &&
-                   parseFloat(maxRiskVariance) > 0;
+                   parseFloat(budget) >= 10000;  // Minimum ₹10,000
 
   let submitError = '';
   if (selectedStocks.length < 2) {
     submitError = 'Please select at least 2 stocks.';
-  } else if (!budget || parseFloat(budget) <= 0) {
-    submitError = 'Please enter a valid budget amount.';
-  } else if (!maxRiskVariance || parseFloat(maxRiskVariance) <= 0) {
-    submitError = 'Please enter a valid risk variance.';
+  } else if (!budget || parseFloat(budget) < 10000) {
+    submitError = 'Minimum budget is ₹10,000.';
   }
 
   // Load stock data
@@ -232,66 +222,7 @@ const DividendOptimizer: React.FC = () => {
     setSelectedStocks(selectedStocks.filter((s) => !(s.ticker === stockToRemove.ticker && s.exchange === stockToRemove.exchange)));
   };
 
-  // Parse advanced parameters
-  const parseAdvancedParams = () => {
-    const result: any = {};
-    
-    // Individual caps
-    if (individualCapsText.trim()) {
-      try {
-        const caps: { [symbol: string]: number } = {};
-        individualCapsText.split('\n').forEach(line => {
-          const [symbol, cap] = line.split(':').map(s => s.trim());
-          if (symbol && cap) {
-            caps[symbol] = parseFloat(cap);
-          }
-        });
-        if (Object.keys(caps).length > 0) {
-          result.individual_caps = caps;
-        }
-      } catch (e) {
-        console.warn('Error parsing individual caps:', e);
-      }
-    }
 
-    // Sector caps
-    if (sectorCapsText.trim()) {
-      try {
-        const caps: { [sector: string]: number } = {};
-        sectorCapsText.split('\n').forEach(line => {
-          const [sector, cap] = line.split(':').map(s => s.trim());
-          if (sector && cap) {
-            caps[sector] = parseFloat(cap);
-          }
-        });
-        if (Object.keys(caps).length > 0) {
-          result.sector_caps = caps;
-        }
-      } catch (e) {
-        console.warn('Error parsing sector caps:', e);
-      }
-    }
-
-    // Sector mapping
-    if (sectorMappingText.trim()) {
-      try {
-        const mapping: { [symbol: string]: string } = {};
-        sectorMappingText.split('\n').forEach(line => {
-          const [symbol, sector] = line.split(':').map(s => s.trim());
-          if (symbol && sector) {
-            mapping[symbol] = sector;
-          }
-        });
-        if (Object.keys(mapping).length > 0) {
-          result.sector_mapping = mapping;
-        }
-      } catch (e) {
-        console.warn('Error parsing sector mapping:', e);
-      }
-    }
-
-    return result;
-  };
 
   // Submit optimization
   const handleSubmit = async () => {
@@ -300,16 +231,13 @@ const DividendOptimizer: React.FC = () => {
     setLoading(true);
     setError(null);
     
-    const advancedParams = parseAdvancedParams();
-    
     const dataToSend: DividendOptimizationRequest = {
-      stocks: selectedStocks.map((s) => ({ ticker: s.ticker, exchange: s.exchange })),
+      stocks: selectedStocks.map((s) => ({ ticker: s.ticker, exchange: s.exchange as ExchangeEnum })),
       budget: parseFloat(budget),
-      max_risk_variance: parseFloat(maxRiskVariance),
       method: selectedMethod,
-      ...advancedParams,
-      ...(minNames ? { min_names: parseInt(minNames) } : {}),
-      ...(seed ? { seed: parseInt(seed) } : {})
+      max_position_size: parseFloat(maxPositionSize) || 0.25,
+      min_positions: parseInt(minPositions) || 3,
+      min_yield: parseFloat(minYield) || 0.005
     };
     
     try {
@@ -347,16 +275,12 @@ const DividendOptimizer: React.FC = () => {
     setSelectedStocks([]);
     setInputValue('');
     setBudget('1000000');
-    setMaxRiskVariance('0.04');
-    setMinNames('');
+    setMaxPositionSize('0.25');
+    setMinPositions('4');
+    setMinYield('0.005');
     setSelectedMethod(DividendOptimizationMethod.AUTO);
     setOptimizationResult(null);
     setError(null);
-    setIndividualCapsText('');
-    setSectorCapsText('');
-    setSectorMappingText('');
-    setSeed('42');
-    setShowAdvanced(false);
   };
 
   // Reset when exchange changes
@@ -551,6 +475,9 @@ const DividendOptimizer: React.FC = () => {
           Investment Parameters
         </Typography>
         
+        <Alert severity="info" sx={{ mb: 2 }}>
+          New approach: Focus on income generation and full capital deployment. Risk/volatility is secondary in dividend investing.
+        </Alert>
         <Grid container spacing={3}>
           <Grid item xs={12} md={6}>
             <TextField
@@ -562,23 +489,9 @@ const DividendOptimizer: React.FC = () => {
               variant="outlined"
               InputProps={{
                 startAdornment: <InputAdornment position="start">₹</InputAdornment>,
-                inputProps: { min: 0, step: 10000 }
+                inputProps: { min: 10000, step: 10000 }
               }}
-              helperText="Total amount to invest (e.g., ₹10,00,000)"
-            />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              label="Max Risk (Volatility²)"
-              type="number"
-              value={maxRiskVariance}
-              onChange={(e) => setMaxRiskVariance(e.target.value)}
-              variant="outlined"
-              InputProps={{
-                inputProps: { min: 0.001, max: 1, step: 0.001 }
-              }}
-              helperText="Risk cap: 0.04 = 20% volatility limit"
+              helperText="Total amount to invest (min ₹10,000)"
             />
           </Grid>
           <Grid item xs={12} md={6}>
@@ -599,111 +512,52 @@ const DividendOptimizer: React.FC = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} md={4}>
             <TextField
               fullWidth
-              label="Minimum Stocks (Optional)"
+              label="Max Position Size"
               type="number"
-              value={minNames}
-              onChange={(e) => setMinNames(e.target.value)}
+              value={maxPositionSize}
+              onChange={(e) => setMaxPositionSize(e.target.value)}
               variant="outlined"
               InputProps={{
-                inputProps: { min: 1 }
+                inputProps: { min: 0.05, max: 0.5, step: 0.05 }
               }}
-              helperText="Force minimum number of stocks in portfolio"
+              helperText="Max % per stock (0.25 = 25%)"
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth
+              label="Min Positions"
+              type="number"
+              value={minPositions}
+              onChange={(e) => setMinPositions(e.target.value)}
+              variant="outlined"
+              InputProps={{
+                inputProps: { min: 2, max: 20 }
+              }}
+              helperText="Minimum stocks for diversification"
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth
+              label="Min Yield"
+              type="number"
+              value={minYield}
+              onChange={(e) => setMinYield(e.target.value)}
+              variant="outlined"
+              InputProps={{
+                inputProps: { min: 0, max: 0.1, step: 0.001 }
+              }}
+              helperText="Min acceptable yield (0.005 = 0.5%)"
             />
           </Grid>
         </Grid>
       </div>
 
-      {/* Advanced Parameters */}
-      <div className="mb-6" style={{ 
-        opacity: selectedExchange ? 1 : 0.5, 
-        pointerEvents: selectedExchange ? 'auto' : 'none',
-        background: 'white', 
-        borderRadius: '8px', 
-        padding: '20px',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-        border: '1px solid #f0f0f0',
-        maxWidth: '900px',
-        margin: '0 auto 24px auto'
-      }}>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={showAdvanced}
-              onChange={(e) => setShowAdvanced(e.target.checked)}
-              color="primary"
-            />
-          }
-          label={
-            <Typography variant="h6" style={{ fontWeight: 600, fontSize: '1.25rem', color: '#1e293b' }}>
-              Advanced Parameters
-            </Typography>
-          }
-        />
-        
-        {showAdvanced && (
-          <Box sx={{ mt: 3 }}>
-            <Alert severity="warning" sx={{ mb: 3 }}>
-              Advanced parameters are optional. Leave empty to use defaults. Format: SYMBOL:VALUE (one per line).
-            </Alert>
-            
-            <Grid container spacing={3}>
-              <Grid item xs={12} md={4}>
-                <TextField
-                  fullWidth
-                  label="Individual Stock Caps"
-                  multiline
-                  rows={4}
-                  value={individualCapsText}
-                  onChange={(e) => setIndividualCapsText(e.target.value)}
-                  variant="outlined"
-                  placeholder="TCS:0.15&#10;RELIANCE:0.20"
-                  helperText="Max weight per stock (0-1). Example: TCS:0.15"
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField
-                  fullWidth
-                  label="Sector Caps"
-                  multiline
-                  rows={4}
-                  value={sectorCapsText}
-                  onChange={(e) => setSectorCapsText(e.target.value)}
-                  variant="outlined"
-                  placeholder="Banking:0.30&#10;Energy:0.25"
-                  helperText="Max weight per sector (0-1). Example: Banking:0.30"
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField
-                  fullWidth
-                  label="Sector Mapping"
-                  multiline
-                  rows={4}
-                  value={sectorMappingText}
-                  onChange={(e) => setSectorMappingText(e.target.value)}
-                  variant="outlined"
-                  placeholder="TCS:Technology&#10;RELIANCE:Energy"
-                  helperText="Map stocks to sectors. Example: TCS:Technology"
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Random Seed"
-                  type="number"
-                  value={seed}
-                  onChange={(e) => setSeed(e.target.value)}
-                  variant="outlined"
-                  helperText="For reproducible results (optional)"
-                />
-              </Grid>
-            </Grid>
-          </Box>
-        )}
-      </div>
+
 
       {/* Action Buttons */}
       <div className="mb-8" style={{ 
@@ -837,19 +691,24 @@ const DividendOptimizer: React.FC = () => {
                     <Typography><strong>Total Budget:</strong> {formatCurrency(optimizationResult.total_budget)}</Typography>
                     <Typography><strong>Amount Invested:</strong> {formatCurrency(optimizationResult.amount_invested)}</Typography>
                     <Typography><strong>Residual Cash:</strong> {formatCurrency(optimizationResult.residual_cash)}</Typography>
-                    <Typography sx={{ color: optimizationResult.amount_invested / optimizationResult.total_budget >= 0.95 ? 'green' : 'orange' }}>
-                      <strong>Deployment Rate:</strong> {formatPercentage(optimizationResult.amount_invested / optimizationResult.total_budget)}
+                    <Typography sx={{ 
+                      color: optimizationResult.deployment_rate >= 0.99 ? 'green' : 
+                             optimizationResult.deployment_rate >= 0.95 ? 'orange' : 'red',
+                      fontWeight: 'bold'
+                    }}>
+                      <strong>🎯 Deployment Rate:</strong> {formatPercentage(optimizationResult.deployment_rate)}
                     </Typography>
                   </Grid>
                   <Grid item xs={12} md={6}>
+                    <Typography sx={{ fontWeight: 'bold', color: '#2e8b57' }}>
+                      <strong>💰 Annual Income:</strong> {formatCurrency(optimizationResult.annual_income)}
+                    </Typography>
                     <Typography><strong>Portfolio Yield:</strong> {formatPercentage(optimizationResult.portfolio_yield)}</Typography>
                     <Typography><strong>Yield on Invested:</strong> {formatPercentage(optimizationResult.yield_on_invested)}</Typography>
-                    <Typography><strong>Annual Income:</strong> {formatCurrency(optimizationResult.annual_income)}</Typography>
                   </Grid>
                   <Grid item xs={12}>
                     <Typography><strong>Method Used:</strong> {optimizationResult.allocation_method}</Typography>
-                    <Typography><strong>Post-Round Volatility:</strong> {formatPercentage(optimizationResult.post_round_volatility)}</Typography>
-                    <Typography><strong>L1 Drift:</strong> {optimizationResult.l1_drift.toFixed(4)}</Typography>
+                    <Typography><strong>Number of Positions:</strong> {optimizationResult.allocations.length}</Typography>
                   </Grid>
                 </Grid>
               </CardContent>
@@ -986,26 +845,25 @@ const DividendOptimizer: React.FC = () => {
             )}
 
             {/* Optimization Summary */}
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="h6">Optimization Details</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <pre style={{ 
-                  whiteSpace: 'pre-wrap', 
-                  fontSize: '0.85rem',
-                  backgroundColor: '#f5f5f5',
-                  padding: '16px',
-                  borderRadius: '4px',
-                  overflow: 'auto'
-                }}>
-                  {JSON.stringify({
-                    granularity_check: optimizationResult.granularity_check,
-                    optimization_summary: optimizationResult.optimization_summary
-                  }, null, 2)}
-                </pre>
-              </AccordionDetails>
-            </Accordion>
+            {optimizationResult.optimization_summary && (
+              <Accordion>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="h6">Optimization Summary</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <pre style={{ 
+                    whiteSpace: 'pre-wrap', 
+                    fontSize: '0.85rem',
+                    backgroundColor: '#f5f5f5',
+                    padding: '16px',
+                    borderRadius: '4px',
+                    overflow: 'auto'
+                  }}>
+                    {JSON.stringify(optimizationResult.optimization_summary, null, 2)}
+                  </pre>
+                </AccordionDetails>
+              </Accordion>
+            )}
           </div>
         )
       )}
@@ -1020,15 +878,16 @@ const DividendOptimizer: React.FC = () => {
       }}>
         <CardContent>
           <Typography variant="h6" gutterBottom color="primary" sx={{ fontWeight: 600 }}>
-            💡 Dividend Investing Tips
+            💡 New Approach: Practitioner-Focused Dividend Investing
           </Typography>
           <ul style={{ margin: 0, paddingLeft: '20px' }}>
-            <li><strong>Focus on Consistency:</strong> Look for companies with a history of regular dividend payments.</li>
-            <li><strong>PSU Stocks:</strong> Government companies often offer high dividend yields (ONGC, Coal India, NTPC).</li>
-            <li><strong>Diversify Sectors:</strong> Spread across banking, energy, utilities, and consumer goods.</li>
-            <li><strong>Risk Management:</strong> Higher yields often come with higher risk - balance is key.</li>
-            <li><strong>Tax Efficiency:</strong> Consider dividend taxation in your overall investment strategy.</li>
-            <li><strong>Reinvestment:</strong> Consider reinvesting dividends for compound growth.</li>
+            <li><strong>Full Capital Deployment:</strong> Our optimizer targets 99%+ deployment rate - no cash sitting idle.</li>
+            <li><strong>Income First:</strong> Maximizes annual dividend income, not theoretical risk metrics.</li>
+            <li><strong>High-Yield Stocks:</strong> PSUs like ONGC, Coal India, NTPC, Power Grid often yield 5-8%+.</li>
+            <li><strong>Simple Diversification:</strong> Use min positions (e.g., 4-6 stocks) for practical portfolios.</li>
+            <li><strong>Position Sizing:</strong> Max 25-30% per stock prevents over-concentration.</li>
+            <li><strong>Tax Note:</strong> Dividends are taxed at slab rates - factor this into your strategy.</li>
+            <li><strong>Reinvestment Strategy:</strong> Use dividends to buy more shares quarterly for compounding.</li>
           </ul>
         </CardContent>
       </Card>

@@ -189,15 +189,20 @@ class TickerRequest(BaseModel):
 ########################################
 
 class DividendOptimizationRequest(BaseModel):
-    """Request model for dividend optimization endpoint"""
+    """Request model for dividend optimization endpoint - simplified for income focus"""
     stocks: List[StockItem]
     budget: float = 1000000  # Default ₹10L
-    max_risk_variance: float = 0.04  # 20% vol cap (σ²)
     method: DividendOptimizationMethod = DividendOptimizationMethod.AUTO
-    individual_caps: Optional[Dict[str, float]] = None  # symbol -> cap
-    sector_caps: Optional[Dict[str, float]] = None      # sector -> cap  
-    sector_mapping: Optional[Dict[str, str]] = None     # symbol -> sector
-    min_names: Optional[int] = None
+    max_position_size: float = 0.25  # Maximum 25% per position
+    min_positions: int = 3  # Minimum diversification
+    min_yield: float = 0.005  # Minimum acceptable yield (0.5%)
+    
+    # Legacy fields kept for backward compatibility but ignored
+    max_risk_variance: Optional[float] = None  # Deprecated - ignored
+    individual_caps: Optional[Dict[str, float]] = None  # Deprecated - use max_position_size
+    sector_caps: Optional[Dict[str, float]] = None  # Deprecated
+    sector_mapping: Optional[Dict[str, str]] = None  # Deprecated
+    min_names: Optional[int] = None  # Deprecated - use min_positions
     seed: Optional[int] = 42  # For reproducible results
     
     # Validation
@@ -206,13 +211,14 @@ class DividendOptimizationRequest(BaseModel):
             "example": {
                 "stocks": [
                     {"ticker": "ITC", "exchange": "NSE"},
-                    {"ticker": "HDFCBANK", "exchange": "NSE"}
+                    {"ticker": "COALINDIA", "exchange": "NSE"},
+                    {"ticker": "ONGC", "exchange": "NSE"},
+                    {"ticker": "NTPC", "exchange": "NSE"}
                 ],
                 "budget": 1000000,
-                "max_risk_variance": 0.04,
                 "method": "AUTO",
-                "sector_caps": {"Banking": 0.35, "FMCG": 0.25},
-                "sector_mapping": {"ITC": "FMCG", "HDFCBANK": "Banking"}
+                "max_position_size": 0.25,
+                "min_positions": 4
             }
         }
 
@@ -239,16 +245,15 @@ class DividendAllocationResult(BaseModel):
     annual_income: float
 
 class DividendOptimizationResponse(BaseModel):
-    """Response model for dividend optimization endpoint"""
+    """Response model for dividend optimization endpoint - income focused"""
     # Portfolio metrics
     total_budget: float
     amount_invested: float
     residual_cash: float
+    deployment_rate: float  # NEW: percentage of budget deployed
     portfolio_yield: float
     yield_on_invested: float
     annual_income: float
-    post_round_volatility: float
-    l1_drift: float
     allocation_method: str
     
     # Individual holdings
@@ -256,8 +261,10 @@ class DividendOptimizationResponse(BaseModel):
     
     # Summary data
     dividend_data: List[DividendStockData]
-    granularity_check: Dict
     optimization_summary: Dict
     
-    # Sector breakdown (if provided)
-    sector_allocations: Optional[Dict[str, float]] = None 
+    # Legacy fields for backward compatibility
+    post_round_volatility: Optional[float] = None  # Deprecated
+    l1_drift: Optional[float] = None  # Deprecated
+    granularity_check: Optional[Dict] = None  # Deprecated
+    sector_allocations: Optional[Dict[str, float]] = None  # Deprecated 

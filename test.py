@@ -6,6 +6,7 @@ import sys
 import warnings
 import logging
 import time
+import json
 from datetime import datetime
 from unittest.mock import patch, MagicMock, mock_open, ANY, Mock
 from pathlib import Path
@@ -3135,6 +3136,7 @@ class TestPortfolioOptimization(unittest.TestCase):
             total_budget=1000000,
             amount_invested=978365,
             residual_cash=21635,
+            deployment_rate=0.978365,  # Added required field
             portfolio_yield=0.0325,
             yield_on_invested=0.0332,
             annual_income=32500,

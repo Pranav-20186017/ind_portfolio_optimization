@@ -603,7 +603,7 @@ logger.propagate = False
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Import dividend optimization after logging is configured
-from dividend_optimizer import DividendOptimizationService
+from dividend_optimizer_new import NewDividendOptimizationService
 
 from io import StringIO
 warnings.filterwarnings("ignore")
@@ -2619,79 +2619,54 @@ async def optimize_dividend_portfolio(
     background_tasks: BackgroundTasks = None
 ) -> DividendOptimizationResponse:
     """
-    Forward yield dividend optimization endpoint.
-    Maximizes dividend income subject to risk and diversification constraints.
+    Practitioner-focused dividend optimization endpoint.
+    Maximizes dividend income and ensures full capital deployment (>99%).
+    Risk/volatility is secondary - dividend investing is about cash flow.
     """
     logger.info(f"Dividend optimization request: {len(request.stocks)} stocks, budget ₹{request.budget:,.0f}, method {request.method}")
     
-    # Initialize service
-    service = DividendOptimizationService()
+    # Initialize new service
+    service = NewDividendOptimizationService()
     
     try:
-        # Step 1: Validate request (this one is async)
+        # Step 1: Validate request - simplified
+        min_positions = request.min_positions if request.min_positions else (request.min_names if request.min_names else 3)
         await service.validate_request(
             request.stocks, 
-            request.budget, 
-            request.min_names,
-            request.sector_caps,
-            request.max_risk_variance
+            request.budget,
+            min_positions,
+            request.max_position_size
         )
         
-        # Step 2: Format tickers and fetch data (sync → threadpool)
+        # Step 2: Format tickers and fetch data
         tickers = format_tickers(request.stocks)
         logger.info(f"Formatted tickers: {tickers}")
         
-        stocks_data = await run_in_threadpool(service.fetch_and_prepare_data, tickers)
+        stocks_data = await service.fetch_and_prepare_data(tickers)
         
-        # Step 3: Prepare optimization data (sync → threadpool)
-        await run_in_threadpool(service.prepare_optimization_data, stocks_data)
-        
-        # Step 4: Convert individual caps to array format (sync)
-        individual_caps = service.convert_individual_caps(
-            request.individual_caps, service.optimizer.symbols
+        # Step 3: Run optimization - much simpler now!
+        result = await service.optimize_portfolio(
+            budget=request.budget,
+            method=request.method.value,
+            max_position_size=request.max_position_size,
+            min_positions=min_positions,
+            min_yield=request.min_yield
         )
         
-        # Step 5: Run continuous optimization (sync → threadpool)
-        target_weights = await run_in_threadpool(
-            service.run_continuous_optimization,
-            request.max_risk_variance,
-            individual_caps,
-            request.sector_caps,
-            request.sector_mapping
-        )
+        # Step 4: Format response
+        response_dict = service.format_response(result, request.budget)
         
-        # Step 6: Check budget feasibility (sync → threadpool)
-        await run_in_threadpool(
-            service.check_budget_feasibility,
-            request.budget,
-            target_weights,
-            request.min_names
-        )
+        # Add backward compatibility fields
+        response_dict['post_round_volatility'] = None  # No longer calculated
+        response_dict['l1_drift'] = None  # No longer relevant
+        response_dict['granularity_check'] = None  # Deprecated
         
-        # Step 7: Allocate shares with normalized caps from QP (sync → threadpool)
-        # CRITICAL FIX: Use the same normalized effective caps from the QP stage for shares
-        effective_caps = await run_in_threadpool(
-            lambda: service.optimizer._effective_caps(base_cap=0.25)
-        )
+        # Convert to response model
+        response = DividendOptimizationResponse(**response_dict)
         
-        result = await run_in_threadpool(
-            service.allocate_shares,
-            target_weights,
-            request.budget,
-            request.method.value,
-            effective_caps,  # Use normalized caps from QP, not raw user caps
-            request.sector_caps,
-            request.sector_mapping,
-            request.min_names,
-            request.seed
-        )
-        
-        # Step 8: Build response (sync → threadpool)
-        response = await run_in_threadpool(_build_dividend_response, service, result, request)
-        
-        logger.info(f"Dividend optimization completed successfully: {result.allocation_method}, "
-                   f"yield {result.portfolio_yield:.4%}, vol {response.post_round_volatility:.4%}, "
-                   f"positions {len(response.allocations)}")
+        logger.info(f"Dividend optimization completed: {result.allocation_method}, "
+                   f"deployment {result.deployment_rate:.1%}, yield {result.portfolio_yield:.2%}, "
+                   f"positions {result.num_positions}")
         
         # Use CustomJSONResponse with jsonable_encoder for extra safety against serialization issues
         payload = jsonable_encoder(response, exclude_none=True)
@@ -2708,106 +2683,7 @@ async def optimize_dividend_portfolio(
             status_code=500
         )
 
-def _build_dividend_response(
-    service: DividendOptimizationService, 
-    result, # PortfolioResult type from divopt module
-    request: DividendOptimizationRequest
-) -> DividendOptimizationResponse:
-    """Build the dividend optimization response object"""
-    
-    # Build allocations (only non-zero positions)
-    allocations = []
-    
-    # Calculate weight_on_invested denominator (sum of executed weights for positions with shares > 0)
-    total_invested_weight = float(np.sum(result.executed_weights[result.shares > 0]))
-    deployment_rate = total_invested_weight  # This equals the deployment rate
-    
-    logger.info(f"Weight calculation: deployment_rate={deployment_rate:.4f}, "
-               f"positions_with_shares={np.sum(result.shares > 0)}")
-    logger.info(f"Weight verification: weight_on_budget will sum to {deployment_rate:.4f}, "
-               f"weight_on_invested will sum to 1.0000")
-    
-    for i, symbol in enumerate(service.optimizer.symbols):
-        if result.shares[i] > 0:
-            weight = float(result.executed_weights[i])  # weight on budget
-            weight_on_invested = float(result.executed_weights[i] / max(1e-12, total_invested_weight))  # weight on invested
-            
-            allocations.append(DividendAllocationResult(
-                symbol=symbol,
-                shares=int(result.shares[i]),
-                price=float(service.optimizer.prices[i]),
-                value=float(result.shares[i] * service.optimizer.prices[i]),
-                weight=weight,
-                weight_on_invested=weight_on_invested,
-                target_weight=float(result.target_weights[i]),
-                forward_yield=float(service.optimizer.forward_yields[i]),
-                annual_income=float(result.shares[i] * service.optimizer.forward_dividends[i])
-            ))
-    
-    # Build dividend data summary
-    dividend_data = []
-    for symbol in service.optimizer.symbols:
-        stock_data = service.optimizer.stocks_data[symbol]
-        dividend_data.append(DividendStockData(
-            symbol=symbol,
-            price=stock_data.price,
-            forward_dividend=stock_data.forward_dividend,
-            forward_yield=stock_data.forward_yield,
-            dividend_source=stock_data.dividend_source,
-            confidence=stock_data.dividend_metadata.get('confidence') if stock_data.dividend_metadata else None,
-            cadence_info=stock_data.dividend_metadata if stock_data.dividend_metadata else None
-        ))
-    
-    # Calculate sector allocations if mapping provided
-    sector_allocations = None
-    if request.sector_mapping:
-        sector_allocations = {}
-        for i, symbol in enumerate(service.optimizer.symbols):
-            if result.shares[i] > 0:
-                sector = request.sector_mapping.get(symbol, "Other")
-                value = float(result.shares[i] * service.optimizer.prices[i])
-                sector_allocations[sector] = sector_allocations.get(sector, 0) + value
-    
-    # Get granularity check
-    granularity = service.optimizer.preflight_granularity(
-        request.budget, result.target_weights, request.min_names
-    )
-    
-    # Ensure granularity flags are native Python booleans
-    granularity_check = {
-        **granularity,
-        "feasible": bool(granularity.get("feasible", True)),
-    }
-    
-    # Calculate post-round volatility
-    post_vol = service.calculate_post_round_volatility(result.shares)
-    
-    # Calculate yield on invested
-    amount_invested = float(np.sum(result.shares * service.optimizer.prices))
-    yield_on_invested = result.annual_income / amount_invested if amount_invested > 0 else 0.0
-    
-    return DividendOptimizationResponse(
-        total_budget=request.budget,
-        amount_invested=amount_invested,
-        residual_cash=result.residual_cash,
-        portfolio_yield=result.portfolio_yield,
-        yield_on_invested=yield_on_invested,
-        annual_income=result.annual_income,
-        post_round_volatility=post_vol,
-        l1_drift=result.drift_l1,
-        allocation_method=result.allocation_method,
-        allocations=allocations,
-        dividend_data=dividend_data,
-        granularity_check=granularity_check,
-        optimization_summary={
-            "method_used": result.allocation_method,
-            "total_shares": int(np.sum(result.shares)),
-            "num_positions": int(np.sum(result.shares > 0)),
-            "deployment_rate": (request.budget - result.residual_cash) / request.budget,
-            "risk_adjusted": bool(post_vol <= (request.max_risk_variance ** 0.5 + 0.01))  # Within tolerance
-        },
-        sector_allocations=sector_allocations
-    )
+# Removed old _build_dividend_response - no longer needed with new simplified approach
 
 # ==== Dependency Injection Wrappers ====
 def download_close_prices(ticker: str, start_date: datetime) -> pd.Series:

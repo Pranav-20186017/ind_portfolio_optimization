@@ -209,12 +209,17 @@ export enum DividendOptimizationMethod {
 export interface DividendOptimizationRequest {
   stocks: StockItem[];
   budget: number;
-  max_risk_variance: number;
   method: DividendOptimizationMethod;
-  individual_caps?: { [symbol: string]: number };
-  sector_caps?: { [sector: string]: number };
-  sector_mapping?: { [symbol: string]: string };
-  min_names?: number;
+  max_position_size: number;  // Maximum weight per position (e.g., 0.25 = 25%)
+  min_positions: number;  // Minimum number of positions for diversification
+  min_yield: number;  // Minimum acceptable yield (e.g., 0.005 = 0.5%)
+  
+  // Legacy fields - kept for backward compatibility but ignored
+  max_risk_variance?: number;  // Deprecated
+  individual_caps?: { [symbol: string]: number };  // Deprecated
+  sector_caps?: { [sector: string]: number };  // Deprecated
+  sector_mapping?: { [symbol: string]: string };  // Deprecated
+  min_names?: number;  // Deprecated - use min_positions
   seed?: number;
 }
 
@@ -244,15 +249,18 @@ export interface DividendOptimizationResponse {
   total_budget: number;
   amount_invested: number;
   residual_cash: number;
+  deployment_rate: number;  // NEW: percentage of budget deployed (0.99 = 99%)
   portfolio_yield: number;
   yield_on_invested: number;
   annual_income: number;
-  post_round_volatility: number;
-  l1_drift: number;
   allocation_method: string;
   allocations: DividendAllocationResult[];
   dividend_data: DividendStockData[];
-  granularity_check: Record<string, any>;
   optimization_summary: Record<string, any>;
-  sector_allocations?: { [sector: string]: number };
+  
+  // Legacy fields - may be null
+  post_round_volatility?: number | null;  // Deprecated
+  l1_drift?: number | null;  // Deprecated
+  granularity_check?: Record<string, any> | null;  // Deprecated
+  sector_allocations?: { [sector: string]: number } | null;  // Deprecated
 }
