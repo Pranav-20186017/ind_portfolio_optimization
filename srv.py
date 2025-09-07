@@ -367,7 +367,20 @@ def finalize_portfolio(
     
     # If optimizer provided performance metrics, use them
     if pfolio_perf is not None:
-        expected_return, volatility, sharpe = pfolio_perf
+        if len(pfolio_perf) == 3:
+            expected_return, volatility, sharpe = pfolio_perf
+        elif len(pfolio_perf) == 2:
+            # EfficientCDaR only returns expected_return and volatility
+            expected_return, volatility = pfolio_perf
+            # Calculate Sharpe ratio manually
+            excess_return = expected_return - risk_free_rate
+            sharpe = excess_return / volatility if volatility > 0 else 0
+        else:
+            # Fallback: calculate all metrics manually
+            expected_return = port_returns.mean() * 252  # Annualized
+            volatility = port_returns.std() * np.sqrt(252)  # Annualized
+            excess_return = expected_return - risk_free_rate
+            sharpe = excess_return / volatility if volatility > 0 else 0
     else:
         # Calculate basic performance metrics
         expected_return = port_returns.mean() * 252  # Annualized
@@ -666,8 +679,15 @@ def sanitize_bse_prices(
 ########################################
 # Ensure output directory
 ########################################
-settings.output_dir.mkdir(parents=True, exist_ok=True)
-output_dir = str(settings.output_dir)  # Keep this variable for backward compatibility
+from pathlib import Path
+try:
+    output_dir_path = Path(settings.output_dir) if isinstance(settings.output_dir, str) else settings.output_dir
+    output_dir_path.mkdir(parents=True, exist_ok=True)
+    output_dir = str(output_dir_path)  # Keep this variable for backward compatibility
+except Exception as e:
+    # Fallback for testing or when settings.output_dir is not properly configured
+    output_dir = "test_outputs"
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
 
 # Configure MOSEK license
 has_mosek_license = configure_mosek_license()
@@ -1946,6 +1966,14 @@ def run_optimization_MIN_CVAR(mu, returns, benchmark_df, risk_free_rate=0.05):
             
             # Calculate standard performance metrics
             pfolio_perf = ef_alt.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+            try:
+                logger.debug(f"MIN_CDAR fallback performance tuple length={len(pfolio_perf)}")
+            except Exception:
+                pass
+            try:
+                logger.debug(f"MIN_CVAR fallback performance tuple length={len(pfolio_perf)}")
+            except Exception:
+                pass
             logger.info("Used min_volatility as fallback for min_cvar (no MOSEK license)")
         else:
             # Try EfficientCVaR optimization with MOSEK solver
@@ -1957,6 +1985,10 @@ def run_optimization_MIN_CVAR(mu, returns, benchmark_df, risk_free_rate=0.05):
                 
                 # Get portfolio metrics
                 pfolio_perf = ef_cvar.portfolio_performance(verbose=False)
+                try:
+                    logger.debug(f"MIN_CVAR MOSEK performance tuple length={len(pfolio_perf)}")
+                except Exception:
+                    pass
                 logger.info("Successfully used MOSEK solver for MIN_CVAR optimization")
                 
             except Exception as solver_error:
@@ -1971,6 +2003,10 @@ def run_optimization_MIN_CVAR(mu, returns, benchmark_df, risk_free_rate=0.05):
                 
                 # Calculate standard performance metrics
                 pfolio_perf = ef_alt.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+                try:
+                    logger.debug(f"MIN_CVAR MOSEK-fallback performance tuple length={len(pfolio_perf)}")
+                except Exception:
+                    pass
                 logger.info("Used min_volatility as fallback for min_cvar (MOSEK error)")
 
         # Use the finalize_portfolio helper function
@@ -2016,6 +2052,10 @@ def run_optimization_MIN_CDAR(mu, returns, benchmark_df, risk_free_rate=0.05):
                 
                 # Get portfolio metrics
                 pfolio_perf = ef_cdar.portfolio_performance(verbose=False)
+                try:
+                    logger.debug(f"MIN_CDAR MOSEK performance tuple length={len(pfolio_perf)}")
+                except Exception:
+                    pass
                 logger.info("Successfully used MOSEK solver for MIN_CDAR optimization")
                 
             except Exception as solver_error:
@@ -2030,6 +2070,10 @@ def run_optimization_MIN_CDAR(mu, returns, benchmark_df, risk_free_rate=0.05):
                 
                 # Calculate standard performance metrics
                 pfolio_perf = ef_alt.portfolio_performance(verbose=False, risk_free_rate=risk_free_rate)
+                try:
+                    logger.debug(f"MIN_CDAR MOSEK-fallback performance tuple length={len(pfolio_perf)}")
+                except Exception:
+                    pass
                 logger.info("Used min_volatility as fallback for min_cdar (MOSEK error)")
 
         # Use the finalize_portfolio helper function
