@@ -300,9 +300,14 @@ const DividendOptimizer: React.FC = () => {
           Maximize dividend yield while maintaining portfolio diversity using entropy-based optimization. 
           Balance income generation with intelligent diversification.
         </Typography>
-        <Typography variant="body2" sx={{ color: '#2e8b57', mb: 4, textAlign: { xs: 'center', md: 'left' } }}>
-          Want risk-return optimization instead? Try our <Link href="/" style={{ color: '#0052cc', textDecoration: 'underline' }}>Portfolio Optimizer</Link>.
-        </Typography>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', justifyContent: { xs: 'center', md: 'flex-start' } }}>
+          <Typography variant="body2" sx={{ color: '#2e8b57' }}>
+            Want risk-return optimization instead? Try our <Link href="/" style={{ color: '#0052cc', textDecoration: 'underline' }}>Portfolio Optimizer</Link>.
+          </Typography>
+          <Link href="/docs/dividend-optimizer" passHref>
+            <Button variant="outlined" size="small">Docs</Button>
+          </Link>
+        </Box>
       </Box>
 
       {/* Exchange Selection */}

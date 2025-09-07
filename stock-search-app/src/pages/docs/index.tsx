@@ -94,7 +94,7 @@ const docsIndexPage: React.FC = () => {
     {
       title: 'Entropy-Based Dividend Optimization',
       description: 'Maximize dividend yield while maintaining portfolio diversity using entropy-based optimization. Balances income generation with intelligent diversification.',
-      path: '/dividend',
+      path: '/docs/dividend-optimizer',
       available: true,
       isNew: true
     }
