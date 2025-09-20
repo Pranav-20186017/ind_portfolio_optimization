@@ -26,7 +26,7 @@ import {
 } from 'chart.js';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
-import Head from 'next/head';
+import SEO from '../components/SEO';
 
 // Material UI components
 import Grid from '@mui/material/Grid';
@@ -1054,14 +1054,12 @@ const HomePage: React.FC = () => {
 
   return (
     <>
-      <Head>
-        <title>Indian Stock Portfolio Optimization Tool | Optimize NSE & BSE Stocks</title>
-        <meta
-          name="description"
-          content="Optimize your Indian stock portfolio with AI-driven quantitative models. Supports NSE, BSE, Mean-Variance, CVaR, HERC, NCO, and more for robust, risk-managed investing."
-        />
-        <meta name="keywords" content="Indian stock portfolio optimization, NSE portfolio, BSE portfolio, mean-variance optimization, CVaR, HERC, NCO, quantitative investing India, risk management stocks" />
-      </Head>
+      <SEO
+        title="Indian Portfolio Optimization – Optimizer"
+        description="Run MVO, HRP, HERC, CVaR/CDaR, and technical indicator models for Indian markets."
+        path="/"
+        image="/og/optimizer.png"
+      />
       
       <TopNav />
       
@@ -2271,5 +2269,10 @@ const HomePage: React.FC = () => {
     </>
   );
 };
+
+export async function getStaticProps() {
+  // preload any config/labels required for SEO; heavy data can remain client-side
+  return { props: {}, revalidate: 3600 }; // ISR hourly
+}
 
 export default HomePage;

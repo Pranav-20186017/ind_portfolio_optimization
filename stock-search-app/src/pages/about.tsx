@@ -1,18 +1,24 @@
 import React from 'react';
-import Head from 'next/head';
+import SEO from '../components/SEO';
 import TopNav from '../components/TopNav';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
 import Divider from '@mui/material/Divider';
 
+export async function getStaticProps() {
+  return { props: {}, revalidate: 86400 }; // daily
+}
+
 export default function About() {
   return (
     <>
-      <Head>
-        <title>About | QuantPort India - Indian Stock Portfolio Optimization</title>
-        <meta name="description" content="QuantPort India is a one-stop solution for Indian stock portfolio optimization, combining advanced quantitative finance with AI, real NSE/BSE data, and customizable risk analytics for retail investors and fund managers." />
-      </Head>
+      <SEO
+        title="About – Indian Portfolio Optimization"
+        description="What this app does, models used, data sources, and credits."
+        path="/about"
+        image="/og/default.png"
+      />
       <TopNav />
       
       <Box sx={{ 

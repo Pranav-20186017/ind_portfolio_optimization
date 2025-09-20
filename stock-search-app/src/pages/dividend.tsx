@@ -22,7 +22,7 @@ import Link from 'next/link';
 import axios from 'axios';
 import Fuse from 'fuse.js';
 import debounce from 'lodash/debounce';
-import Head from 'next/head';
+import SEO from '../components/SEO';
 
 // Material UI components
 import Grid from '@mui/material/Grid';
@@ -268,14 +268,12 @@ const DividendOptimizer: React.FC = () => {
 
   return (
     <>
-      <Head>
-        <title>Dividend Yield Optimizer | Entropy-Based Portfolio Optimization</title>
-        <meta
-          name="description"
-          content="Optimize your dividend portfolio using entropy-based diversification. Maximize yield while maintaining portfolio diversity with NSE & BSE stocks."
-        />
-        <meta name="keywords" content="dividend yield optimization, entropy diversification, Indian dividend stocks, NSE dividend, BSE dividend, portfolio optimization" />
-      </Head>
+      <SEO
+        title="Dividend Optimizer – India"
+        description="Greedy/MILP-based dividend allocation under variance caps, sector limits, and budget."
+        path="/dividend"
+        image="/og/dividend.png"
+      />
       
       <TopNav />
       
@@ -708,5 +706,9 @@ const DividendOptimizer: React.FC = () => {
     </>
   );
 };
+
+export async function getStaticProps() {
+  return { props: {}, revalidate: 3600 };
+}
 
 export default DividendOptimizer;
