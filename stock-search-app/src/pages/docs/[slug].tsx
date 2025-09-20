@@ -33,10 +33,10 @@ const getDocTitle = (slug: string): string => {
 };
 
 export const getStaticPaths: GetStaticPaths = async () => {
-  const slugs = getDocSlugs();
-  
+  // For now, return empty paths to avoid conflicts with existing doc pages
+  // This will make all paths fallback to the dynamic route only when they don't exist as static files
   return { 
-    paths: slugs.map((slug) => ({ params: { slug } })), 
+    paths: [], 
     fallback: 'blocking' 
   };
 };
