@@ -3,14 +3,12 @@ module.exports = {
   siteUrl:
     process.env.SITE_URL || "https://indportfoliooptimization.vercel.app",
   generateRobotsTxt: true,
-  sitemapSize: 5000,
+  // Force a single sitemap file (no index)
+  generateIndexSitemap: false,
+  sitemapSize: 50000,
   changefreq: "weekly",
   priority: 0.7,
-  exclude: [
-    "/api/*",
-    "/_next/*",
-    // add any private/gated pages here
-  ],
+  exclude: ["/api/*", "/_next/*"],
   transform: async (config, path) => {
     const high = ["/", "/dividend", "/about", "/docs"];
     return {

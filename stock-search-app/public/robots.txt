@@ -1,4 +1,9 @@
+# *
 User-agent: *
-Allow: /
+Disallow: /
 
-Sitemap: https://indportfoliooptimization.vercel.app/sitemap.xml 
+# Host
+Host: https://indportfoliooptimization.vercel.app
+
+# Sitemaps
+Sitemap: https://indportfoliooptimization.vercel.app/sitemap.xml
