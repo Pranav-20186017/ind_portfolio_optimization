@@ -7,14 +7,17 @@ from datetime import datetime, timezone
 import pyarrow as pa, pyarrow.parquet as pq
 from supabase import create_client
 
-SB_URL  = os.environ["SUPABASE_URL"]
-SB_KEY  = os.environ["SUPABASE_SERVICE_ROLE_KEY"]  # MUST be service_role in prod
-BUCKET  = os.environ.get("SUPABASE_BUCKET", "runs")
-sb = create_client(SB_URL, SB_KEY)
+# Optional Supabase binding for tests/CI: if envs are missing, disable persistence
+SB_URL  = os.getenv("SUPABASE_URL")
+SB_KEY  = os.getenv("SUPABASE_SERVICE_ROLE_KEY")  # MUST be service_role in prod
+BUCKET  = os.getenv("SUPABASE_BUCKET", "runs")
+sb = create_client(SB_URL, SB_KEY) if (SB_URL and SB_KEY) else None
 
 def _sha(b: bytes) -> str: return sha256(b).hexdigest()
 
 def _upload_bytes(run_id: str, name: str, data: bytes, content_type: str, kind: str):
+    if sb is None:
+        return
     # path is bucket-relative
     path = f"{run_id}/{name}"
     # IMPORTANT: upsert must be string, not bool
@@ -63,6 +66,8 @@ def persist_all(
 
     yearly_returns: Dict[int, float] | None = None,  # optional dict {year: ret}
 ):
+    if sb is None:
+        return
     # 1) parent row (snapshot)
     sb.table("runs").upsert({
         "run_id": run_id,
