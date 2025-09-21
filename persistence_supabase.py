@@ -7,15 +7,18 @@ from hashlib import sha256
 import pyarrow as pa, pyarrow.parquet as pq
 from supabase import create_client
 
-SB_URL  = os.environ["SUPABASE_URL"]
-SB_KEY  = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-BUCKET  = os.environ.get("SUPABASE_BUCKET", "runs")
-sb = create_client(SB_URL, SB_KEY)
+# Optional Supabase binding: disable persistence if env vars are missing (CI/tests)
+SB_URL  = os.getenv("SUPABASE_URL")
+SB_KEY  = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+BUCKET  = os.getenv("SUPABASE_BUCKET", "runs")
+sb = create_client(SB_URL, SB_KEY) if (SB_URL and SB_KEY) else None
 logger = logging.getLogger(__name__)
 
 def _sha(b: bytes) -> str: return sha256(b).hexdigest()
 
 def _upload_bytes(run_id: str, name: str, data: bytes, content_type: str, kind: str):
+    if sb is None:
+        return
     # Store inside the bucket under {run_id}/... (do not prefix with bucket name)
     path = f"{run_id}/{name}"
     try:
@@ -64,6 +67,8 @@ def persist_all(
     returns_panel_df=None,        # optional full panel (wide or long)
     cov_matrix=None               # optional numpy.ndarray
 ):
+    if sb is None:
+        return
     # 1) parent row (snapshot for easy history UI)
     sb.table("runs").upsert({
         "run_id": run_id,
