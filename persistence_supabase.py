@@ -1,45 +1,41 @@
 from __future__ import annotations
-import os, io, base64, logging
-from datetime import datetime, timezone
+import os, io, base64, json
 from typing import Dict, Any, Optional
 from hashlib import sha256
+from datetime import datetime, timezone
 
 import pyarrow as pa, pyarrow.parquet as pq
 from supabase import create_client
 
-# Optional Supabase binding: disable persistence if env vars are missing (CI/tests)
-SB_URL  = os.getenv("SUPABASE_URL")
-SB_KEY  = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-BUCKET  = os.getenv("SUPABASE_BUCKET", "runs")
-sb = create_client(SB_URL, SB_KEY) if (SB_URL and SB_KEY) else None
-logger = logging.getLogger(__name__)
+SB_URL  = os.environ["SUPABASE_URL"]
+SB_KEY  = os.environ["SUPABASE_SERVICE_ROLE_KEY"]  # MUST be service_role in prod
+BUCKET  = os.environ.get("SUPABASE_BUCKET", "runs")
+sb = create_client(SB_URL, SB_KEY)
 
 def _sha(b: bytes) -> str: return sha256(b).hexdigest()
 
 def _upload_bytes(run_id: str, name: str, data: bytes, content_type: str, kind: str):
-    if sb is None:
-        return
-    # Store inside the bucket under {run_id}/... (do not prefix with bucket name)
+    # path is bucket-relative
     path = f"{run_id}/{name}"
-    try:
-        sb.storage.from_(BUCKET).upload(
-            path,
-            data,
-            file_options={
-                "contentType": content_type,
-                "upsert": "true",
-            },
-        )
-    except Exception as e:
-        logger.exception("Storage upload failed for %s: %s", path, str(e))
-        raise
-    try:
-        sb.table("run_artifacts").insert({
-            "run_id": run_id, "kind": kind, "path": path,
-            "content_type": content_type, "bytes": len(data), "sha256": _sha(data)
-        }).execute()
-    except Exception as e:
-        logger.exception("run_artifacts insert failed for %s: %s", path, str(e))
+    # IMPORTANT: upsert must be string, not bool
+    sb.storage.from_(BUCKET).upload(
+        path,
+        data,
+        file_options={
+            "contentType": content_type,
+            "upsert": "true",
+            # optional: "cacheControl": "3600"
+        },
+    )
+    # record in DB
+    sb.table("run_artifacts").insert({
+        "run_id": run_id,
+        "kind": kind,
+        "path": path,
+        "content_type": content_type,
+        "bytes": len(data),
+        "sha256": _sha(data),
+    }).execute()
 
 def _upload_parquet(run_id: str, name: str, table: pa.Table, kind: str):
     buf = io.BytesIO(); pq.write_table(table, buf)
@@ -55,47 +51,45 @@ def persist_all(
     # maps: method -> ...
     method_weights: Dict[str, Dict[str, float]] | None = None,
     method_metrics: Dict[str, Dict[str, float]] | None = None,
-    method_plots_b64: Dict[str, Dict[str, str]] | None = None,  # {"MVO":{"returns_dist.png":"...","max_drawdown.png":"..."}}
+    method_plots_b64: Dict[str, Dict[str, str]] | None = None,
 
-    # response-level artifacts
     covariance_heatmap_b64: Optional[str] = None,
 
-    # optional Parquet frames
-    cumulative_returns_df=None,   # pd.DataFrame: ["dt","method","cumret"]
-    benchmark_returns_df=None,    # pd.DataFrame: ["dt","benchmark","ret"]
-    stock_yearly_returns_df=None, # pd.DataFrame: ["ticker","year","ret"]
-    returns_panel_df=None,        # optional full panel (wide or long)
-    cov_matrix=None               # optional numpy.ndarray
+    cumulative_returns_df=None,   # df[dt, method, cumret]
+    benchmark_returns_df=None,    # df[dt, benchmark, ret]
+    stock_yearly_returns_df=None, # df[ticker, year, ret]
+    returns_panel_df=None,        # df[...] optional
+    cov_matrix=None,              # numpy.ndarray optional
+
+    yearly_returns: Dict[int, float] | None = None,  # optional dict {year: ret}
 ):
-    if sb is None:
-        return
-    # 1) parent row (snapshot for easy history UI)
+    # 1) parent row (snapshot)
     sb.table("runs").upsert({
         "run_id": run_id,
         "endpoint": endpoint,
         "request_json": request_json,
         "response_json": response_json,
-        "note": "bg persist v1"
+        "note": "bg persist v2",
     }).execute()
 
-    # 2) per-method weights
+    # 2) per-method weights -------------- (UPSERT with new composite PK)
     if method_weights:
         rows = []
         for method, wmap in method_weights.items():
             for t, w in (wmap or {}).items():
-                rows.append({"run_id": run_id, "ticker": t, "weight": float(w), "method": method})
+                rows.append({
+                    "run_id": run_id,
+                    "ticker": t,
+                    "method": method,
+                    "weight": float(w),
+                })
         if rows:
-            try:
-                sb.table("run_weights").insert(rows).execute()
-            except Exception as e:
-                # Fallback if schema lacks 'method' column
-                if "method" in str(e):
-                    rows_nomethod = [{k: v for k, v in r.items() if k != "method"} for r in rows]
-                    sb.table("run_weights").insert(rows_nomethod).execute()
-                else:
-                    raise
+            sb.table("run_weights").upsert(
+                rows,
+                on_conflict="run_id,ticker,method"
+            ).execute()
 
-    # 3) per-method metrics (flatten entire PortfolioPerformance)
+    # 3) per-method metrics -------------- (UPSERT with new composite PK)
     if method_metrics:
         rows = []
         for method, m in method_metrics.items():
@@ -103,18 +97,14 @@ def persist_all(
                 rows.append({
                     "run_id": run_id,
                     "metric_name": k,
+                    "method": method,
                     "metric_value": (None if v is None else float(v)),
-                    "method": method
                 })
         if rows:
-            try:
-                sb.table("run_metrics").insert(rows).execute()
-            except Exception as e:
-                if "method" in str(e):
-                    rows_nomethod = [{k: v for k, v in r.items() if k != "method"} for r in rows]
-                    sb.table("run_metrics").insert(rows_nomethod).execute()
-                else:
-                    raise
+            sb.table("run_metrics").upsert(
+                rows,
+                on_conflict="run_id,metric_name,method"
+            ).execute()
 
     # 4) per-method plots (base64 → PNG)
     if method_plots_b64:
@@ -124,7 +114,7 @@ def persist_all(
                     raw = base64.b64decode(b64)
                     _upload_bytes(run_id, f"{method}_{fname}", raw, "image/png", "image")
                 except Exception:
-                    pass
+                    pass  # keep persistence best-effort
 
     # 5) response-level covariance heatmap
     if covariance_heatmap_b64:
@@ -162,9 +152,12 @@ def persist_all(
     except Exception:
         pass
 
-    # 8) finished marker (write an actual UTC timestamp)
-    sb.table("runs").update({
-        "finished_at": datetime.now(timezone.utc).isoformat()
-    }).eq("run_id", run_id).execute()
+    # 8) optional per-run yearly returns table (if you created it)
+    if yearly_returns:
+        yr_rows = [{"run_id": run_id, "year": int(y), "method": None, "year_ret": float(v)} for y, v in yearly_returns.items()]
+        sb.table("run_yearly_returns").upsert(yr_rows, on_conflict="run_id,year,method").execute()
 
-
+    # 9) finished marker (real timestamp)
+    sb.table("runs").update(
+        {"finished_at": datetime.now(timezone.utc).isoformat()}
+    ).eq("run_id", run_id).execute()

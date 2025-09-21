@@ -22,4 +22,5 @@ arch==7.0.0
 riskfolio-lib==7.0.1
 scikit-learn==1.5.0
 supabase==2.19.0
-pyarrow==13.0.0
+pyarrow==14.0.1
+httpx>=0.24
