@@ -40,7 +40,7 @@ import yfinance as yf
 import talib
 from arch import arch_model
 from cachetools import TTLCache, cached
-from fastapi import FastAPI, Body, BackgroundTasks
+from fastapi import FastAPI, Body, BackgroundTasks, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
@@ -75,6 +75,7 @@ from dividend_optimizer import (
     DividendOptResponse,
     optimize_dividend_portfolio,
 )
+from persistence_supabase import persist_all
 
 # Custom JSON encoder to handle NaN, Infinity, etc.
 class CustomJSONEncoderMeta(type):
@@ -2097,7 +2098,7 @@ def run_optimization_MIN_CDAR(mu, returns, benchmark_df, risk_free_rate=0.05):
 ########################################
 
 @app.post("/optimize")
-async def optimize_portfolio(request: TickerRequest = Body(...), background_tasks: BackgroundTasks = None):
+async def optimize_portfolio(request: TickerRequest = Body(...), background_tasks: BackgroundTasks = None, fastapi_request: Request = None):
     try:
         # Get formatted ticker list
         tickers = format_tickers(request.stocks)
@@ -2627,6 +2628,102 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                 "failed_methods": failed_methods,
                 "message": "Some optimization methods failed to complete"
             }
+
+        # ── Background persistence to Supabase ──
+        try:
+            run_id = str(uuid.uuid4())
+            req_json = jsonable_encoder(request)
+            resp_json = response_data
+
+            # Collect per-method weights / metrics / plots
+            method_weights: Dict[str, Dict[str, float]] = {}
+            method_metrics: Dict[str, Dict[str, float]] = {}
+            method_plots: Dict[str, Dict[str, str]] = {}
+
+            for method_name, optres in (response.results or {}).items():
+                if not optres:
+                    continue
+                if getattr(optres, "weights", None):
+                    method_weights[method_name] = optres.weights
+                perf = getattr(optres, "performance", None)
+                if perf is not None:
+                    method_metrics[method_name] = jsonable_encoder(perf)
+                imgs = {}
+                if getattr(optres, "returns_dist", None):
+                    imgs["returns_dist.png"] = optres.returns_dist
+                if getattr(optres, "max_drawdown_plot", None):
+                    imgs["max_drawdown.png"] = optres.max_drawdown_plot
+                if imgs:
+                    method_plots[method_name] = imgs
+
+            # Response-level artifacts to optional Parquet frames
+            import pandas as pd
+
+            cum_df = None
+            if response.dates and response.cumulative_returns:
+                try:
+                    dt = pd.to_datetime(response.dates)
+                    rows = []
+                    for m, series in (response.cumulative_returns or {}).items():
+                        if not series:
+                            continue
+                        for i, v in enumerate(series):
+                            rows.append({"dt": dt[i], "method": m, "cumret": None if v is None else float(v)})
+                    cum_df = pd.DataFrame(rows)
+                except Exception:
+                    cum_df = None
+
+            bench_df = None
+            if response.benchmark_returns:
+                try:
+                    dt = pd.to_datetime(response.dates)
+                    rows = []
+                    for br in response.benchmark_returns:
+                        name = br["name"] if isinstance(br, dict) else br.name
+                        seq = br["returns"] if isinstance(br, dict) else br.returns
+                        for i, v in enumerate(seq or []):
+                            rows.append({"dt": dt[i], "benchmark": str(name), "ret": None if v is None else float(v)})
+                    bench_df = pd.DataFrame(rows)
+                except Exception:
+                    bench_df = None
+
+            yr_df = None
+            if response.stock_yearly_returns:
+                try:
+                    rows = []
+                    for t, yearmap in (response.stock_yearly_returns or {}).items():
+                        for year_str, val in (yearmap or {}).items():
+                            rows.append({"ticker": t, "year": int(year_str), "ret": None if val is None else float(val)})
+                    yr_df = pd.DataFrame(rows)
+                except Exception:
+                    yr_df = None
+
+            cov_heat_b64 = response.covariance_heatmap
+            Sigma = None
+            returns_panel_df = None
+
+            if background_tasks is not None:
+                background_tasks.add_task(
+                    persist_all,
+                    run_id=run_id,
+                    endpoint=str(fastapi_request.url.path) if fastapi_request is not None else "/optimize",
+                    request_json=req_json,
+                    response_json=resp_json,
+                    method_weights=method_weights,
+                    method_metrics=method_metrics,
+                    method_plots_b64=method_plots,
+                    covariance_heatmap_b64=cov_heat_b64,
+                    cumulative_returns_df=cum_df,
+                    benchmark_returns_df=bench_df,
+                    stock_yearly_returns_df=yr_df,
+                    cov_matrix=Sigma,
+                    returns_panel_df=returns_panel_df,
+                )
+                # Attach run_id for client tracing
+                response_data.setdefault("meta", {})["run_id"] = run_id
+        except Exception as e:
+            # Do not fail the request if persistence scheduling fails
+            logger.exception("Background persistence scheduling failed: %s", str(e))
         
         print("OPTIMIZE: Successfully completed portfolio optimization")
         return CustomJSONResponse(content=response_data)
@@ -2655,14 +2752,55 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
 
 
 @app.post("/dividend-optimize", response_model=DividendOptResponse)
-def dividend_optimize_endpoint(req: DividendOptRequest = Body(...)) -> DividendOptResponse:
+def dividend_optimize_endpoint(
+    req: DividendOptRequest = Body(...),
+    background_tasks: BackgroundTasks = None,
+    fastapi_request: Request = None
+) -> DividendOptResponse:
     """
     Endpoint for entropy-based dividend yield optimization.
     Uses yfinance to fetch historical prices and dividend data.
     Returns optimal weights maximizing yield with entropy diversification.
     """
     try:
-        return optimize_dividend_portfolio(req)
+        # Compute dividend optimization result
+        res = optimize_dividend_portfolio(req)
+
+        # Build persistence payloads
+        run_id = str(uuid.uuid4())
+        res_json = jsonable_encoder(res)
+        req_json = jsonable_encoder(req)
+
+        method_weights = {"DIVIDEND": res_json.get("weights", {})}
+        method_metrics = {
+            "DIVIDEND": {
+                "portfolio_yield": res_json.get("portfolio_yield"),
+                "entropy": res_json.get("entropy"),
+                "effective_n": res_json.get("effective_n"),
+                "realized_variance": res_json.get("realized_variance"),
+            }
+        }
+
+        # Schedule background persistence (no plots by default for dividend)
+        try:
+            if background_tasks is not None:
+                background_tasks.add_task(
+                    persist_all,
+                    run_id=run_id,
+                    endpoint=str(fastapi_request.url.path) if fastapi_request is not None else "/dividend-optimize",
+                    request_json=req_json,
+                    response_json=res_json,
+                    method_weights=method_weights,
+                    method_metrics=method_metrics,
+                    method_plots_b64=None,
+                )
+                # Attach run_id for client tracing
+                res_json.setdefault("meta", {})["run_id"] = run_id
+        except Exception as e:
+            # Do not fail the request if persistence scheduling fails
+            logger.exception("Background persistence scheduling failed (dividend): %s", str(e))
+
+        return CustomJSONResponse(content=res_json)
     except APIError:
         # Re-raise API errors as-is
         raise

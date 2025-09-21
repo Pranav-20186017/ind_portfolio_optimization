@@ -21,7 +21,9 @@ class Settings(BaseSettings):
     # CORS Origins
     allowed_origins: list[AnyHttpUrl] = Field(
         ["https://indportfoliooptimization.vercel.app",
-         "https://indportfoliooptimization.vercel.app/dividend"],
+         "https://indportfoliooptimization.vercel.app/dividend",
+         "http://localhost"
+         "http://127.0.0.1"],
         env="ALLOWED_ORIGINS"
     )
     
