@@ -2657,7 +2657,6 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
                     method_plots[method_name] = imgs
 
             # Response-level artifacts to optional Parquet frames
-            import pandas as pd
 
             cum_df = None
             if response.dates and response.cumulative_returns:
