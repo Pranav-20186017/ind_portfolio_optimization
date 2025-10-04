@@ -401,6 +401,53 @@ class TestPortfolioOptimization(unittest.TestCase):
         self.assertTrue(np.isfinite(metrics['r_squared']))
         self.assertTrue(0 <= metrics['r_squared'] <= 1)  # R² should be between 0 and 1
 
+    def test_tracking_error_and_capture_ratios(self):
+        """Test tracking error and upside/downside capture ratios."""
+        # Create synthetic benchmark returns and portfolio returns with a known scaling
+        dates = pd.date_range('2021-01-01', periods=252, freq='B')
+        np.random.seed(0)
+        bench_ret = pd.Series(np.random.normal(0.0005, 0.01, len(dates)), index=dates)
+        # Portfolio with exact 2x exposure to benchmark
+        port_ret = 2.0 * bench_ret
+        # Convert benchmark returns to price series for compute_custom_metrics API
+        bench_price = (1 + bench_ret).cumprod() * 100
+        metrics = compute_custom_metrics(port_ret, bench_price, risk_free_rate=0.0)
+
+        # Tracking error = std(active) * sqrt(252), using price-derived benchmark returns to mirror implementation
+        expected_te = bench_price.pct_change().dropna().std() * np.sqrt(252)
+        # Allow small tolerance due to alignment and numerical differences
+        self.assertAlmostEqual(metrics['tracking_error'], expected_te, places=3)
+
+        # Upside/Downside capture should be ~2.0 given 2x exposure
+        self.assertTrue('upside_capture' in metrics and 'downside_capture' in metrics)
+        self.assertAlmostEqual(metrics['upside_capture'], 2.0, delta=0.1)
+        self.assertAlmostEqual(metrics['downside_capture'], 2.0, delta=0.1)
+
+    def test_effective_n_in_finalize_portfolio(self):
+        """Test effective number of bets computed in finalize_portfolio."""
+        # Create returns DataFrame for 4 assets
+        dates = pd.date_range('2021-01-01', periods=200, freq='B')
+        np.random.seed(42)
+        returns = pd.DataFrame({
+            'A': np.random.normal(0.0005, 0.01, len(dates)),
+            'B': np.random.normal(0.0004, 0.009, len(dates)),
+            'C': np.random.normal(0.0003, 0.011, len(dates)),
+            'D': np.random.normal(0.0006, 0.012, len(dates)),
+        }, index=dates)
+        # Benchmark price series aligned
+        bench = pd.Series(100 * np.cumprod(1 + np.random.normal(0.0005, 0.01, len(dates))), index=dates)
+
+        # Case 1: Equal weights -> N_eff = 4
+        w_equal = {'A': 0.25, 'B': 0.25, 'C': 0.25, 'D': 0.25}
+        res_eq, _ = finalize_portfolio('Test', w_equal, returns, bench, risk_free_rate=0.0)
+        self.assertAlmostEqual(res_eq.performance.effective_n, 4.0, places=6)
+
+        # Case 2: Concentrated weights -> N_eff = 1 / (0.7^2 + 3*0.1^2) ≈ 1.9231
+        w_conc = {'A': 0.7, 'B': 0.1, 'C': 0.1, 'D': 0.1}
+        res_co, _ = finalize_portfolio('Test', w_conc, returns, bench, risk_free_rate=0.0)
+        expected_neff = 1.0 / (0.7**2 + 3 * 0.1**2)
+        self.assertAlmostEqual(res_co.performance.effective_n, expected_neff, places=6)
+
     def test_beta_calculation_with_daily_rf(self):
         """Test beta calculation using daily risk-free rates."""
         # Create a simple returns series for portfolio and benchmark
@@ -1261,7 +1308,11 @@ class TestPortfolioOptimization(unittest.TestCase):
                 modigliani_risk_adjusted_performance=0.1,
                 information_ratio=0.5,
                 sterling_ratio=1.8,
-                v2_ratio=0.9
+                v2_ratio=0.9,
+                tracking_error=0.03,
+                upside_capture=1.1,
+                downside_capture=0.9,
+                effective_n=3.0
             )
         )
         mock_cum_returns = [1.0, 1.02, 1.05, 1.08]
@@ -1919,7 +1970,11 @@ class TestPortfolioOptimization(unittest.TestCase):
             modigliani_risk_adjusted_performance=0.0,
             information_ratio=0.0,
             sterling_ratio=np.nan,
-            v2_ratio=np.nan
+            v2_ratio=np.nan,
+            tracking_error=0.0,
+            upside_capture=0.0,
+            downside_capture=0.0,
+            effective_n=1.0
         )
         
         # Convert to JSON through custom encoder
@@ -2488,7 +2543,9 @@ class TestPortfolioOptimization(unittest.TestCase):
         # Mock multiple functions to ensure the test passes
         with patch('srv.fetch_and_align_data') as mock_fetch, \
              patch('srv.run_optimization') as mock_run_optimization, \
-             patch('srv.get_risk_free_rate') as mock_rf:
+             patch('srv.get_risk_free_rate') as mock_rf, \
+             patch('srv.file_to_base64') as mock_b64, \
+             patch('srv.generate_covariance_heatmap') as mock_heat:
             
             # Create data that will produce NaN/Inf in calculations
             dates = pd.date_range("2023-01-01", periods=50)  # More data points
@@ -2504,6 +2561,10 @@ class TestPortfolioOptimization(unittest.TestCase):
             mock_fetch.return_value = (df, benchmark)
             mock_rf.return_value = 0.05
             
+            # Ensure image/base64 helpers return safe placeholders without 'NaN'
+            mock_b64.return_value = "base64_encoded_string"
+            mock_heat.return_value = "base64_encoded_heatmap"
+
             # Mock optimization result with some NaN/Inf values to test sanitization
             from srv import OptimizationResult, PortfolioPerformance
             
@@ -2544,7 +2605,11 @@ class TestPortfolioOptimization(unittest.TestCase):
                 modigliani_risk_adjusted_performance=0.09,
                 information_ratio=0.7,
                 sterling_ratio=0.6,
-                v2_ratio=0.5
+                v2_ratio=0.5,
+                tracking_error=0.01,
+                upside_capture=1.05,
+                downside_capture=0.95,
+                effective_n=2.5
             )
             
             # Create an optimization result with the performance

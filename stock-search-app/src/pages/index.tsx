@@ -643,6 +643,22 @@ const HomePage: React.FC = () => {
     return methodDisplayNames[methodKey] || methodKey;
   };
 
+  // Define common color scheme for algorithm visualization for consistency
+  const colors = {
+    MVO: 'rgba(75, 192, 192, 1)', 
+    MinVol: 'rgba(153, 102, 255, 1)',
+    MaxQuadraticUtility: 'rgba(255, 159, 64, 1)',
+    EquiWeighted: 'rgba(255, 99, 132, 1)',
+    'CriticalLineAlgorithm_MVO': 'rgba(54, 162, 235, 1)',
+    'CriticalLineAlgorithm_MinVol': 'rgba(255, 206, 86, 1)',
+    HRP: 'rgba(75, 192, 75, 1)',
+    HERC: 'rgba(255, 107, 53, 1)',  // Orange-red
+    NCO: 'rgba(46, 139, 87, 1)',    // Sea green
+    HERC2: 'rgba(138, 43, 226, 1)', // Blue violet
+    MinCVaR: 'rgba(255, 99, 255, 1)',
+    MinCDaR: 'rgba(199, 99, 132, 1)'
+  } as const;
+
   // Then update the prepareBetaChartData function
   const prepareBetaChartData = (res: PortfolioOptimizationResponse) => {
     const years = getAllYears(res);
@@ -1026,21 +1042,7 @@ const HomePage: React.FC = () => {
     }
   }, [selectedExchange]);
 
-  // Define common color scheme for algorithm visualization for consistency
-  const colors = {
-    MVO: 'rgba(75, 192, 192, 1)', 
-    MinVol: 'rgba(153, 102, 255, 1)',
-    MaxQuadraticUtility: 'rgba(255, 159, 64, 1)',
-    EquiWeighted: 'rgba(255, 99, 132, 1)',
-    'CriticalLineAlgorithm_MVO': 'rgba(54, 162, 235, 1)',
-    'CriticalLineAlgorithm_MinVol': 'rgba(255, 206, 86, 1)',
-    HRP: 'rgba(75, 192, 75, 1)',
-    HERC: 'rgba(255, 107, 53, 1)',  // Orange-red
-    NCO: 'rgba(46, 139, 87, 1)',    // Sea green
-    HERC2: 'rgba(138, 43, 226, 1)', // Blue violet
-    MinCVaR: 'rgba(255, 99, 255, 1)',
-    MinCDaR: 'rgba(199, 99, 132, 1)'
-  };
+  
 
   // Add a helper function to calculate final cumulative return for technical optimization
   const calculateFinalCumulativeReturn = (returns: (number | null)[] | undefined): number | null => {
@@ -1865,6 +1867,50 @@ const HomePage: React.FC = () => {
                                     {methodData.performance.ulcer_index.toFixed(4)}
                                   </TableCell>
                                 </TableRow>
+
+                                {/* NEW: Active Risk & Capture Ratios */}
+                                <TableRow>
+                                  <TableCell>
+                                    Tracking Error (annualized)
+                                    <Tooltip title="Annualized standard deviation of active returns (portfolio minus benchmark). Measures active risk.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                    <Chip label="NEW" size="small" sx={{ backgroundColor: '#4caf50', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', ml: 1 }} />
+                                  </TableCell>
+                                  <TableCell align="right">{((methodData.performance.tracking_error ?? 0) * 100).toFixed(2)}%</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Upside Capture
+                                    <Tooltip title="Average portfolio return during positive benchmark days divided by average benchmark return (×100%).">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                    <Chip label="NEW" size="small" sx={{ backgroundColor: '#4caf50', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', ml: 1 }} />
+                                  </TableCell>
+                                  <TableCell align="right">{((methodData.performance.upside_capture ?? 0) * 100).toFixed(1)}%</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell>
+                                    Downside Capture
+                                    <Tooltip title="Average portfolio return during negative benchmark days divided by average benchmark return (×100%). Lower is better.">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                    <Chip label="NEW" size="small" sx={{ backgroundColor: '#4caf50', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', ml: 1 }} />
+                                  </TableCell>
+                                  <TableCell align="right">{((methodData.performance.downside_capture ?? 0) * 100).toFixed(1)}%</TableCell>
+                                </TableRow>
+
+                                {/* NEW: Concentration / Diversification */}
+                                <TableRow>
+                                  <TableCell>
+                                    Effective Number of Bets (N_eff)
+                                    <Tooltip title="The effective number of equally weighted independent bets in the portfolio. Higher indicates greater diversification. Calculated as 1 / sum(weights^2).">
+                                      <InfoOutlined fontSize="small" style={{ marginLeft: '4px', verticalAlign: 'middle', cursor: 'help' }} />
+                                    </Tooltip>
+                                    <Chip label="NEW" size="small" sx={{ backgroundColor: '#4caf50', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', ml: 1 }} />
+                                  </TableCell>
+                                  <TableCell align="right">{(methodData.performance.effective_n ?? 0).toFixed(2)}</TableCell>
+                                </TableRow>
                               </>
                             )}
                           </TableBody>
@@ -2239,6 +2285,7 @@ const HomePage: React.FC = () => {
                             );
                           })}
                         </TableRow>
+                        
                       ))}
                     </TableBody>
                   </Table>

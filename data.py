@@ -146,6 +146,14 @@ class PortfolioPerformance(BaseModel):
     sterling_ratio: float
     v2_ratio: float
 
+    # Active risk & capture ratios
+    tracking_error: float
+    upside_capture: float
+    downside_capture: float
+
+    # Concentration / diversification
+    effective_n: float
+
 class OptimizationResult(BaseModel):
     weights: Dict[str, float]
     performance: PortfolioPerformance

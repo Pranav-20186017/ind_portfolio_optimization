@@ -353,6 +353,13 @@ def finalize_portfolio(
     if weight_series.sum() > 0:
         weight_series = weight_series / weight_series.sum()
     
+    # Effective number of bets (concentration proxy)
+    try:
+        denom = float((weight_series.values ** 2).sum())
+        effective_n = (1.0 / denom) if denom > 1e-12 else float('inf')
+    except Exception:
+        effective_n = 0.0
+    
     # Calculate portfolio returns
     port_returns = (returns_filtered * weight_series).sum(axis=1)
     
@@ -472,7 +479,12 @@ def finalize_portfolio(
         modigliani_risk_adjusted_performance=custom.get("modigliani_risk_adjusted_performance", 0.0) or 0.0,
         information_ratio=custom.get("information_ratio", 0.0) or 0.0,
         sterling_ratio=custom.get("sterling_ratio", 0.0) or 0.0,
-        v2_ratio=custom.get("v2_ratio", 0.0) or 0.0
+        v2_ratio=custom.get("v2_ratio", 0.0) or 0.0,
+        # NEW fields
+        tracking_error=custom.get("tracking_error", 0.0) or 0.0,
+        upside_capture=custom.get("upside_capture", 0.0) or 0.0,
+        downside_capture=custom.get("downside_capture", 0.0) or 0.0,
+        effective_n=float(effective_n)
     )
     
     # Create optimization result
@@ -2728,26 +2740,26 @@ async def optimize_portfolio(request: TickerRequest = Body(...), background_task
         return CustomJSONResponse(content=response_data)
     
     except APIError:
-        print("OPTIMIZE: API Error caught, re-raising")
         # Let our custom exception handler deal with this
         raise
     except ValueError as e:
-        error_message = str(e)
-        print(f"OPTIMIZE: ValueError: {error_message}")
-        # Handle validation errors with a 422 status code
-        logger.warning("Validation error in optimize_portfolio: %s", error_message, exc_info=True)
+        # Promote to APIError with details
+        logger.warning("Validation error in optimize_portfolio: %s", str(e), exc_info=True)
         raise APIError(
             code=ErrorCode.INVALID_TICKER,
-            message=error_message,
-            status_code=422  # Changed from 400 to 422 for validation errors
+            message=str(e),
+            status_code=422,
+            details={"error_type": "ValueError", "context": "optimize_portfolio"}
         )
     except Exception as e:
-        error_message = str(e)
-        print(f"OPTIMIZE: Unexpected error: {error_message}")
-        # Let our generic exception handler deal with unexpected errors
-        # But include more detailed logging with stack trace
-        logger.exception("Unexpected error in optimize_portfolio: %s", error_message)
-        raise
+        # Wrap unexpected exceptions with context
+        logger.exception("Unexpected error in optimize_portfolio: %s", str(e))
+        raise APIError(
+            code=ErrorCode.UNEXPECTED_ERROR,
+            message="Unexpected error in optimize_portfolio",
+            status_code=500,
+            details={"error": str(e), "error_type": type(e).__name__}
+        )
 
 
 @app.post("/dividend-optimize", response_model=DividendOptResponse)
@@ -3180,6 +3192,35 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
     # 10) Information Ratio: E[R_P−R_B] / σ(R_P−R_B)
     information_ratio = active.mean() / active.std() if active.std() > 0 else 0.0
 
+    # --- Tracking Error & Capture Ratios (lightweight additions) ---
+    try:
+        # Tracking Error (annualized)
+        te = float(active.std() * np.sqrt(ann_factor)) if active.std() > 0 else 0.0
+
+        # Upside/Downside capture vs benchmark
+        pr = port_returns.reindex(bench_ret.index).dropna()
+        br = bench_ret.loc[pr.index]
+
+        up_mask = br > 0
+        dn_mask = br < 0
+
+        if up_mask.any():
+            denom_up = br[up_mask].mean()
+            up_cap = float(pr[up_mask].mean() / denom_up) if abs(denom_up) > 1e-12 else np.nan
+        else:
+            up_cap = np.nan
+
+        if dn_mask.any():
+            denom_dn = br[dn_mask].mean()
+            up_denom_safe = abs(denom_dn) > 1e-12
+            dn_cap = float(pr[dn_mask].mean() / denom_dn) if up_denom_safe else np.nan
+        else:
+            dn_cap = np.nan
+    except Exception:
+        te = 0.0
+        up_cap = np.nan
+        dn_cap = np.nan
+
     # 11) Sterling Ratio: CAGR / (AvgAnnualDD − 10%)
     try:
         annual_dd = (
@@ -3242,7 +3283,12 @@ def compute_custom_metrics(port_returns: pd.Series, benchmark_df: pd.Series, ris
         "modigliani_risk_adjusted_performance": float(modigliani_risk_adjusted_performance),
         "information_ratio": float(information_ratio),
         "sterling_ratio": sterling_ratio,  # Keep as np.nan if NaN
-        "v2_ratio": v2_ratio  # Keep as np.nan if NaN
+        "v2_ratio": v2_ratio,  # Keep as np.nan if NaN
+
+        # NEW: active-risk & captures
+        "tracking_error": float(te),
+        "upside_capture": float(up_cap) if not pd.isna(up_cap) else 0.0,
+        "downside_capture": float(dn_cap) if not pd.isna(dn_cap) else 0.0
     }
 
 # Define a function to maintain backward compatibility with existing code

@@ -71,6 +71,14 @@ export interface PortfolioPerformance {
     information_ratio: number;
     sterling_ratio: number;
     v2_ratio: number;
+
+    // Active risk & capture ratios (NEW)
+    tracking_error: number;
+    upside_capture: number;
+    downside_capture: number;
+
+    // Diversification (NEW)
+    effective_n: number;
 }
 
 // Extended optimization result, now including drawdown plot images
